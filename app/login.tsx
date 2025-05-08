@@ -1,21 +1,37 @@
 import { BlurView } from 'expo-blur';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme();
 
-  const handleLogin = () => {
-    // TODO: Implement login logic
-    router.replace('/(tabs)');
+  const handleLogin = async () => {
+    if (loading) return;
+    
+    try {
+      setLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      router.replace('/(tabs)');
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -35,6 +51,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            editable={!loading}
           />
           
           <TextInput
@@ -47,17 +64,27 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            editable={!loading}
           />
 
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+            style={[
+              styles.button,
+              { 
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                opacity: loading ? 0.7 : 1
+              }
+            ]}
             onPress={handleLogin}
+            disabled={loading}
           >
-            <ThemedText style={styles.buttonText}>Login</ThemedText>
+            <ThemedText style={styles.buttonText}>
+              {loading ? 'Logging in...' : 'Login'}
+            </ThemedText>
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <ThemedText>Don't have an account? </ThemedText>
+            <ThemedText>Don&apos;t have an account? </ThemedText>
             <Link href="/signup" asChild>
               <TouchableOpacity>
                 <ThemedText style={styles.link}>Sign Up</ThemedText>

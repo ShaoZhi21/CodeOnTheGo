@@ -15,6 +15,7 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
+    "@supabase/supabase-js": "^2.49.4",
     "expo": "~53.0.8",
     "expo-blur": "~14.1.4",
     "expo-constants": "~17.1.6",
@@ -35,7 +36,9 @@
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.10.0",
+    "react-native-url-polyfill": "^2.0.0",
     "react-native-web": "~0.20.0",
+    "react-native-websocket": "^1.0.2",
     "react-native-webview": "13.13.5"
   },
   "devDependencies": {
@@ -43,6 +46,7 @@
     "@types/react": "~19.0.10",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
+    "node-libs-react-native": "^1.2.1",
     "typescript": "~5.8.3"
   },
   "private": true
