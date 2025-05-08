@@ -9,6 +9,11 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 
+const validateEmail = (email: string) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,16 +21,56 @@ export default function LoginScreen() {
   const colorScheme = useColorScheme();
 
   const handleLogin = async () => {
-    if (loading) return;
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
     
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) throw error;
+
+      // Check if the user's email is verified
+      if (!data.user?.email_confirmed_at) {
+        await supabase.auth.signOut();
+        Alert.alert(
+          'Email Not Verified',
+          'Please verify your email before logging in. Check your inbox for the verification link.',
+          [
+            {
+              text: 'Resend Verification',
+              onPress: async () => {
+                try {
+                  const { error } = await supabase.auth.resend({
+                    type: 'signup',
+                    email,
+                  });
+                  if (error) throw error;
+                  Alert.alert('Success', 'Verification email has been resent. Please check your inbox.');
+                } catch (error: any) {
+                  Alert.alert('Error', error.message);
+                }
+              },
+            },
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+          ]
+        );
+        return;
+      }
+
       router.replace('/(tabs)');
     } catch (error: any) {
       Alert.alert('Error', error.message);

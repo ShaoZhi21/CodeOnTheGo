@@ -1,22 +1,120 @@
 import { BlurView } from 'expo-blur';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { supabase } from '@/lib/supabase';
+
+// Password validation rules
+const PASSWORD_RULES = {
+  minLength: 8,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumber: true,
+  requireSpecialChar: true,
+};
+
+const validatePassword = (password: string) => {
+  const errors = [];
+  
+  if (password.length < PASSWORD_RULES.minLength) {
+    errors.push(`Password must be at least ${PASSWORD_RULES.minLength} characters long`);
+  }
+  if (PASSWORD_RULES.requireUppercase && !/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+  if (PASSWORD_RULES.requireLowercase && !/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+  if (PASSWORD_RULES.requireNumber && !/\d/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+  if (PASSWORD_RULES.requireSpecialChar && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    errors.push('Password must contain at least one special character');
+  }
+
+  return errors;
+};
+
+const validateEmail = (email: string) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
 
 export default function SignupScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const colorScheme = useColorScheme();
 
-  const handleSignup = () => {
-    // TODO: Implement signup logic
-    router.replace('/(tabs)');
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    setPasswordErrors(validatePassword(text));
+  };
+
+  const handleSignup = async () => {
+    if (!email || !password || !name) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      Alert.alert('Error', 'Please enter a valid email address');
+      return;
+    }
+
+    if (passwordErrors.length > 0) {
+      Alert.alert('Error', 'Please fix the password requirements:\n' + passwordErrors.join('\n'));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: Platform.select({
+            web: `${window.location.origin}/auth/callback`,
+            default: 'codeonthego://auth/callback',
+          }),
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Check if email confirmation is required
+        if (data.session === null) {
+          Alert.alert(
+            'Verification Email Sent',
+            'Please check your email for the verification link. After verifying, you can log in.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/login'),
+              },
+            ]
+          );
+        } else {
+          // If email confirmation is not required, redirect to home
+          router.replace('/(tabs)');
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,6 +132,7 @@ export default function SignupScreen() {
             placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
             value={name}
             onChangeText={setName}
+            editable={!loading}
           />
 
           <TextInput
@@ -47,6 +146,7 @@ export default function SignupScreen() {
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
+            editable={!loading}
           />
           
           <TextInput
@@ -57,20 +157,40 @@ export default function SignupScreen() {
             placeholder="Password"
             placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={handlePasswordChange}
             secureTextEntry
+            editable={!loading}
           />
 
+          {passwordErrors.length > 0 && (
+            <View style={styles.errorContainer}>
+              {passwordErrors.map((error, index) => (
+                <ThemedText key={index} style={styles.errorText}>
+                  • {error}
+                </ThemedText>
+              ))}
+            </View>
+          )}
+
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
+            style={[
+              styles.button,
+              { 
+                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                opacity: loading ? 0.7 : 1
+              }
+            ]}
             onPress={handleSignup}
+            disabled={loading || passwordErrors.length > 0}
           >
-            <ThemedText style={styles.buttonText}>Sign Up</ThemedText>
+            <ThemedText style={styles.buttonText}>
+              {loading ? 'Signing up...' : 'Sign Up'}
+            </ThemedText>
           </TouchableOpacity>
 
           <View style={styles.footer}>
             <ThemedText>Already have an account? </ThemedText>
-            <Link href = "/login" asChild>
+            <Link href="/login" asChild>
               <TouchableOpacity>
                 <ThemedText style={styles.link}>Login</ThemedText>
               </TouchableOpacity>
@@ -132,5 +252,14 @@ const styles = StyleSheet.create({
   link: {
     color: '#007AFF',
     fontWeight: '600',
+  },
+  errorContainer: {
+    marginTop: 5,
+    marginBottom: 10,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginBottom: 2,
   },
 }); 
