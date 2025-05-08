@@ -23,7 +23,7 @@ export default function SignupScreen() {
     <ThemedView style={styles.container}>
       <BlurView intensity={80} style={styles.blurContainer}>
         <View style={styles.formContainer}>
-          <ThemedText style={styles.title}>Create Account?!!!!!!</ThemedText>
+          <ThemedText style={styles.title}>Create Account</ThemedText>
           
           <TextInput
             style={[
