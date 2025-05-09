@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 
 // Password validation rules
 const PASSWORD_RULES = {
-  minLength: 8,
+  minLength: 6,
   requireUppercase: true,
   requireLowercase: true,
   requireNumber: true,
@@ -51,31 +51,40 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
   const colorScheme = useColorScheme();
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
-    setPasswordErrors(validatePassword(text));
   };
 
   const handleSignup = async () => {
+    setFormErrors([]);
+    setPasswordErrors([]);
+    
+    const errors: string[] = [];
     if (!email || !password || !name) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+      errors.push('Please fill in all fields');
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
+      errors.push('Please enter a valid email address');
     }
 
-    if (passwordErrors.length > 0) {
-      Alert.alert('Error', 'Please fix the password requirements:\n' + passwordErrors.join('\n'));
+    const pwErrors = validatePassword(password);
+    setPasswordErrors(pwErrors);
+    
+    if (errors.length > 0 || pwErrors.length > 0) {
+      setFormErrors(errors);
       return;
     }
 
     try {
       setLoading(true);
+      
+      // Create a proper redirect URL with explicit scheme and path
+      const redirectUrl = 'codeonthego://auth-callback';
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -83,35 +92,31 @@ export default function SignupScreen() {
           data: {
             full_name: name,
           },
-          emailRedirectTo: Platform.select({
-            web: `${window.location.origin}/auth/callback`,
-            default: 'codeonthego://auth/callback',
-          }),
+          emailRedirectTo: redirectUrl,
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        setFormErrors([error.message]);
+        return;
+      }
 
       if (data.user) {
         // Check if email confirmation is required
         if (data.session === null) {
-          Alert.alert(
-            'Verification Email Sent',
-            'Please check your email for the verification link. After verifying, you can log in.',
-            [
-              {
-                text: 'OK',
-                onPress: () => router.replace('/login'),
-              },
-            ]
-          );
+          router.replace({
+            pathname: '/login',
+            params: {
+              message: 'Please check your email for the verification link. After verifying, you can log in.',
+            },
+          });
         } else {
           // If email confirmation is not required, redirect to home
           router.replace('/(tabs)');
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      setFormErrors([error.message]);
     } finally {
       setLoading(false);
     }
@@ -122,6 +127,16 @@ export default function SignupScreen() {
       <BlurView intensity={80} style={styles.blurContainer}>
         <View style={styles.formContainer}>
           <ThemedText style={styles.title}>Create Account</ThemedText>
+          
+          {formErrors.length > 0 && (
+            <View style={styles.errorContainer}>
+              {formErrors.map((error, index) => (
+                <ThemedText key={index} style={styles.errorText}>
+                  • {error}
+                </ThemedText>
+              ))}
+            </View>
+          )}
           
           <TextInput
             style={[
@@ -181,7 +196,7 @@ export default function SignupScreen() {
               }
             ]}
             onPress={handleSignup}
-            disabled={loading || passwordErrors.length > 0}
+            disabled={loading}
           >
             <ThemedText style={styles.buttonText}>
               {loading ? 'Signing up...' : 'Sign Up'}
