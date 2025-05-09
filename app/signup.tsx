@@ -128,16 +128,6 @@ export default function SignupScreen() {
         <View style={styles.formContainer}>
           <ThemedText style={styles.title}>Create Account</ThemedText>
           
-          {formErrors.length > 0 && (
-            <View style={styles.errorContainer}>
-              {formErrors.map((error, index) => (
-                <ThemedText key={index} style={styles.errorText}>
-                  • {error}
-                </ThemedText>
-              ))}
-            </View>
-          )}
-          
           <TextInput
             style={[
               styles.input,
@@ -177,10 +167,15 @@ export default function SignupScreen() {
             editable={!loading}
           />
 
-          {passwordErrors.length > 0 && (
+          {(formErrors.length > 0 || passwordErrors.length > 0) && (
             <View style={styles.errorContainer}>
+              {formErrors.map((error, index) => (
+                <ThemedText key={`form-${index}`} style={styles.errorText}>
+                  • {error}
+                </ThemedText>
+              ))}
               {passwordErrors.map((error, index) => (
-                <ThemedText key={index} style={styles.errorText}>
+                <ThemedText key={`password-${index}`} style={styles.errorText}>
                   • {error}
                 </ThemedText>
               ))}
