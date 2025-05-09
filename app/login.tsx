@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
-import { Link, router } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Link, router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -18,16 +18,31 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState<string[]>([]);
+  const [successMessage, setSuccessMessage] = useState('');
   const colorScheme = useColorScheme();
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    if (params.message) {
+      setSuccessMessage(params.message as string);
+    }
+  }, [params.message]);
 
   const handleLogin = async () => {
+    setFormErrors([]);
+    
+    const errors: string[] = [];
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+      errors.push('Please fill in all fields');
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+      errors.push('Please enter a valid email address');
+    }
+    
+    if (errors.length > 0) {
+      setFormErrors(errors);
       return;
     }
     
@@ -38,42 +53,21 @@ export default function LoginScreen() {
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        setFormErrors([error.message]);
+        return;
+      }
 
       // Check if the user's email is verified
       if (!data.user?.email_confirmed_at) {
         await supabase.auth.signOut();
-        Alert.alert(
-          'Email Not Verified',
-          'Please verify your email before logging in. Check your inbox for the verification link.',
-          [
-            {
-              text: 'Resend Verification',
-              onPress: async () => {
-                try {
-                  const { error } = await supabase.auth.resend({
-                    type: 'signup',
-                    email,
-                  });
-                  if (error) throw error;
-                  Alert.alert('Success', 'Verification email has been resent. Please check your inbox.');
-                } catch (error: any) {
-                  Alert.alert('Error', error.message);
-                }
-              },
-            },
-            {
-              text: 'OK',
-              style: 'cancel',
-            },
-          ]
-        );
+        setFormErrors(['Email not verified. Please verify your email before logging in.']);
         return;
       }
 
       router.replace('/(tabs)');
     } catch (error: any) {
-      Alert.alert('Error', error.message);
+      setFormErrors([error.message]);
     } finally {
       setLoading(false);
     }
@@ -111,6 +105,24 @@ export default function LoginScreen() {
             secureTextEntry
             editable={!loading}
           />
+
+          {successMessage ? (
+            <View style={styles.successContainer}>
+              <ThemedText style={styles.successText}>
+                {successMessage}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {formErrors.length > 0 && (
+            <View style={styles.errorContainer}>
+              {formErrors.map((error, index) => (
+                <ThemedText key={index} style={styles.errorText}>
+                  • {error}
+                </ThemedText>
+              ))}
+            </View>
+          )}
 
           <TouchableOpacity
             style={[
@@ -192,5 +204,26 @@ const styles = StyleSheet.create({
   link: {
     color: '#007AFF',
     fontWeight: '600',
+  },
+  errorContainer: {
+    marginTop: 5,
+    marginBottom: 10,
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  successContainer: {
+    marginTop: 5,
+    marginBottom: 15,
+    backgroundColor: '#e7f3e8',
+    padding: 10,
+    borderRadius: 8,
+  },
+  successText: {
+    color: '#2d862e',
+    fontSize: 14,
+    textAlign: 'center',
   },
 }); 
