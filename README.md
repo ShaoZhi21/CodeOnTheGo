@@ -1,3 +1,47 @@
+# CodeOnTheGo – Gamified Mobile Coding App
+
+**CodeOnTheGo** is a Duolingo-style app for learning to code through fun, structured, and competitive practice. Built with [Expo](https://expo.dev) and React Native.
+
+---
+
+## Features
+
+### Login / Signup  
+Create an account to track your progress, history, and friends.
+
+### Questions Module  
+Practice through:
+- **Roadmap**: Topic-wise path  
+- **Questions**: Random/Selected question
+Includes model solutions, examples, and difficulty levels.
+
+### Smart Marking  
+- Keyword-based checks  
+- AI hints & feedback  
+- Reveal ideal or similar solutions
+
+### 1v1 Code Duel  
+Real-time competitive coding with scoring based on accuracy and speed.
+
+### Tournaments  
+Bracket or knockout-style events with leaderboard tracking.
+
+### Quiz Mode  
+Quick quizzes:
+- By topic  
+- Personalized from past mistakes
+
+### Social Features  
+- Add friends and view activity  
+- Global leaderboard for XP and wins
+
+### Profile System  
+Gamified stats:
+- XP, streaks, trophies  
+- Topic progress, skill map
+
+### Settings  
+Manage personal details and notifications.
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
