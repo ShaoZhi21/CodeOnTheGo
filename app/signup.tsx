@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
-import { Link, router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { Link, router } from 'expo-router';
+import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -9,48 +9,91 @@ import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { supabase } from '@/lib/supabase';
 
+// Password validation rules
+const PASSWORD_RULES = {
+  minLength: 6,
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumber: true,
+  requireSpecialChar: true,
+};
+
+const validatePassword = (password: string) => {
+  const errors = [];
+  
+  if (password.length < PASSWORD_RULES.minLength) {
+    errors.push(`Password must be at least ${PASSWORD_RULES.minLength} characters long`);
+  }
+  if (PASSWORD_RULES.requireUppercase && !/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+  if (PASSWORD_RULES.requireLowercase && !/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+  if (PASSWORD_RULES.requireNumber && !/\d/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+  if (PASSWORD_RULES.requireSpecialChar && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    errors.push('Password must contain at least one special character');
+  }
+
+  return errors;
+};
+
 const validateEmail = (email: string) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
 
-export default function LoginScreen() {
+export default function SignupScreen() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<string[]>([]);
-  const [successMessage, setSuccessMessage] = useState('');
   const colorScheme = useColorScheme();
-  const params = useLocalSearchParams();
 
-  useEffect(() => {
-    if (params.message) {
-      setSuccessMessage(params.message as string);
-    }
-  }, [params.message]);
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+  };
 
-  const handleLogin = async () => {
+  const handleSignup = async () => {
     setFormErrors([]);
+    setPasswordErrors([]);
     
     const errors: string[] = [];
-    if (!email || !password) {
+    if (!email || !password || !name) {
       errors.push('Please fill in all fields');
     }
 
     if (!validateEmail(email)) {
       errors.push('Please enter a valid email address');
     }
+
+    const pwErrors = validatePassword(password);
+    setPasswordErrors(pwErrors);
     
-    if (errors.length > 0) {
+    if (errors.length > 0 || pwErrors.length > 0) {
       setFormErrors(errors);
       return;
     }
-    
+
     try {
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
+      
+      // Create a proper redirect URL with explicit scheme and path
+      const redirectUrl = 'codeonthego://auth-callback';
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: name,
+          },
+          emailRedirectTo: redirectUrl,
+        },
       });
 
       if (error) {
@@ -58,14 +101,20 @@ export default function LoginScreen() {
         return;
       }
 
-      // Check if the user's email is verified
-      if (!data.user?.email_confirmed_at) {
-        await supabase.auth.signOut();
-        setFormErrors(['Email not verified. Please verify your email before logging in.']);
-        return;
+      if (data.user) {
+        // Check if email confirmation is required
+        if (data.session === null) {
+          router.replace({
+            pathname: '/login',
+            params: {
+              message: 'Please check your email for the verification link. After verifying, you can log in.',
+            },
+          });
+        } else {
+          // If email confirmation is not required, redirect to home
+          router.replace('/(tabs)');
+        }
       }
-
-      router.replace('/(tabs)');
     } catch (error: any) {
       setFormErrors([error.message]);
     } finally {
@@ -77,8 +126,20 @@ export default function LoginScreen() {
     <ThemedView style={styles.container}>
       <BlurView intensity={80} style={styles.blurContainer}>
         <View style={styles.formContainer}>
-          <ThemedText style={styles.title}>Welcome Back</ThemedText>
+          <ThemedText style={styles.title}>Create Account</ThemedText>
           
+          <TextInput
+            style={[
+              styles.input,
+              { color: Colors[colorScheme ?? 'light'].text }
+            ]}
+            placeholder="Full Name"
+            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
+            value={name}
+            onChangeText={setName}
+            editable={!loading}
+          />
+
           <TextInput
             style={[
               styles.input,
@@ -101,23 +162,20 @@ export default function LoginScreen() {
             placeholder="Password"
             placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={handlePasswordChange}
             secureTextEntry
             editable={!loading}
           />
 
-          {successMessage ? (
-            <View style={styles.successContainer}>
-              <ThemedText style={styles.successText}>
-                {successMessage}
-              </ThemedText>
-            </View>
-          ) : null}
-
-          {formErrors.length > 0 && (
+          {(formErrors.length > 0 || passwordErrors.length > 0) && (
             <View style={styles.errorContainer}>
               {formErrors.map((error, index) => (
-                <ThemedText key={index} style={styles.errorText}>
+                <ThemedText key={`form-${index}`} style={styles.errorText}>
+                  • {error}
+                </ThemedText>
+              ))}
+              {passwordErrors.map((error, index) => (
+                <ThemedText key={`password-${index}`} style={styles.errorText}>
                   • {error}
                 </ThemedText>
               ))}
@@ -132,19 +190,19 @@ export default function LoginScreen() {
                 opacity: loading ? 0.7 : 1
               }
             ]}
-            onPress={handleLogin}
+            onPress={handleSignup}
             disabled={loading}
           >
             <ThemedText style={styles.buttonText}>
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Signing up...' : 'Sign Up'}
             </ThemedText>
           </TouchableOpacity>
 
           <View style={styles.footer}>
-            <ThemedText>Don&apos;t have an account? </ThemedText>
-            <Link href="/screens/signup" asChild>
+            <ThemedText>Already have an account? </ThemedText>
+            <Link href="/login" asChild>
               <TouchableOpacity>
-                <ThemedText style={styles.link}>Sign Up</ThemedText>
+                <ThemedText style={styles.link}>Login</ThemedText>
               </TouchableOpacity>
             </Link>
           </View>
@@ -213,17 +271,5 @@ const styles = StyleSheet.create({
     color: 'red',
     fontSize: 12,
     marginBottom: 2,
-  },
-  successContainer: {
-    marginTop: 5,
-    marginBottom: 15,
-    backgroundColor: '#e7f3e8',
-    padding: 10,
-    borderRadius: 8,
-  },
-  successText: {
-    color: '#2d862e',
-    fontSize: 14,
-    textAlign: 'center',
   },
 }); 
