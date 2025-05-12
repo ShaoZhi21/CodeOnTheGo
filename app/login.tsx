@@ -1,7 +1,7 @@
 import { BlurView } from 'expo-blur';
 import { Link, router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -77,7 +77,11 @@ export default function LoginScreen() {
     <ThemedView style={styles.container}>
       <BlurView intensity={80} style={styles.blurContainer}>
         <View style={styles.formContainer}>
-          <ThemedText style={styles.title}>Welcome Back</ThemedText>
+          <Image 
+            source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+            style={styles.logo}
+          />
+          <ThemedText style={styles.title}>CodeOnTheGo</ThemedText>
           
           <TextInput
             style={[
@@ -128,7 +132,7 @@ export default function LoginScreen() {
             style={[
               styles.button,
               { 
-                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                backgroundColor: '#6564c7',
                 opacity: loading ? 0.7 : 1
               }
             ]}
@@ -159,6 +163,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#faf5fd',
   },
   blurContainer: {
     borderRadius: 20,
@@ -174,6 +179,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     height: 40,
     lineHeight: 40,
+    color: '#6564c7',
   },
   input: {
     height: 50,
@@ -202,8 +208,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   link: {
-    color: '#007AFF',
-    fontWeight: '600',
+    color: '#6564c7',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   errorContainer: {
     marginTop: 5,
@@ -225,5 +232,11 @@ const styles = StyleSheet.create({
     color: '#2d862e',
     fontSize: 14,
     textAlign: 'center',
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 20,
+    alignSelf: 'center',
   },
 }); 

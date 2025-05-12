@@ -186,7 +186,7 @@ export default function SignupScreen() {
             style={[
               styles.button,
               { 
-                backgroundColor: Colors[colorScheme ?? 'light'].tint,
+                backgroundColor: '#6564c7',
                 opacity: loading ? 0.7 : 1
               }
             ]}
@@ -217,6 +217,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
+    backgroundColor: '#faf5fd',
   },
   blurContainer: {
     borderRadius: 20,
@@ -232,6 +233,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     height: 40,
     lineHeight: 40,
+    color: '#6564c7',
   },
   input: {
     height: 50,
@@ -260,8 +262,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   link: {
-    color: '#007AFF',
-    fontWeight: '600',
+    color: '#6564c7',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   errorContainer: {
     marginTop: 5,
