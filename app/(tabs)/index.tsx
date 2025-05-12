@@ -1,75 +1,299 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
+import CircularProgress from '@/components/CircularProgress';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { router } from 'expo-router';
 
 export default function HomeScreen() {
+  const [roadmapTopics] = useState([
+    'Array',
+    'Binary',
+    'Recursion',
+    'Linked List',
+    'AVL Tree',
+    'Hash table',
+    '2 pointer',
+    'Sliding Window',
+    'String',
+    'DP',
+    'Greedy',
+    'Deque',
+  ]);
+
+  const [topicsInProgress] = useState([
+    { name: 'Array', percentage: 85 },
+    { name: 'Deque', percentage: 70 },
+    { name: 'Recursion', percentage: 35 },
+  ]);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.profileContainer}>
+        <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/screens/profile')}>
+          <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
+          <ThemedText style={styles.profileName}>Chong Rui</ThemedText>
+        </TouchableOpacity>
+        <View style={styles.statsRow}>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>20</ThemedText>
+          </View>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>2040</ThemedText>
+          </View>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>5</ThemedText>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.topicRoadMapContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Topic roadmap</ThemedText>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false} 
+          style={styles.topicsScrollView}
+        >
+          <View style={styles.topicsGrid}>
+            {roadmapTopics.map((topic, index) => (
+              <TouchableOpacity key={index} style={styles.topicPill} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic}`)}>
+                <ThemedText>{topic}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+        
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Topics in progress</ThemedText>
+        <View style={styles.progressCircles}>
+          {topicsInProgress.map((topic) => (
+            <TouchableOpacity key={topic.name} style={styles.progressItem} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic.name}`)}>
+              <CircularProgress percentage={topic.percentage}>
+                <ThemedText>{topic.percentage}%</ThemedText>
+              </CircularProgress>
+              <ThemedText>{topic.name}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.practiceQuestionsContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Practice questions</ThemedText>
+        <View style={styles.practiceButtonsContainer}>
+          <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/randomquestion')}>
+            <Image source={require('@/assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
+            <ThemedText>Random</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/allquestions')}>
+            <Image source={require('@/assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
+            <ThemedText>See All</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.gameModeContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Game mode</ThemedText>
+        <View style={styles.gameModeButtonsContainer}>
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]} onPress={() => router.push('/screens/tournament')}>
+              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Tournament</ThemedText>
+          </View>
+          
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/screens/duel')}>
+              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Duel</ThemedText>
+          </View>
+          
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]} onPress={() => router.push('/screens/quizselection')}>
+              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Quiz</ThemedText>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  profileContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F4EEFF',
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E0E0E0',
+    overflow: 'hidden',
+  },
+  avatarNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E0D7FF',
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginLeft: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 4,
+  },
+  statText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  topicRoadMapContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+  },
+  sectionTitle: {
+    marginBottom: 16,
+    paddingLeft: 8,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  topicsScrollView: {
+    flexGrow: 0,
+  },
+  topicsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    width: 650,
+    gap: 8,
+    paddingHorizontal: 4,
+    marginBottom: 24,
+  },
+  topicPill: {
+    backgroundColor: '#F4EEFF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+  progressCircles: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 4,
+  },
+  progressItem: {
     alignItems: 'center',
     gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  practiceQuestionsContainer: {
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    backgroundColor: 'white',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  practiceButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingHorizontal: 16,
+    height: 55,
+  },
+  practiceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E0E7FF',
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    width: '48%',
+  },
+  practiceButtonIcon: {
+    width: 30,
+    height: 30,
+    marginRight: 8,
+  },
+  gameModeContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+  },
+  gameModeButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    paddingHorizontal: 16,
+  },
+  gameModeItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gameModeButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+  gameModeIcon: {
+    width: 70,
+    height: 70,
+  },
+  gameModeText: {
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
