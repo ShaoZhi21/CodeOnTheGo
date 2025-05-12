@@ -3,7 +3,7 @@ import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } f
 
 import CircularProgress from '@/components/CircularProgress';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { router } from 'expo-router';
 
 export default function HomeScreen() {
   const [roadmapTopics] = useState([
@@ -29,11 +29,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ThemedView style={styles.profileContainer}>
-        <View style={styles.avatarNameContainer}>
+      <View style={styles.profileContainer}>
+        <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/screens/profile')}>
           <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
           <ThemedText style={styles.profileName}>Chong Rui</ThemedText>
-        </View>
+        </TouchableOpacity>
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
@@ -48,7 +48,7 @@ export default function HomeScreen() {
             <ThemedText style={styles.statText}>5</ThemedText>
           </View>
         </View>
-      </ThemedView>
+      </View>
 
       <View style={styles.topicRoadMapContainer}>
         <ThemedText type="subtitle" style={styles.sectionTitle}>Topic roadmap</ThemedText>
@@ -59,7 +59,7 @@ export default function HomeScreen() {
         >
           <View style={styles.topicsGrid}>
             {roadmapTopics.map((topic, index) => (
-              <TouchableOpacity key={index} style={styles.topicPill}>
+              <TouchableOpacity key={index} style={styles.topicPill} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic}`)}>
                 <ThemedText>{topic}</ThemedText>
               </TouchableOpacity>
             ))}
@@ -69,12 +69,12 @@ export default function HomeScreen() {
         <ThemedText type="subtitle" style={styles.sectionTitle}>Topics in progress</ThemedText>
         <View style={styles.progressCircles}>
           {topicsInProgress.map((topic) => (
-            <View key={topic.name} style={styles.progressItem}>
+            <TouchableOpacity key={topic.name} style={styles.progressItem} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic.name}`)}>
               <CircularProgress percentage={topic.percentage}>
                 <ThemedText>{topic.percentage}%</ThemedText>
               </CircularProgress>
               <ThemedText>{topic.name}</ThemedText>
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       </View>
@@ -82,11 +82,11 @@ export default function HomeScreen() {
       <View style={styles.practiceQuestionsContainer}>
         <ThemedText type="subtitle" style={styles.sectionTitle}>Practice questions</ThemedText>
         <View style={styles.practiceButtonsContainer}>
-          <TouchableOpacity style={styles.practiceButton}>
+          <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/randomquestion')}>
             <Image source={require('@/assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>Random</ThemedText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.practiceButton}>
+          <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/allquestions')}>
             <Image source={require('@/assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>See All</ThemedText>
           </TouchableOpacity>
@@ -97,21 +97,21 @@ export default function HomeScreen() {
         <ThemedText type="subtitle" style={styles.sectionTitle}>Game mode</ThemedText>
         <View style={styles.gameModeButtonsContainer}>
           <View style={styles.gameModeItem}>
-            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]} onPress={() => router.push('/screens/tournament')}>
               <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.gameModeIcon} />
             </TouchableOpacity>
             <ThemedText style={styles.gameModeText}>Tournament</ThemedText>
           </View>
           
           <View style={styles.gameModeItem}>
-            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/screens/duel')}>
               <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.gameModeIcon} />
             </TouchableOpacity>
             <ThemedText style={styles.gameModeText}>Duel</ThemedText>
           </View>
           
           <View style={styles.gameModeItem}>
-            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]} onPress={() => router.push('/screens/quizselection')}>
               <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.gameModeIcon} />
             </TouchableOpacity>
             <ThemedText style={styles.gameModeText}>Quiz</ThemedText>
