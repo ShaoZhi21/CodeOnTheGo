@@ -6,7 +6,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 
 export default function HomeScreen() {
-  // Step 1: Create the state for roadmap topics
   const [roadmapTopics] = useState([
     'Array',
     'Binary',
@@ -31,22 +30,22 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ThemedView style={styles.profileContainer}>
-        <View style={styles.profileNameContainer}>
-          <Image source={require('@/assets/images/profile/profile-icon.png')} style={styles.icon} />
-          <ThemedText>Chong Rui</ThemedText>
+        <View style={styles.avatarNameContainer}>
+          <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
+          <ThemedText style={styles.profileName}>Chong Rui</ThemedText>
         </View>
-        <View style={styles.profileStatsContainer}>
-          <View style={styles.profileInfoContainer}>
-            <Image source={require('@/assets/images/profile/fire-icon.png')} style={styles.icon} />
-            <ThemedText>20</ThemedText>
+        <View style={styles.statsRow}>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>20</ThemedText>
           </View>
-          <View style={styles.profileInfoContainer}>
-            <Image source={require('@/assets/images/profile/trophy-icon.png')} style={styles.icon} />
-            <ThemedText>2040</ThemedText>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>2040</ThemedText>
           </View>
-          <View style={styles.profileInfoContainer}>
-            <Image source={require('@/assets/images/profile/magnifying-glass-icon.png')} style={styles.icon} />
-            <ThemedText>5</ThemedText>
+          <View style={styles.statChip}>
+            <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
+            <ThemedText style={styles.statText}>5</ThemedText>
           </View>
         </View>
       </ThemedView>
@@ -67,6 +66,7 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
         
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Topics in progress</ThemedText>
         <View style={styles.progressCircles}>
           {topicsInProgress.map((topic) => (
             <View key={topic.name} style={styles.progressItem}>
@@ -76,6 +76,46 @@ export default function HomeScreen() {
               <ThemedText>{topic.name}</ThemedText>
             </View>
           ))}
+        </View>
+      </View>
+
+      <View style={styles.practiceQuestionsContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Practice questions</ThemedText>
+        <View style={styles.practiceButtonsContainer}>
+          <TouchableOpacity style={styles.practiceButton}>
+            <Image source={require('@/assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
+            <ThemedText>Random</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.practiceButton}>
+            <Image source={require('@/assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
+            <ThemedText>See All</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.gameModeContainer}>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Game mode</ThemedText>
+        <View style={styles.gameModeButtonsContainer}>
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]}>
+              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Tournament</ThemedText>
+          </View>
+          
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]}>
+              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Duel</ThemedText>
+          </View>
+          
+          <View style={styles.gameModeItem}>
+            <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]}>
+              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.gameModeIcon} />
+            </TouchableOpacity>
+            <ThemedText style={styles.gameModeText}>Quiz</ThemedText>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -90,35 +130,65 @@ const styles = StyleSheet.create({
   profileContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#F4EEFF',
     width: '100%',
-    paddingVertical: 12,
-    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
     borderBottomWidth: 2,
-    borderBottomColor: '#E0E0E0', 
+    borderBottomColor: '#E0E0E0',
+    overflow: 'hidden',
   },
-  profileNameContainer: {
+  avatarNameContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: 120,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E0D7FF',
+    borderRadius: 18,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 18,
+    marginRight: 10,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  profileStatsContainer: {
+  statChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginLeft: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  profileInfoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 80,
-    gap: 10,
-    fontSize: 10,
+  statIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 4,
   },
-  icon: {
-    width: 24,
-    height: 24,
+  statText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   topicRoadMapContainer: {
     padding: 16,
@@ -126,6 +196,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     marginBottom: 16,
+    paddingLeft: 8,
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -154,10 +225,75 @@ const styles = StyleSheet.create({
   progressCircles: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 16,
+    marginTop: 4,
   },
   progressItem: {
     alignItems: 'center',
     gap: 8,
+  },
+  practiceQuestionsContainer: {
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    backgroundColor: 'white',
+  },
+  practiceButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingHorizontal: 16,
+    height: 55,
+  },
+  practiceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E0E7FF',
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    width: '48%',
+  },
+  practiceButtonIcon: {
+    width: 30,
+    height: 30,
+    marginRight: 8,
+  },
+  gameModeContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+  },
+  gameModeButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    paddingHorizontal: 16,
+  },
+  gameModeItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gameModeButton: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+  gameModeIcon: {
+    width: 70,
+    height: 70,
+  },
+  gameModeText: {
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
