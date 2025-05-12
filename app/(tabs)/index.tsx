@@ -98,23 +98,23 @@ export default function HomeScreen() {
         <View style={styles.gameModeButtonsContainer}>
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]} onPress={() => router.push('/screens/tournament')}>
-              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.gameModeIcon} />
+              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.tournamentIcon} />
+              <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Tournament</ThemedText>
             </TouchableOpacity>
-            <ThemedText style={styles.gameModeText}>Tournament</ThemedText>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/screens/duel')}>
-              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.gameModeIcon} />
+              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.duelIcon} />
+              <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Duel</ThemedText>
             </TouchableOpacity>
-            <ThemedText style={styles.gameModeText}>Duel</ThemedText>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]} onPress={() => router.push('/screens/quizselection')}>
-              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.gameModeIcon} />
+              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
+              <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Quiz</ThemedText>
             </TouchableOpacity>
-            <ThemedText style={styles.gameModeText}>Quiz</ThemedText>
           </View>
         </View>
       </View>
@@ -125,13 +125,13 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#F4EEFF'
   },
   profileContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#6564c7',
     width: '100%',
     paddingVertical: 14,
     paddingHorizontal: 8,
@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   },
   topicRoadMapContainer: {
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#F4EEFF',
   },
   sectionTitle: {
     marginBottom: 16,
@@ -212,11 +212,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   topicPill: {
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#b4aaf4',
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 20,
     elevation: 2,
+    borderWidth: 3,
+    borderColor: '#897fef',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
@@ -234,20 +236,20 @@ const styles = StyleSheet.create({
   practiceQuestionsContainer: {
     paddingVertical: 4,
     paddingHorizontal: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#F4EEFF'
   },
   practiceButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginTop: 4,
     paddingHorizontal: 16,
-    height: 55,
+    height: 60,
   },
   practiceButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#b4aaf4',
     borderRadius: 20,
     elevation: 2,
     shadowColor: '#000',
@@ -255,20 +257,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
     width: '48%',
+    paddingVertical: 12,
   },
   practiceButtonIcon: {
     width: 30,
     height: 30,
     marginRight: 8,
+    tintColor: '#6564c7',
   },
   gameModeContainer: {
     padding: 16,
-    backgroundColor: 'white',
+    backgroundColor: '#F4EEFF'
   },
   gameModeButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
+    gap: 12,
     paddingHorizontal: 16,
   },
   gameModeItem: {
@@ -276,9 +280,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gameModeButton: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
@@ -287,13 +291,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
   },
-  gameModeIcon: {
-    width: 70,
-    height: 70,
+  tournamentIcon: {
+    width: 65,
+    height: 65,
+  },
+  duelIcon: {
+    width: 65,
+    height: 65,
+  },
+  quizIcon: {
+    width: 60,
+    height: 60,
+    marginBottom: 5,
   },
   gameModeText: {
-    marginTop: 8,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
+    marginTop: 2,
   },
 });
