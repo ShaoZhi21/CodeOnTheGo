@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function QuestionScreen() {
@@ -41,7 +41,7 @@ export default function QuestionScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }}>
         <View style={styles.titleContainer}>
           <View style={styles.questionHeader}>
             <ThemedText style={styles.questionId}>#{id}</ThemedText>
@@ -54,6 +54,23 @@ export default function QuestionScreen() {
 
 
         <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>{showProblem ? 'Problem Description' : 'Example'}</ThemedText>
+          <View style={styles.descriptionBox}>
+            <ThemedText style={styles.description}>
+              {showProblem ? description : (
+                <>
+                  <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].input}</ThemedText>
+                  <View style={{ height: 10 }} />
+                  <ThemedText style={styles.exampleLabel}>{'\n'}Output:</ThemedText>
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].output}</ThemedText>
+                  <View style={{ height: 10 }} />
+                  <ThemedText style={styles.exampleLabel}>{'\n'}Explanation:</ThemedText>
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].explanation}</ThemedText>
+                </>
+              )}
+            </ThemedText>
+          </View>
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#897fef' }]} onPress={() => setShowProblem(true)}>
               <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
@@ -62,16 +79,19 @@ export default function QuestionScreen() {
               <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
             </TouchableOpacity>
           </View>
-
-          <ThemedText style={styles.sectionTitle}>{showProblem ? 'Problem Description' : 'Example'}</ThemedText>
-          <View style={styles.descriptionBox}>
-            <ThemedText style={styles.description}>
-              {showProblem ? description : examples[0].explanation}
-            </ThemedText>
-          </View>
         </View>
         
-
+        <View style={[styles.section, { flex: 1 }]}>
+          <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+          <View style={styles.codeInputContainer}>
+            <TextInput
+              style={styles.codeInput}
+              multiline
+              placeholder="Write your solution here...">
+              </TextInput>
+          </View>
+        </View>
+          
         <TouchableOpacity style={styles.solveButton}>
           <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
         </TouchableOpacity>
@@ -144,19 +164,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   section: {
-    marginBottom: 20,
+    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 18,
+    marginLeft: '1%',
     fontWeight: '600',
-    marginBottom: 12,
+    marginBottom: 8,
     color: '#2d2d2d',
   },
   description: {
     fontSize: 16,
     lineHeight: 24,
     color: '#444',
-    height: '50%',
   },
   solveButton: {
     backgroundColor: '#6564c7',
@@ -173,7 +193,9 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 12,
+    gap: 6,
   },
   toggleButton: {
     flex: 1,
@@ -191,6 +213,39 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 8,
     backgroundColor: '#fff',
-    height: '50%',
+    minHeight: 200,
+    maxHeight: 300,
+  },
+  codeInputContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    padding: 10,
+  },
+  codeInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#444',
+    textAlignVertical: 'top',
+  },
+  exampleBox: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginTop: 8,
+  },
+  exampleText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
+    marginBottom: 4,
+  },
+  exampleLabel: {
+    fontWeight: 'bold',
+    color: '#6564c7',
   },
 }); 
