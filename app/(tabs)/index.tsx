@@ -6,6 +6,11 @@ import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
 
 export default function HomeScreen() {
+  const [profile, setProfile] = useState('Chong Rui');
+  const [streak, setStreak] = useState(20);
+  const [trophy, setTrophy] = useState(2040);
+  const [hint, setHint] = useState(5);
+
   const [roadmapTopics] = useState([
     'Array',
     'Binary',
@@ -32,20 +37,20 @@ export default function HomeScreen() {
       <View style={styles.profileContainer}>
         <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/screens/profile')}>
           <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
-          <ThemedText style={styles.profileName}>Chong Rui</ThemedText>
+          <ThemedText style={styles.profileName}>{profile}</ThemedText>
         </TouchableOpacity>
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>20</ThemedText>
+            <ThemedText style={styles.statText}>{streak}</ThemedText>
           </View>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>2040</ThemedText>
+            <ThemedText style={styles.statText}>{trophy}</ThemedText>
           </View>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>5</ThemedText>
+            <ThemedText style={styles.statText}>{hint}</ThemedText>
           </View>
         </View>
       </View>

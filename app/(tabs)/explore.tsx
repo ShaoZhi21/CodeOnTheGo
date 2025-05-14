@@ -45,7 +45,7 @@ const getStatusColor = (status: Problem['status']) => {
   }
 };
 
-export default function AllQuestionsScreen() {
+export default function ExploreScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -60,7 +60,7 @@ export default function AllQuestionsScreen() {
       </View>
 
       <ScrollView style={styles.tableContainer}>
-      {problems.map((problem) => (
+        {problems.map((problem) => (
           <TouchableOpacity 
             key={problem.id}
             style={styles.row}
