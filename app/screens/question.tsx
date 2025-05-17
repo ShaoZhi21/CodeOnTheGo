@@ -62,12 +62,38 @@ export default function QuestionScreen() {
           </View>
         </View>
 
+        <View style={styles.buttonContainer}>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
+              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
+              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
+            </TouchableOpacity>
+          </View>
+
         <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>{showProblem ? 'Problem Description' : 'Example'}</ThemedText>
-          <View style={styles.descriptionBox}>
-            <ThemedText style={styles.description}>
-              {showProblem ? description : (
+            <View style={styles.descriptionContainer}>
+              {showProblem ? 
+              <ThemedText style={styles.description}>{description}</ThemedText>
+               : (
                 <>
+                  <View style={styles.exampleContent}>
+                    <View style={styles.exampleSection}>
+                      <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
+                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].input}</ThemedText>
+                    </View>
+
+                    <View style={styles.exampleSection}>
+                      <ThemedText style={styles.exampleLabel}>Output:</ThemedText>
+                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].output}</ThemedText>
+                    </View>
+
+                    <View style={styles.exampleSection}>
+                      <ThemedText style={styles.exampleLabel}>Explanation:</ThemedText>
+                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].explanation}</ThemedText>
+                    </View>
+                  </View>
+
                   <View style={styles.exampleNavigation}>
                     <TouchableOpacity 
                       style={[styles.arrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
@@ -105,26 +131,9 @@ export default function QuestionScreen() {
                       <ThemedText style={styles.arrowButtonText}>{'>'}</ThemedText>
                     </TouchableOpacity>
                   </View>
-                  <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].input}</ThemedText>
-                  <View style={{ height: 18 }} />
-                  <ThemedText style={styles.exampleLabel}>{'\n'}Output:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].output}</ThemedText>
-                  <View style={{ height: 18 }} />
-                  <ThemedText style={styles.exampleLabel}>{'\n'}Explanation:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].explanation}</ThemedText>
                 </>
               )}
-            </ThemedText>
-          </View>
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#897fef' }]} onPress={() => setShowProblem(true)}>
-              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#897fef' }]} onPress={() => setShowProblem(false)}>
-              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
-            </TouchableOpacity>
-          </View>
+            </View>
         </View>
         
         <View style={[styles.section, { flex: 1 }]}>
@@ -219,6 +228,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#444',
+    height: 226,
   },
   solveButton: {
     backgroundColor: '#6564c7',
@@ -248,22 +258,21 @@ const styles = StyleSheet.create({
   toggleButtonText: {
     color: '#fff',
     fontWeight: 'bold',
+    fontSize: 18,
   },
-  descriptionBox: {
+  descriptionContainer: {
     padding: 12,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#fff',
-    minHeight: 200,
-    maxHeight: 300,
     height: 250,
   },
   codeInputContainer: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#fff',
     padding: 10,
   },
@@ -273,22 +282,28 @@ const styles = StyleSheet.create({
     color: '#444',
     textAlignVertical: 'top',
   },
+  exampleContent: {
+    flex: 1,
+  },
+  exampleSection: {
+    marginBottom: 4,
+  },
+  exampleLabel: {
+    fontWeight: 'bold',
+    color: '#6564c7',
+    fontSize: 16,
+  },
   exampleText: {
     fontSize: 16,
     lineHeight: 24,
     color: '#444',
   },
-  exampleLabel: {
-    fontWeight: 'bold',
-    color: '#6564c7',
-    marginTop: 12,
-  },
   exampleNavigation: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 8,
     width: '100%',
+    paddingTop: 8,
   },
   exampleNumberContainer: {
     flexDirection: 'row',
@@ -325,6 +340,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     fontWeight: 'bold',
+    paddingRight: "2%",
   },
   disabledNavButton: {
     backgroundColor: '#e0e0e0',
