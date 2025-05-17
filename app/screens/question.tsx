@@ -15,9 +15,20 @@ export default function QuestionScreen() {
       input: "nums = [2,7,11,15], target = 9",
       output: "[0,1]",
       explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]."
+    },
+    {
+      input: "nums = [3,2,4], target = 6",
+      output: "[1,2]",
+      explanation: "Because nums[1] + nums[2] == 6, we return [1, 2]."
+    },
+    {
+      input: "nums = [3,3], target = 6",
+      output: "[0,1]",
+      explanation: "Because nums[0] + nums[1] == 6, we return [0, 1]."
     }
   ]);
   const [showProblem, setShowProblem] = useState(true);
+  const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -51,21 +62,57 @@ export default function QuestionScreen() {
           </View>
         </View>
 
-
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>{showProblem ? 'Problem Description' : 'Example'}</ThemedText>
           <View style={styles.descriptionBox}>
             <ThemedText style={styles.description}>
               {showProblem ? description : (
                 <>
+                  <View style={styles.exampleNavigation}>
+                    <TouchableOpacity 
+                      style={[styles.arrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
+                      onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
+                      disabled={currentExampleIndex === 0}
+                    >
+                      <ThemedText style={styles.arrowButtonText}>{'<'}</ThemedText>
+                    </TouchableOpacity>
+                    
+                    <View style={styles.exampleNumberContainer}>
+                      {examples.map((_, index) => (
+                        <TouchableOpacity 
+                          key={index}
+                          onPress={() => setCurrentExampleIndex(index)}
+                          style={[
+                            styles.exampleIndicator,
+                            currentExampleIndex === index && styles.activeExampleIndicator
+                          ]}
+                        >
+                          <ThemedText style={[
+                            styles.exampleIndicatorText,
+                            currentExampleIndex === index && styles.activeExampleIndicatorText
+                          ]}>
+                            {index + 1}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <TouchableOpacity 
+                      style={[styles.arrowButton, currentExampleIndex === examples.length - 1 && styles.disabledNavButton]}
+                      onPress={() => setCurrentExampleIndex(prev => Math.min(examples.length - 1, prev + 1))}
+                      disabled={currentExampleIndex === examples.length - 1}
+                    >
+                      <ThemedText style={styles.arrowButtonText}>{'>'}</ThemedText>
+                    </TouchableOpacity>
+                  </View>
                   <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].input}</ThemedText>
-                  <View style={{ height: 10 }} />
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].input}</ThemedText>
+                  <View style={{ height: 18 }} />
                   <ThemedText style={styles.exampleLabel}>{'\n'}Output:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].output}</ThemedText>
-                  <View style={{ height: 10 }} />
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].output}</ThemedText>
+                  <View style={{ height: 18 }} />
                   <ThemedText style={styles.exampleLabel}>{'\n'}Explanation:</ThemedText>
-                  <ThemedText style={styles.exampleText}>{'\n'}{examples[0].explanation}</ThemedText>
+                  <ThemedText style={styles.exampleText}>{'\n'}{examples[currentExampleIndex].explanation}</ThemedText>
                 </>
               )}
             </ThemedText>
@@ -210,6 +257,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     minHeight: 200,
     maxHeight: 300,
+    height: 250,
   },
   codeInputContainer: {
     flex: 1,
@@ -225,22 +273,60 @@ const styles = StyleSheet.create({
     color: '#444',
     textAlignVertical: 'top',
   },
-  exampleBox: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginTop: 8,
-  },
   exampleText: {
     fontSize: 16,
     lineHeight: 24,
     color: '#444',
-    marginBottom: 4,
   },
   exampleLabel: {
     fontWeight: 'bold',
     color: '#6564c7',
+    marginTop: 12,
+  },
+  exampleNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 8,
+    width: '100%',
+  },
+  exampleNumberContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exampleIndicator: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeExampleIndicator: {
+    backgroundColor: '#6564c7',
+  },
+  exampleIndicatorText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  activeExampleIndicatorText: {
+    color: '#fff',
+  },
+  arrowButton: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowButtonText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  disabledNavButton: {
+    backgroundColor: '#e0e0e0',
   },
 }); 
