@@ -37,7 +37,6 @@ export default function QuestionScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          <ThemedText style={styles.backText}>Back</ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -118,10 +117,6 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 8,
     tintColor: '#fff',
-  },
-  backText: {
-    color: '#fff',
-    fontSize: 16,
   },
   content: {
     flex: 1,
