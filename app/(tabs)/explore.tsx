@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Problem {
@@ -45,13 +45,10 @@ const getStatusColor = (status: Problem['status']) => {
   }
 };
 
-export default function AllQuestionsScreen() {
+export default function ExploreScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-        </TouchableOpacity>
         <ThemedText style={styles.title}>Problems</ThemedText>
       </View>
       
@@ -63,7 +60,7 @@ export default function AllQuestionsScreen() {
       </View>
 
       <ScrollView style={styles.tableContainer}>
-      {problems.map((problem) => (
+        {problems.map((problem) => (
           <TouchableOpacity 
             key={problem.id}
             style={styles.row}
@@ -102,27 +99,12 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#6564c7',
-    padding: 16, 
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    gap: 10,
-    alignItems: 'center',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
-    tintColor: '#fff',
+    padding: 16,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    paddingTop: 4,
   },
   tableContainer: {
     flex: 1,
