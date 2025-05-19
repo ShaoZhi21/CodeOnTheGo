@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function QuestionScreen() {
@@ -29,6 +29,9 @@ export default function QuestionScreen() {
   ]);
   const [showProblem, setShowProblem] = useState(true);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+  const [solution, setSolution] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState("");
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -42,6 +45,42 @@ export default function QuestionScreen() {
         return '#6564c7';
     }
   };
+
+  function handleSolutionChange(text: string) {
+    setSolution(text);
+    console.log(solution);
+  }
+  
+  async function handleSolveProblem() {
+    if (!solution.trim()) {
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: solution,
+          question: description
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setAnalysis(data.analysis);
+      } else {
+        console.error('Error:', data.error);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -140,15 +179,36 @@ export default function QuestionScreen() {
           <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
           <View style={styles.codeInputContainer}>
             <TextInput
+              value={solution}
+              onChangeText={handleSolutionChange}
               style={styles.codeInput}
               multiline
               placeholder="Write your solution here...">
-              </TextInput>
+            </TextInput>
           </View>
         </View>
+
+        {analysis && (
+          <View style={styles.analysisWrapper}>
+            <ThemedText style={styles.sectionTitle}>Analysis</ThemedText>
+            <View style={styles.analysisContainer}>
+              <View style={styles.analysisContent}>
+                <ThemedText style={styles.analysisText}>{analysis}</ThemedText>
+              </View>
+            </View>
+          </View>
+        )}
           
-        <TouchableOpacity style={styles.solveButton}>
-          <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+        <TouchableOpacity 
+          style={[styles.solveButton, !solution.trim() && styles.solveButtonDisabled]}
+          onPress={handleSolveProblem}
+          disabled={!solution.trim() || isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -274,7 +334,7 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 12,
     backgroundColor: '#fff',
-    padding: 10,
+    padding: 12,
   },
   codeInput: {
     flex: 1,
@@ -344,5 +404,26 @@ const styles = StyleSheet.create({
   },
   disabledNavButton: {
     backgroundColor: '#e0e0e0',
+  },
+  solveButtonDisabled: {
+    backgroundColor: '#c7c1e9',
+  },
+  analysisWrapper: {
+    marginTop: 4,
+  },
+  analysisContainer: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  analysisContent: {
+    marginTop: 8,
+  },
+  analysisText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
   },
 }); 
