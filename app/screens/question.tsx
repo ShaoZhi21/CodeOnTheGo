@@ -329,9 +329,9 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   arrowButton: {
-    width: 50,
+    width: 40,
     height: 30,
-    borderRadius: 15,
+    borderRadius: 20,
     backgroundColor: '#6564c7',
     justifyContent: 'center',
     alignItems: 'center',
