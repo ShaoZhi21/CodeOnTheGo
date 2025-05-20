@@ -45,6 +45,7 @@ export default function QuestionScreen() {
   const [solution, setSolution] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -203,35 +204,92 @@ export default function QuestionScreen() {
         {analysis && (
           <View style={styles.analysisWrapper}>
             <ThemedText style={styles.sectionTitle}>Analysis</ThemedText>
+            
+            <View style={styles.analysisButtonContainer}>
+              <TouchableOpacity 
+                style={[
+                  styles.analysisButton, 
+                  selectedAnalysisSection === 'correctness' && styles.selectedAnalysisButton,
+                  analysis.correctness === '✓' && styles.correctButton,
+                  analysis.correctness === '✗' && styles.wrongButton
+                ]} 
+                onPress={() => setSelectedAnalysisSection('correctness')}
+              >
+                <Image 
+                  source={
+                    analysis.correctness === '✓' 
+                      ? require('@/assets/images/icons/correct-icon.png')
+                      : require('@/assets/images/icons/wrong-icon.png')
+                  } 
+                  style={styles.correctnessIcon}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButton]} 
+                onPress={() => setSelectedAnalysisSection('efficiency')}
+              >
+                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButtonText]}>
+                  Efficiency
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButton]} 
+                onPress={() => setSelectedAnalysisSection('edgeCases')}
+              >
+                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButtonText]}>
+                  Edge Cases
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButton]} 
+                onPress={() => setSelectedAnalysisSection('suggestions')}
+              >
+                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButtonText]}>
+                  Suggestions
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.analysisContainer}>
               <View style={styles.analysisContent}>
-                <View style={styles.analysisSection}>
-                  <ThemedText style={styles.analysisSubtitle}>Correctness</ThemedText>
-                  <ThemedText style={styles.analysisText}>{analysis.correctness}</ThemedText>
-                </View>
+                {selectedAnalysisSection === 'correctness' && (
+                  <View style={styles.analysisSection}>
+                    <ThemedText style={styles.analysisSubtitle}>Correctness</ThemedText>
+                    <ThemedText style={styles.analysisText}>{analysis.correctness}</ThemedText>
+                  </View>
+                )}
 
-                <View style={styles.analysisSection}>
-                  <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
-                  <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
-                  <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
-                  <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
-                </View>
+                {selectedAnalysisSection === 'efficiency' && (
+                  <View style={styles.analysisSection}>
+                    <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
+                    <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
+                    <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
+                    <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
+                  </View>
+                )}
 
-                <View style={styles.analysisSection}>
-                  <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
-                  {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                    <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
-                  ))}
-                </View>
+                {selectedAnalysisSection === 'edgeCases' && (
+                  <View style={styles.analysisSection}>
+                    <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
+                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
+                      <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
+                    ))}
+                  </View>
+                )}
 
-                <View style={styles.analysisSection}>
-                  <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
-                  {analysis.suggestions.map((suggestion: string, index: number) => (
-                    <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
-                  ))}
-                </View>
+                {selectedAnalysisSection === 'suggestions' && (
+                  <View style={styles.analysisSection}>
+                    <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
+                    {analysis.suggestions.map((suggestion: string, index: number) => (
+                      <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
+                    ))}
+                  </View>
+                )}
 
-                <View style={styles.analysisSection}>
+                <View style={styles.scoreSection}>
                   <ThemedText style={styles.analysisSubtitle}>Score</ThemedText>
                   <ThemedText style={styles.analysisText}>{analysis.score}/100</ThemedText>
                   <ThemedText style={styles.analysisText}>Stars: {analysis.stars}</ThemedText>
@@ -476,5 +534,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#444',
+  },
+  analysisButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 6,
+  },
+  analysisButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#c7c1e9',
+  },
+  selectedAnalysisButton: {
+    backgroundColor: '#6564c7',
+  },
+  correctButton: {
+    backgroundColor: '#e6f4ea', 
+    borderWidth: 4,
+    borderColor: '#009045',
+  },
+  wrongButton: {
+    backgroundColor: '#fff2f0', 
+    borderWidth: 4,
+    borderColor: '#FF375F',
+  },
+  correctnessIcon: {
+    width: 36,
+    height: 36,
+  },
+  analysisButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  selectedAnalysisButtonText: {
+    fontWeight: 'bold',
+  },
+  scoreSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
   },
 }); 
