@@ -229,27 +229,30 @@ export default function QuestionScreen() {
                 style={[styles.analysisButton, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButton]} 
                 onPress={() => setSelectedAnalysisSection('efficiency')}
               >
-                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButtonText]}>
-                  Efficiency
-                </ThemedText>
+                <Image 
+                  source={require('@/assets/images/icons/efficient-icon.png')}
+                  style={styles.analysisIcon}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity 
                 style={[styles.analysisButton, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButton]} 
                 onPress={() => setSelectedAnalysisSection('edgeCases')}
               >
-                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButtonText]}>
-                  Edge Cases
-                </ThemedText>
+                <Image 
+                  source={require('@/assets/images/icons/checklist-icon.png')}
+                  style={styles.analysisIcon}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity 
                 style={[styles.analysisButton, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButton]} 
                 onPress={() => setSelectedAnalysisSection('suggestions')}
               >
-                <ThemedText style={[styles.analysisButtonText, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButtonText]}>
-                  Suggestions
-                </ThemedText>
+                <Image 
+                  source={require('@/assets/images/icons/suggestion-icon.png')}
+                  style={styles.analysisIcon}
+                />
               </TouchableOpacity>
             </View>
 
@@ -566,13 +569,9 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
   },
-  analysisButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  selectedAnalysisButtonText: {
-    fontWeight: 'bold',
+  analysisIcon: {
+    width: 44,
+    height: 44,
   },
   scoreSection: {
     marginTop: 16,
