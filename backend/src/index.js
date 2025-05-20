@@ -57,6 +57,7 @@ app.post('/api/analyze', async (req, res) => {
 
     Award more marks for clearer and longer explanations that accurately justify the approach.
     Short or vague answers, even if correct, should not receive high scores without sufficient reasoning.
+    Gibberish answers should be marked as ✗ and given a score of 0.
 
 
 
