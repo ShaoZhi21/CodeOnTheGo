@@ -44,7 +44,8 @@ app.post('/api/analyze', async (req, res) => {
       systemInstruction: "You are a helpful and precise assistant. Your job is to evaluate the logic of pseudocode when given a question and a block of pseudocode. Explain whether the logic correctly answers the question, and point out any logical errors or missing steps. Use clear reasoning and suggest improvements if needed. Do not write actual code unless asked.",
     });
     
-    const prompt = `You are a concise and critical code reviewer. 
+    const prompt = 
+    `You are a concise and critical code reviewer. 
     When given a question and a piece of code (or pseudocode), your job is to 
     determine if the logic correctly solves the question, assess its efficiency, 
     identify any edge cases it might fail, and suggest specific improvements. 
@@ -59,48 +60,62 @@ app.post('/api/analyze', async (req, res) => {
     Short or vague answers, even if correct, should not receive high scores without sufficient reasoning.
     Gibberish answers should be marked as ✗ and given a score of 0.
 
+    Before scoring, do the following:
+    - Step 1: Generate your own ideal pseudocode in step-by-step point form (in natural language) that explains the intended algorithm fully.
+    - Step 2: Check how many of these steps the user’s explanation hits, either exactly or paraphrased. No need to be very strict with the phrasing as long as the idea is similar.
+    - Step 3: For solutions that are correct, determine explanation detail coverage:
+    - < 30% → Very vague or incomplete → Score ≤ 50-60
+    - 30-60% → Decent but missing several key steps → Score 60-75
+    - 60–80% → Decent but missing several key steps → Score 75–90
+    - 80–100% → Very detailed and thorough → Score 90–100
+
+    If the solution is not logically correct (✗), do not apply this explanation coverage rule.
+    Instead, refer directly to the scoring rubric under "Scoring" and award points accordingly for those that are incorrect.
+
+    Do not give high marks for correct but very short explanations.
+    Mark based on whether the user sufficiently *explained their thinking* — not just whether the final logic appears valid.
 
 
 Code: ${code}
 Question: ${question}
 
 Evaluate the submission as follows:
-1. **Correctness (✓ or ✗)** – Be strict. Only mark ✓ if the logic **fully and precisely solves the problem**.  
-   - Do **not assume** steps the user left out (e.g. sorting, bounds checks, loop conditions).  
+1. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
+   - Do not assume steps the user left out (e.g. sorting, bounds checks, loop conditions).  
    - If the code omits or fails to explain something critical, mark it as ✗ and include that in Suggestions.
    - Ensure the user has included all the steps in the explanation.
    - Ensure the user explains how it reaches the final answer clearly. If not stated, wrong.
-2. **Efficiency** – 
+2. Efficiency – 
    Time: [state time complexity clearly]  
    Space: [state space complexity]  
    Any more optimal? [Yes/No – If yes, describe why this is not optimal, but do not give the optimal solution]
-3. **Edge Cases** – 
+3. Edge Cases – 
   - What corner cases could break this code? Write concisely.
   Give it in the format of:
-  1) Corner case 1 (reasoning 3-5 words max)
-  2) Corner case 2 (reasoning 3-5 words max)
+  1) Corner case 1 (reasoning 5 words max STRICTLY)
+  2) Corner case 2 (reasoning 5 words max STRICTLY)
   ...
-4. **Suggestions** – 
+4. Suggestions – 
   2-3 specific ways to improve the code. Write concisely only one sentence.
   If logic is ✗, suggest what was missing (e.g. "no sorting step included").
   Include suggestions to include more details in explanation,
    clarity, performance, or robustness.
   Give it in the format of:
-  1) Suggestion 1 (reasoning 8 words max)
-  2) Suggestion 2 (reasoning 8 words max)
+  1) Suggestion 1 (reasoning 10 words max STRICTLY)
+  2) Suggestion 2 (reasoning 10 words max STRICTLY)
   ...
 
-**Scoring**  
+Scoring  
 Rate the solution out of 100 using the following scale:
 
-- **100** – Fully correct and efficient, complete explanation, no gaps (5 stars)
-- **75–99** – Correct and efficient, but explanation is missing small details (4 stars)
-- **60–75** – Correct but inefficient, with solid explanation OR Correct but efficient, lacking lots of details (3 stars)
-- **50–60** – Correct but inefficient and not explained clearly (2 stars)
-- **25–50** – Logical flaws present that could cause edge case failures (1 star)
-- **0–25** – Major logical flaw or complete misunderstanding of the problem (0 stars)
+- 90-100 – Fully correct and efficient, complete explanation, no gaps (5 stars)
+- 75–90 – Correct and efficient, but explanation is missing small details (4 stars)
+- 60–75 – Correct but inefficient, with solid explanation OR Correct and efficient, lacking lots of details (3 stars)
+- 50–60 – Correct but inefficient and not explained clearly (2 stars)
+- 25–50 – Incorrect solution due to minor logical flaws present that could cause significant test case failures (1 star)
+- 0–25 – Completely incorrect solution due to major logical flaw or complete misunderstanding of the problem (0 stars)
 
-**Final Output Format:**
+Final Output Format:
 
 Correctness: ✓ or ✗  
 
