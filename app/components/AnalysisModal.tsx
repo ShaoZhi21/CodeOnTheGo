@@ -11,7 +11,7 @@ import Animated, {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.60;
-const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.4;
+const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.42;
 
 interface Analysis {
   correctness: string;
