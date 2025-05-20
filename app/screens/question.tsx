@@ -260,12 +260,12 @@ export default function QuestionScreen() {
               <View style={styles.analysisContent}>
                 {selectedAnalysisSection === 'correctness' && (
                   <View style={styles.analysisSection}>
-                    <ThemedText style={styles.analysisSubtitle}>Correctness</ThemedText>
-                    <ThemedText style={styles.analysisText}>{analysis.correctness}</ThemedText>
-                    <View style={styles.scoreSection}>
-                      <ThemedText style={styles.analysisSubtitle}>Score</ThemedText>
-                      <ThemedText style={styles.analysisText}>{analysis.score}/100</ThemedText>
-                      <View style={[styles.starsContainer, { marginBottom: 8 }]}>
+                    <View style={styles.correctnessContainer}>
+                      <View style={styles.scoreContainer}>
+                        <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
+                        <ThemedText style={styles.scoreLabel}>/100</ThemedText>
+                      </View>
+                      <View style={styles.starsContainer}>
                         {[...Array(5)].map((_, index) => (
                           <Image
                             key={index}
@@ -274,7 +274,7 @@ export default function QuestionScreen() {
                                 ? require('@/assets/images/icons/star-icon.png')
                                 : require('@/assets/images/icons/empty-star.png')
                             }
-                            style={styles.starIcon}
+                            style={styles.largeStarIcon}
                           />
                         ))}
                       </View>
@@ -585,20 +585,35 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
   },
-  scoreSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+  correctnessContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
   },
   starsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
+    gap: 8,
   },
-  starIcon: {
-    width: 24,
-    height: 24,
+  largeStarIcon: {
+    width: 40,
+    height: 40,
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  scoreText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#2d2d2d',
+    lineHeight: 28,
+  },
+  scoreLabel: {
+    fontSize: 20,
+    color: '#666',
+    lineHeight: 20,
   },
 }); 
