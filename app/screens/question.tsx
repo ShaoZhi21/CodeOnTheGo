@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AnalysisModal } from '../components/AnalysisModal';
 
 interface Analysis {
   correctness: string;
@@ -46,6 +47,7 @@ export default function QuestionScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -85,6 +87,7 @@ export default function QuestionScreen() {
       const data = await response.json();
       if (response.ok) {
         setAnalysis(data.analysis);
+        setShowAnalysis(true);
       } else {
         console.error('Error:', data.error);
       }
@@ -201,119 +204,6 @@ export default function QuestionScreen() {
           </View>
         </View>
 
-        {analysis && (
-          <View style={styles.analysisWrapper}>
-            <ThemedText style={styles.sectionTitle}>Analysis</ThemedText>
-            
-            <View style={styles.analysisButtonContainer}>
-              <TouchableOpacity 
-                style={[
-                  styles.analysisButton, 
-                  selectedAnalysisSection === 'correctness' && styles.selectedAnalysisButton,
-                  analysis.correctness === '✓' && styles.correctButton,
-                  analysis.correctness === '✗' && styles.wrongButton
-                ]} 
-                onPress={() => setSelectedAnalysisSection('correctness')}
-              >
-                <Image 
-                  source={
-                    analysis.correctness === '✓' 
-                      ? require('@/assets/images/icons/correct-icon.png')
-                      : require('@/assets/images/icons/wrong-icon.png')
-                  } 
-                  style={styles.correctnessIcon}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.analysisButton, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButton]} 
-                onPress={() => setSelectedAnalysisSection('efficiency')}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/efficient-icon.png')}
-                  style={[styles.analysisIcon, { marginBottom: 4 }]}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.analysisButton, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButton]} 
-                onPress={() => setSelectedAnalysisSection('edgeCases')}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/checklist-icon.png')}
-                  style={[styles.analysisIcon, { marginBottom: 4 }, { marginLeft: 4 }]}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.analysisButton, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButton]} 
-                onPress={() => setSelectedAnalysisSection('suggestions')}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/suggestion-icon.png')}
-                  style={[styles.analysisIcon, { marginBottom: 6 }]}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.analysisContainer}>
-              <View style={styles.analysisContent}>
-                {selectedAnalysisSection === 'correctness' && (
-                  <View style={styles.analysisSection}>
-                    <View style={styles.correctnessContainer}>
-                      <View style={styles.scoreContainer}>
-                        <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
-                        <ThemedText style={styles.scoreLabel}>/100</ThemedText>
-                      </View>
-                      <View style={styles.starsContainer}>
-                        {[...Array(5)].map((_, index) => (
-                          <Image
-                            key={index}
-                            source={
-                              index < analysis.stars
-                                ? require('@/assets/images/icons/star-icon.png')
-                                : require('@/assets/images/icons/empty-star.png')
-                            }
-                            style={styles.largeStarIcon}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                )}
-
-                {selectedAnalysisSection === 'efficiency' && (
-                  <View style={styles.analysisSection}>
-                    <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
-                    <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
-                    <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
-                    <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
-                  </View>
-                )}
-
-                {selectedAnalysisSection === 'edgeCases' && (
-                  <View style={styles.analysisSection}>
-                    <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
-                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                      <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
-                    ))}
-                  </View>
-                )}
-
-                {selectedAnalysisSection === 'suggestions' && (
-                  <View style={styles.analysisSection}>
-                    <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
-                    {analysis.suggestions.map((suggestion: string, index: number) => (
-                      <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
-                    ))}
-                  </View>
-                )}
-
-              </View>
-            </View>
-          </View>
-        )}
-          
         <TouchableOpacity 
           style={[styles.solveButton, !solution.trim() && styles.solveButtonDisabled]}
           onPress={handleSolveProblem}
@@ -326,6 +216,12 @@ export default function QuestionScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      <AnalysisModal
+        visible={showAnalysis}
+        onClose={() => setShowAnalysis(false)}
+        analysis={analysis}
+      />
     </SafeAreaView>
   );
 }
