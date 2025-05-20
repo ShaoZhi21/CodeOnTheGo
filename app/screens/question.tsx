@@ -231,7 +231,7 @@ export default function QuestionScreen() {
               >
                 <Image 
                   source={require('@/assets/images/icons/efficient-icon.png')}
-                  style={styles.analysisIcon}
+                  style={[styles.analysisIcon, { marginBottom: 4 }]}
                 />
               </TouchableOpacity>
 
@@ -241,7 +241,7 @@ export default function QuestionScreen() {
               >
                 <Image 
                   source={require('@/assets/images/icons/checklist-icon.png')}
-                  style={styles.analysisIcon}
+                  style={[styles.analysisIcon, { marginBottom: 4 }, { marginLeft: 4 }]}
                 />
               </TouchableOpacity>
 
@@ -251,7 +251,7 @@ export default function QuestionScreen() {
               >
                 <Image 
                   source={require('@/assets/images/icons/suggestion-icon.png')}
-                  style={styles.analysisIcon}
+                  style={[styles.analysisIcon, { marginBottom: 6 }]}
                 />
               </TouchableOpacity>
             </View>
@@ -262,6 +262,23 @@ export default function QuestionScreen() {
                   <View style={styles.analysisSection}>
                     <ThemedText style={styles.analysisSubtitle}>Correctness</ThemedText>
                     <ThemedText style={styles.analysisText}>{analysis.correctness}</ThemedText>
+                    <View style={styles.scoreSection}>
+                      <ThemedText style={styles.analysisSubtitle}>Score</ThemedText>
+                      <ThemedText style={styles.analysisText}>{analysis.score}/100</ThemedText>
+                      <View style={[styles.starsContainer, { marginBottom: 8 }]}>
+                        {[...Array(5)].map((_, index) => (
+                          <Image
+                            key={index}
+                            source={
+                              index < analysis.stars
+                                ? require('@/assets/images/icons/star-icon.png')
+                                : require('@/assets/images/icons/empty-star.png')
+                            }
+                            style={styles.starIcon}
+                          />
+                        ))}
+                      </View>
+                    </View>
                   </View>
                 )}
 
@@ -292,11 +309,6 @@ export default function QuestionScreen() {
                   </View>
                 )}
 
-                <View style={styles.scoreSection}>
-                  <ThemedText style={styles.analysisSubtitle}>Score</ThemedText>
-                  <ThemedText style={styles.analysisText}>{analysis.score}/100</ThemedText>
-                  <ThemedText style={styles.analysisText}>Stars: {analysis.stars}</ThemedText>
-                </View>
               </View>
             </View>
           </View>
@@ -570,13 +582,23 @@ const styles = StyleSheet.create({
     height: 36,
   },
   analysisIcon: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
   },
   scoreSection: {
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  starIcon: {
+    width: 24,
+    height: 24,
   },
 }); 
