@@ -4,6 +4,19 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+interface Analysis {
+  correctness: string;
+  efficiency: {
+    time: string;
+    space: string;
+    anyMoreOptimal: string;
+  };
+  edgeCases: string[];
+  suggestions: string[];
+  score: number;
+  stars: number;
+}
+
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty } = params;
@@ -31,7 +44,7 @@ export default function QuestionScreen() {
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
   const [solution, setSolution] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState("");
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -48,7 +61,6 @@ export default function QuestionScreen() {
 
   function handleSolutionChange(text: string) {
     setSolution(text);
-    console.log(solution);
   }
   
   async function handleSolveProblem() {
@@ -193,7 +205,37 @@ export default function QuestionScreen() {
             <ThemedText style={styles.sectionTitle}>Analysis</ThemedText>
             <View style={styles.analysisContainer}>
               <View style={styles.analysisContent}>
-                <ThemedText style={styles.analysisText}>{analysis}</ThemedText>
+                <View style={styles.analysisSection}>
+                  <ThemedText style={styles.analysisSubtitle}>Correctness</ThemedText>
+                  <ThemedText style={styles.analysisText}>{analysis.correctness}</ThemedText>
+                </View>
+
+                <View style={styles.analysisSection}>
+                  <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
+                  <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
+                  <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
+                  <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
+                </View>
+
+                <View style={styles.analysisSection}>
+                  <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
+                  {analysis.edgeCases.map((edgeCase: string, index: number) => (
+                    <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
+                  ))}
+                </View>
+
+                <View style={styles.analysisSection}>
+                  <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
+                  {analysis.suggestions.map((suggestion: string, index: number) => (
+                    <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
+                  ))}
+                </View>
+
+                <View style={styles.analysisSection}>
+                  <ThemedText style={styles.analysisSubtitle}>Score</ThemedText>
+                  <ThemedText style={styles.analysisText}>{analysis.score}/100</ThemedText>
+                  <ThemedText style={styles.analysisText}>Stars: {analysis.stars}</ThemedText>
+                </View>
               </View>
             </View>
           </View>
@@ -420,6 +462,15 @@ const styles = StyleSheet.create({
   },
   analysisContent: {
     marginTop: 8,
+  },
+  analysisSection: {
+    marginBottom: 8,
+  },
+  analysisSubtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2d2d2d',
+    marginBottom: 4,
   },
   analysisText: {
     fontSize: 16,

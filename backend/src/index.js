@@ -66,7 +66,7 @@ Evaluate the submission as follows:
   ...
 4. **Suggestions** – 
   2-3 specific ways to improve the code. Write concisely only one sentence.
-  If logic is ✗, suggest what was missing (e.g. “no sorting step included”).
+  If logic is ✗, suggest what was missing (e.g. "no sorting step included").
   Include suggestions to improve clarity, performance, or robustness.
   Give it in the format of:
   1) Suggestion 1 (reasoning 8 words max)
@@ -104,7 +104,56 @@ Stars: 0-5
     const response = await result.response;
     const text = response.text();
 
-    res.json({ analysis: text });
+    console.log('Raw Gemini response:', text); // Log the raw response
+
+    // Parse the response into structured format
+    const lines = text.split('\n');
+    const analysis = {
+      correctness: '',
+      efficiency: {
+        time: '',
+        space: '',
+        anyMoreOptimal: ''
+      },
+      edgeCases: [],
+      suggestions: [],
+      score: 0,
+      stars: 0
+    };
+
+    let currentSection = '';
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      if (trimmedLine.startsWith('Correctness:')) {
+        analysis.correctness = trimmedLine.replace('Correctness:', '').trim();
+      } else if (trimmedLine.startsWith('Time:')) {
+        analysis.efficiency.time = trimmedLine.replace('Time:', '').trim();
+      } else if (trimmedLine.startsWith('Space:')) {
+        analysis.efficiency.space = trimmedLine.replace('Space:', '').trim();
+      } else if (trimmedLine.startsWith('Any more optimal?')) {
+        analysis.efficiency.anyMoreOptimal = trimmedLine.replace('Any more optimal?', '').trim();
+      } else if (trimmedLine.startsWith('Edge Cases:')) {
+        currentSection = 'edgeCases';
+      } else if (trimmedLine.startsWith('Suggestions:')) {
+        currentSection = 'suggestions';
+      } else if (trimmedLine.startsWith('Score:')) {
+        const scoreMatch = trimmedLine.match(/(\d+)\/100/);
+        if (scoreMatch) {
+          analysis.score = parseInt(scoreMatch[1]);
+        }
+      } else if (trimmedLine.startsWith('Stars:')) {
+        const starsMatch = trimmedLine.match(/(\d+)/);
+        if (starsMatch) {
+          analysis.stars = parseInt(starsMatch[1]);
+        }
+      } else if (trimmedLine && currentSection === 'edgeCases') {
+        analysis.edgeCases.push(trimmedLine);
+      } else if (trimmedLine && currentSection === 'suggestions') {
+        analysis.suggestions.push(trimmedLine);
+      }
+    }
+    res.json({ analysis });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Failed to analyze code' });
