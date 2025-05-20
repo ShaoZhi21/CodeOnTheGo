@@ -10,8 +10,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.60;
-const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.42;
+const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.75;
+const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
 
 interface Analysis {
   correctness: string;

@@ -73,7 +73,7 @@ app.post('/api/analyze', async (req, res) => {
     Instead, refer directly to the scoring rubric under "Scoring" and award points accordingly for those that are incorrect.
 
     Do not give high marks for correct but very short explanations.
-    Mark based on whether the user sufficiently *explained their thinking* — not just whether the final logic appears valid.
+    Mark based on whether the user sufficiently explained their thinking — not just whether the final logic appears valid.
 
 
 Code: ${code}
@@ -90,20 +90,24 @@ Evaluate the submission as follows:
    Space: [state space complexity]  
    Any more optimal? [Yes/No – If yes, describe why this is not optimal, but do not give the optimal solution]
 3. Edge Cases – 
-  - What corner cases could break this code? Write concisely.
+  - What corner cases could break this code? 
+    Write concisely. Give at least 1 and at most 3 strictly.
+    Ignore large input cases unless the time complexity is O(n^2) or O(n^3) or worse.
   Give it in the format of:
   1) Corner case 1 (reasoning 5 words max STRICTLY)
   2) Corner case 2 (reasoning 5 words max STRICTLY)
-  ...
+  3) Corner case 3 (reasoning 5 words max STRICTLY)
 4. Suggestions – 
-  2-3 specific ways to improve the code. Write concisely only one sentence.
+  Give at least 1 and at most 3 specific ways to improve the code strictly. 
+  Write concisely only one sentence.
+  No need to tell them to explain time or space complexity.
+  If logic is ✓, suggest what was missing (e.g. "no sorting step included").
   If logic is ✗, suggest what was missing (e.g. "no sorting step included").
-  Include suggestions to include more details in explanation,
-   clarity, performance, or robustness.
+  Include suggestions to include more details in explanation, clarity, performance, or robustness.
   Give it in the format of:
-  1) Suggestion 1 (reasoning 10 words max STRICTLY)
-  2) Suggestion 2 (reasoning 10 words max STRICTLY)
-  ...
+  1) Suggestion 1 (reasoning 15 words max STRICTLY)
+  2) Suggestion 2 (reasoning 15 words max STRICTLY)
+  3) Suggestion 3 (reasoning 15 words max STRICTLY)
 
 Scoring  
 Rate the solution out of 100 using the following scale:
