@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
@@ -48,6 +48,16 @@ export default function QuestionScreen() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [showAnalysis, setShowAnalysis] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      setSolution("");
+      setIsAnalyzing(false);
+      setAnalysis(null);
+      setShowAnalysis(false);
+      setSelectedAnalysisSection('correctness');
+    };
+  }, []);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -118,13 +128,13 @@ export default function QuestionScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
-              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
-              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
+            <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
+            <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.section}>
             <View style={styles.descriptionContainer}>
@@ -204,17 +214,35 @@ export default function QuestionScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={[styles.solveButton, !solution.trim() && styles.solveButtonDisabled]}
-          onPress={handleSolveProblem}
-          disabled={!solution.trim() || isAnalyzing}
-        >
-          {isAnalyzing ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={[
+              styles.solveButton, 
+              (!solution.trim() || isAnalyzing) && styles.solveButtonDisabled,
+              analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
+            ]}
+            onPress={handleSolveProblem}
+            disabled={!solution.trim() || isAnalyzing}
+          >
+            {isAnalyzing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+            )}
+          </TouchableOpacity>
+
+          {analysis && (
+            <TouchableOpacity 
+              style={styles.analysisToggleButton}
+              onPress={() => setShowAnalysis(true)}
+            >
+              <Image 
+                source={require('@/assets/images/icons/up-arrow.png')}
+                style={styles.analysisToggleIcon}
+              />
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <AnalysisModal
@@ -306,7 +334,16 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginVertical: 20,
+    justifyContent: 'center',
+  },
+  solveButtonFullWidth: {
+    flex: 1,
+  },
+  solveButtonWithAnalysis: {
+    flex: 0.8,
+  },
+  solveButtonDisabled: {
+    backgroundColor: '#c7c1e9',
   },
   solveButtonText: {
     color: '#fff',
@@ -315,10 +352,9 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    marginBottom: 12,
-    gap: 6,
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 24,
   },
   toggleButton: {
     flex: 1,
@@ -416,8 +452,18 @@ const styles = StyleSheet.create({
   disabledNavButton: {
     backgroundColor: '#e0e0e0',
   },
-  solveButtonDisabled: {
-    backgroundColor: '#c7c1e9',
+  analysisToggleButton: {
+    flex: 0.2,
+    backgroundColor: '#6564c7',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analysisToggleIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#fff',
   },
   analysisWrapper: {
     marginTop: 4,
