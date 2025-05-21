@@ -1,8 +1,22 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AnalysisModal } from '../components/AnalysisModal';
+
+interface Analysis {
+  correctness: string;
+  efficiency: {
+    time: string;
+    space: string;
+    anyMoreOptimal: string;
+  };
+  edgeCases: string[];
+  suggestions: string[];
+  score: number;
+  stars: number;
+}
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
@@ -29,6 +43,21 @@ export default function QuestionScreen() {
   ]);
   const [showProblem, setShowProblem] = useState(true);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
+  const [solution, setSolution] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      setSolution("");
+      setIsAnalyzing(false);
+      setAnalysis(null);
+      setShowAnalysis(false);
+      setSelectedAnalysisSection('correctness');
+    };
+  }, []);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -42,6 +71,42 @@ export default function QuestionScreen() {
         return '#6564c7';
     }
   };
+
+  function handleSolutionChange(text: string) {
+    setSolution(text);
+  }
+  
+  async function handleSolveProblem() {
+    if (!solution.trim()) {
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('http://localhost:3000/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: solution,
+          question: description
+        }),
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setAnalysis(data.analysis);
+        setShowAnalysis(true);
+      } else {
+        console.error('Error:', data.error);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -63,13 +128,13 @@ export default function QuestionScreen() {
         </View>
 
         <View style={styles.buttonContainer}>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
-              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
-              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
+            <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
+            <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.section}>
             <View style={styles.descriptionContainer}>
@@ -140,17 +205,51 @@ export default function QuestionScreen() {
           <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
           <View style={styles.codeInputContainer}>
             <TextInput
+              value={solution}
+              onChangeText={handleSolutionChange}
               style={styles.codeInput}
               multiline
               placeholder="Write your solution here...">
-              </TextInput>
+            </TextInput>
           </View>
         </View>
-          
-        <TouchableOpacity style={styles.solveButton}>
-          <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
-        </TouchableOpacity>
+
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={[
+              styles.solveButton, 
+              (!solution.trim() || isAnalyzing) && styles.solveButtonDisabled,
+              analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
+            ]}
+            onPress={handleSolveProblem}
+            disabled={!solution.trim() || isAnalyzing}
+          >
+            {isAnalyzing ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+            )}
+          </TouchableOpacity>
+
+          {analysis && (
+            <TouchableOpacity 
+              style={styles.analysisToggleButton}
+              onPress={() => setShowAnalysis(true)}
+            >
+              <Image 
+                source={require('@/assets/images/icons/up-arrow.png')}
+                style={styles.analysisToggleIcon}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
       </ScrollView>
+
+      <AnalysisModal
+        visible={showAnalysis}
+        onClose={() => setShowAnalysis(false)}
+        analysis={analysis}
+      />
     </SafeAreaView>
   );
 }
@@ -235,7 +334,16 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginVertical: 20,
+    justifyContent: 'center',
+  },
+  solveButtonFullWidth: {
+    flex: 1,
+  },
+  solveButtonWithAnalysis: {
+    flex: 0.8,
+  },
+  solveButtonDisabled: {
+    backgroundColor: '#c7c1e9',
   },
   solveButtonText: {
     color: '#fff',
@@ -244,10 +352,9 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    marginBottom: 12,
-    gap: 6,
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 24,
   },
   toggleButton: {
     flex: 1,
@@ -274,7 +381,7 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
     borderRadius: 12,
     backgroundColor: '#fff',
-    padding: 10,
+    padding: 12,
   },
   codeInput: {
     flex: 1,
@@ -344,5 +451,111 @@ const styles = StyleSheet.create({
   },
   disabledNavButton: {
     backgroundColor: '#e0e0e0',
+  },
+  analysisToggleButton: {
+    flex: 0.2,
+    backgroundColor: '#6564c7',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analysisToggleIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#fff',
+  },
+  analysisWrapper: {
+    marginTop: 4,
+  },
+  analysisContainer: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  analysisContent: {
+    marginTop: 8,
+  },
+  analysisSection: {
+    marginBottom: 8,
+  },
+  analysisSubtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2d2d2d',
+    marginBottom: 4,
+  },
+  analysisText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
+  },
+  analysisButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 6,
+  },
+  analysisButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#c7c1e9',
+  },
+  selectedAnalysisButton: {
+    backgroundColor: '#6564c7',
+  },
+  correctButton: {
+    backgroundColor: '#e6f4ea', 
+    borderWidth: 4,
+    borderColor: '#009045',
+  },
+  wrongButton: {
+    backgroundColor: '#fff2f0', 
+    borderWidth: 4,
+    borderColor: '#FF375F',
+  },
+  correctnessIcon: {
+    width: 36,
+    height: 36,
+  },
+  analysisIcon: {
+    width: 42,
+    height: 42,
+  },
+  correctnessContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  largeStarIcon: {
+    width: 40,
+    height: 40,
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  scoreText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#2d2d2d',
+    lineHeight: 28,
+  },
+  scoreLabel: {
+    fontSize: 20,
+    color: '#666',
+    lineHeight: 20,
   },
 }); 
