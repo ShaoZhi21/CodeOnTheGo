@@ -1,7 +1,8 @@
+import DescriptionBox from '@/components/codeblocks/DescriptionBox';
 import { ThemedText } from '@/components/ThemedText';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
 
@@ -48,6 +49,7 @@ export default function QuestionScreen() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [descriptionBoxes, setDescriptionBoxes] = useState<string[]>([""]);
 
   useEffect(() => {
     return () => {
@@ -77,10 +79,11 @@ export default function QuestionScreen() {
   }
   
   async function handleSolveProblem() {
-    if (!solution.trim()) {
+    const combinedSolution = descriptionBoxes.join('\n');
+    if (!combinedSolution.trim()) {
       return;
     }
-
+    setSolution(combinedSolution);
     setIsAnalyzing(true);
     try {
       const response = await fetch('http://localhost:3000/api/analyze', {
@@ -89,7 +92,7 @@ export default function QuestionScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: solution,
+          code: combinedSolution,
           question: description
         }),
       });
@@ -106,6 +109,18 @@ export default function QuestionScreen() {
     } finally {
       setIsAnalyzing(false);
     }
+  }
+
+  function handleDescriptionBoxChange(index: number, text: string) {
+    setDescriptionBoxes(prev => {
+      const updated = [...prev];
+      updated[index] = text;
+      return updated;
+    });
+  }
+
+  function handleAddDescriptionBox() {
+    setDescriptionBoxes(prev => [...prev, ""]);
   }
 
   return (
@@ -203,26 +218,35 @@ export default function QuestionScreen() {
         
         <View style={[styles.section, { flex: 1 }]}>
           <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
-          <View style={styles.codeInputContainer}>
-            <TextInput
-              value={solution}
-              onChangeText={handleSolutionChange}
-              style={styles.codeInput}
-              multiline
-              placeholder="Write your solution here...">
-            </TextInput>
+
+          {/* Button Row */}
+          <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
+              <ThemedText style={styles.addBoxButtonText}>Description</ThemedText>
+            </TouchableOpacity>
           </View>
+
+          {/* Render all DescriptionBoxes */}
+          {descriptionBoxes.map((value, idx) => (
+            <DescriptionBox
+              key={idx}
+              value={value}
+              onChangeText={text => handleDescriptionBoxChange(idx, text)}
+              placeholder={`Write your solution here...`}
+              onDelete={descriptionBoxes.length > 1 ? () => setDescriptionBoxes(prev => prev.filter((_, i) => i !== idx)) : undefined}
+            />
+          ))}
         </View>
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[
               styles.solveButton, 
-              (!solution.trim() || isAnalyzing) && styles.solveButtonDisabled,
+              (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
               analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
             ]}
             onPress={handleSolveProblem}
-            disabled={!solution.trim() || isAnalyzing}
+            disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
           >
             {isAnalyzing ? (
               <ActivityIndicator color="#fff" />
@@ -557,5 +581,24 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#666',
     lineHeight: 20,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 12,
+    gap: 8,
+  },
+  addBoxButton: {
+    flex: 1,
+    backgroundColor: '#6564c7',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBoxButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 }); 
