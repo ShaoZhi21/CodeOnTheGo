@@ -73,10 +73,6 @@ export default function QuestionScreen() {
         return '#6564c7';
     }
   };
-
-  function handleSolutionChange(text: string) {
-    setSolution(text);
-  }
   
   async function handleSolveProblem() {
     const combinedSolution = descriptionBoxes.join('\n');
