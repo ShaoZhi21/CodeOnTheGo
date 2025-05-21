@@ -67,12 +67,19 @@ Manage personal details and notifications.
    npm install
    ```
 
-3. Start the backend server
+3. Create a `.env` file in the backend directory with the following variables:
+   ```env
+   PORT=3000
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+   You can get your Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+4. Start the backend server
    ```bash
    npm run dev
    ```
 
-4. Verify backend is running
+5. Verify backend is running
    - Health check: `http://localhost:3000/health`
    - Analysis endpoint: `http://localhost:3000/analyze`
 
