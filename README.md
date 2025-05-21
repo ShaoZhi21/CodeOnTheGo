@@ -17,7 +17,7 @@ Includes model solutions, examples, and difficulty levels.
 
 ### Smart Marking  
 - Keyword-based checks  
-- AI hints & feedback  
+- AI hints & feedback powered by Google's Gemini AI
 - Reveal ideal or similar solutions
 
 ### 1v1 Code Duel  
@@ -42,30 +42,43 @@ Gamified stats:
 
 ### Settings  
 Manage personal details and notifications.
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Setup Instructions
 
-## Get started
-
+### Frontend Setup
 1. Install dependencies
-
    ```bash
    npm install
    ```
 
 2. Start the app
-
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+### Backend Setup (Required for AI Analysis)
+1. Navigate to the backend directory
+   ```bash
+   cd backend
+   ```
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+2. Install backend dependencies
+   ```bash
+   npm install
+   ```
+
+3. Start the backend server
+   ```bash
+   npm run dev
+   ```
+
+4. Verify backend is running
+   - Health check: `http://localhost:3000/health`
+   - Analysis endpoint: `http://localhost:3000/analyze`
+
+The backend uses Google's Gemini AI to provide intelligent code analysis and feedback. Make sure the backend is running for the AI features to work.
+
+## Development
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
