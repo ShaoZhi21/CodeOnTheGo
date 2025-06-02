@@ -1,5 +1,6 @@
 import DescriptionBox from '@/components/codeblocks/DescriptionBox';
 import { ThemedText } from '@/components/ThemedText';
+import { apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -50,6 +51,7 @@ export default function QuestionScreen() {
   const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [descriptionBoxes, setDescriptionBoxes] = useState<string[]>([""]);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -81,8 +83,9 @@ export default function QuestionScreen() {
     }
     setSolution(combinedSolution);
     setIsAnalyzing(true);
+    setAnalysisError(null);
     try {
-      const response = await fetch('http://localhost:3000/api/analyze', {
+      const response = await apiCall('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,14 +97,11 @@ export default function QuestionScreen() {
       });
 
       const data = await response.json();
-      if (response.ok) {
-        setAnalysis(data.analysis);
-        setShowAnalysis(true);
-      } else {
-        console.error('Error:', data.error);
-      }
+      setAnalysis(data.analysis);
+      setShowAnalysis(true);
     } catch (error) {
-      console.error('Error:', error);
+      // Show simple error message if both APIs failed
+      setAnalysisError('Both live and local servers failed, try again');
     } finally {
       setIsAnalyzing(false);
     }
@@ -218,7 +218,7 @@ export default function QuestionScreen() {
           {/* Button Row */}
           <View style={styles.buttonRow}>
             <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
-              <ThemedText style={styles.addBoxButtonText}>Description</ThemedText>
+              <ThemedText style={styles.addBoxButtonText}>Add Box</ThemedText>
             </TouchableOpacity>
           </View>
 
@@ -234,6 +234,12 @@ export default function QuestionScreen() {
           ))}
         </View>
 
+        {/* Error message for analysis failure */}
+        {analysisError && (
+          <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
+            <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
+          </View>
+        )}
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[

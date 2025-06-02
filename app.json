@@ -39,6 +39,19 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5028ba7f-437a-4eb7-ac2c-51b6425e93f0"
+      }
+    },
+    "owner": "shaozhi",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/5028ba7f-437a-4eb7-ac2c-51b6425e93f0"
     }
   }
 }
