@@ -171,6 +171,7 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 20,
     justifyContent: 'center',
+    marginBottom: 20,
   },
   title: {
     fontSize: 32,
