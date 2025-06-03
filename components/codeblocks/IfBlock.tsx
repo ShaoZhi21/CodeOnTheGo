@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface IfBlockProps {
   condition: string;
@@ -8,6 +8,7 @@ interface IfBlockProps {
   onChangeCondition: (text: string) => void;
   onChangeBody: (text: string) => void;
   onDelete?: () => void;
+  isConnected?: boolean;
 }
 
 export function IfBlock({ condition, body, onChangeCondition, onChangeBody, onDelete }: IfBlockProps) {
@@ -22,6 +23,11 @@ export function IfBlock({ condition, body, onChangeCondition, onChangeBody, onDe
           placeholder="condition"
           placeholderTextColor="#aaa"
         />
+        {onDelete && (
+          <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+            <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
+          </TouchableOpacity>
+      )}
       </View>
       <TextInput
         style={styles.bodyInput}
@@ -31,9 +37,6 @@ export function IfBlock({ condition, body, onChangeCondition, onChangeBody, onDe
         placeholderTextColor="#aaa"
         multiline
       />
-      {onDelete && (
-        <ThemedText style={styles.delete} onPress={onDelete}>Delete</ThemedText>
-      )}
     </View>
   );
 }
@@ -42,13 +45,29 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#e6f4ea',
     borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#b8e6d3',
     padding: 12,
-    marginBottom: 8,
+    gap: 8,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FF375F',
+    backgroundColor: 'white',
+  },
+  deleteIcon: {
+    width: 14,
+    height: 14,
+    tintColor: '#FF375F',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
     gap: 8,
   },
   label: {
@@ -68,20 +87,13 @@ const styles = StyleSheet.create({
     minWidth: 60,
   },
   bodyInput: {
-    minHeight: 40,
     borderWidth: 1,
     borderColor: '#009045',
     borderRadius: 6,
     fontSize: 16,
     color: '#222',
-    padding: 6,
+    padding: 12,
     backgroundColor: '#fff',
     marginLeft: 25,
-  },
-  delete: {
-    color: '#FF375F',
-    marginTop: 6,
-    fontWeight: 'bold',
-    textAlign: 'right',
   },
 });

@@ -2,17 +2,27 @@ import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
 import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
-interface ElseBlockProps {
+interface ElseIfBlockProps {
+  condition: string;
   body: string;
+  onChangeCondition: (text: string) => void;
   onChangeBody: (text: string) => void;
   onDelete?: () => void;
+  isConnected?: boolean;
 }
 
-export function ElseBlock({ body, onChangeBody, onDelete }: ElseBlockProps) {
+export function ElseIfBlock({ condition, body, onChangeCondition, onChangeBody, onDelete, isConnected }: ElseIfBlockProps) {
   return (
-    <View style={styles.container}>
-      <View style={styles.topRow}>
-        <ThemedText style={styles.label}>else:</ThemedText>
+    <View style={[styles.container, isConnected && styles.connectedContainer]}>
+      <View style={styles.row}>
+        <ThemedText style={styles.label}>else if</ThemedText>
+        <TextInput
+          style={styles.conditionInput}
+          value={condition}
+          onChangeText={onChangeCondition}
+          placeholder="condition"
+          placeholderTextColor="#aaa"
+        />
         {onDelete && (
           <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
             <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
@@ -41,15 +51,29 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 8,
   },
-  topRow: {
+  connectedContainer: {
+    marginBottom: 2,
+  },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   label: {
     fontWeight: 'bold',
     color: '#009045',
     fontSize: 16,
+    marginRight: 4,
+  },
+  conditionInput: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderColor: '#009045',
+    fontSize: 16,
+    color: '#222',
+    padding: 4,
+    marginHorizontal: 4,
+    minWidth: 60,
   },
   bodyInput: {
     borderWidth: 1,

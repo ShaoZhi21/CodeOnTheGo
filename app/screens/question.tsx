@@ -1,6 +1,9 @@
 import DescriptionBox from '@/components/codeblocks/DescriptionBox';
 import { ElseBlock } from '@/components/codeblocks/ElseBlock';
+import { ElseIfBlock } from '@/components/codeblocks/ElseIfBlock';
+import { ForBlock } from '@/components/codeblocks/ForBlock';
 import { IfBlock } from '@/components/codeblocks/IfBlock';
+import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -35,7 +38,22 @@ interface ElseBlockType {
   type: 'else';
   body: string;
 }
-type CodeBlock = BoxBlock | IfBlockType | ElseBlockType;
+interface ElseIfBlockType {
+  type: 'elseif';
+  condition: string;
+  body: string;
+}
+interface WhileBlockType {
+  type: 'while';
+  condition: string;
+  body: string;
+}
+interface ForBlockType {
+  type: 'for';
+  condition: string;
+  body: string;
+}
+type CodeBlock = BoxBlock | IfBlockType | ElseBlockType | ElseIfBlockType | WhileBlockType | ForBlockType;
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
@@ -97,7 +115,10 @@ export default function QuestionScreen() {
     const combinedSolution = descriptionBoxes.map(block => {
       if (block.type === 'text') return block.value;
       if (block.type === 'if') return `if ${block.condition}:\n   ${block.body}`;
+      if (block.type === 'elseif') return `else if ${block.condition}:\n   ${block.body}`;
       if (block.type === 'else') return `else\n   ${block.body}`;
+      if (block.type === 'while') return `while (${block.condition}):\n   ${block.body}`;
+      if (block.type === 'for') return `for (${block.condition}):\n   ${block.body}`;
       return '';
     }).join('\n');
     if (!combinedSolution.trim()) {
@@ -106,7 +127,7 @@ export default function QuestionScreen() {
     setSolution(combinedSolution);
     setIsAnalyzing(true);
     setAnalysisError(null);
-    console.log(combinedSolution);
+    console.log('\n' + combinedSolution);
     try {
       const response = await apiCall('/api/analyze', {
         method: 'POST',
@@ -163,14 +184,35 @@ export default function QuestionScreen() {
   }
 
   function handleAddIfBlock() {
-    setDescriptionBoxes(prev => [...prev, { type: 'if', condition: '', body: '' }]);
+    setDescriptionBoxes(prev => {
+      if (prev.length > 0 && (prev[prev.length - 1].type === 'if' || prev[prev.length - 1].type === 'elseif')) {
+        return [...prev, { type: 'elseif', condition: '', body: '' }];
+      }
+      return [...prev, { type: 'if', condition: '', body: '' }];
+    });
+  }
+
+  function handleElseIfBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'elseif'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleElseIfBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'elseif'
+        ? { ...block, body: text }
+        : block
+    ));
   }
 
   function handleAddElseBlock() {
     setDescriptionBoxes(prev => {
       if (
         prev.length > 0 &&
-        prev[prev.length - 1].type === 'if'
+        (prev[prev.length - 1].type === 'if' || prev[prev.length - 1].type === 'elseif')
       ) {
         return [...prev, { type: 'else', body: '' }];
       }
@@ -181,6 +223,46 @@ export default function QuestionScreen() {
   function handleElseBlockBodyChange(index: number, text: string) {
     setDescriptionBoxes(prev => prev.map((block, i) =>
       i === index && block.type === 'else'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleAddWhileBlock() {
+    setDescriptionBoxes(prev => [...prev, { type: 'while', condition: '', body: '' }]);
+  }
+
+  function handleWhileBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'while'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleWhileBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'while'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleAddForBlock() {
+    setDescriptionBoxes(prev => [...prev, { type: 'for', condition: '', body: '' }]);
+  }
+
+  function handleForBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'for'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleForBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'for'
         ? { ...block, body: text }
         : block
     ));
@@ -282,35 +364,13 @@ export default function QuestionScreen() {
         <View style={[styles.section, { flex: 1 }]}>
           <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
 
-          {/* Button Row */}
-          <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
-              <ThemedText style={styles.addBoxButtonText}>Box</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
-              <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBoxButton, {
-                opacity:
-                  descriptionBoxes.length > 0 &&
-                  descriptionBoxes[descriptionBoxes.length - 1].type === 'if'
-                    ? 1 : 0.5
-              }]}
-              onPress={handleAddElseBlock}
-              disabled={
-                !(
-                  descriptionBoxes.length > 0 &&
-                  descriptionBoxes[descriptionBoxes.length - 1].type === 'if'
-                )
-              }
-            >
-              <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
-            </TouchableOpacity>
-          </View>
-
           {/* Render all DescriptionBoxes */}
           {descriptionBoxes.map((block, idx) => {
+            // Check if this block should be connected to the previous block
+            const isConnected = idx > 0 && 
+              (block.type === 'if' || block.type === 'elseif') &&
+              (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
+
             if (block.type === 'text') {
               return (
                 <DescriptionBox
@@ -331,6 +391,20 @@ export default function QuestionScreen() {
                   onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
                   onChangeBody={text => handleIfBlockBodyChange(idx, text)}
                   onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  isConnected={isConnected}
+                />
+              );
+            }
+            if (block.type === 'elseif') {
+              return (
+                <ElseIfBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  isConnected={isConnected}
                 />
               );
             }
@@ -344,9 +418,66 @@ export default function QuestionScreen() {
                 />
               );
             }
+            if (block.type === 'while') {
+              return (
+                <WhileBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
+            if (block.type === 'for') {
+              return (
+                <ForBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleForBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleForBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
             return null;
           })}
         </View>
+
+        {/* Button Row */}
+        <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
+              <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
+              <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBoxButton, {
+                opacity:
+                  descriptionBoxes.length > 0 &&
+                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                    ? 1 : 0.5
+              }]}
+              onPress={handleAddElseBlock}
+              disabled={
+                !(
+                  descriptionBoxes.length > 0 &&
+                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                )
+              }
+            >
+              <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
+              <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
+              <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
+            </TouchableOpacity>
+          </View>
 
         {/* Error message for analysis failure */}
         {analysisError && (
@@ -493,8 +624,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 16,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   toggleButton: {
     flex: 1,
@@ -715,6 +845,6 @@ const styles = StyleSheet.create({
   addBoxButtonText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 15,
   },
 }); 

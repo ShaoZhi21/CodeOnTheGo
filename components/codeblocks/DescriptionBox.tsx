@@ -1,6 +1,6 @@
 // app/components/DescriptionBox.tsx
 import React from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface DescriptionBoxProps {
   value: string;
@@ -33,7 +33,7 @@ const DescriptionBox: React.FC<DescriptionBoxProps> = ({ value, onChangeText, pl
       </View>
       {onDelete && (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-          <Text style={styles.deleteButtonText}>×</Text>
+          <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
         </TouchableOpacity>
       )}
     </View>
@@ -44,7 +44,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingRight: 12,
     marginBottom: 8,
+    gap: 8,
   },
   codeInputContainer: {
     flex: 1,
@@ -69,18 +73,19 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   deleteButton: {
-    marginLeft: 8,
-    padding: 8,
-    borderRadius: 16,
-    backgroundColor: '#eee',
-    alignItems: 'center',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FF375F',
+    backgroundColor: 'white',
   },
-  deleteButtonText: {
-    fontSize: 18,
-    color: '#FF375F',
-    fontWeight: 'bold',
-    lineHeight: 18,
+  deleteIcon: {
+    width: 14,
+    height: 14,
+    tintColor: '#FF375F',
   },
 });
 

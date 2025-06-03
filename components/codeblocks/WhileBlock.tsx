@@ -2,17 +2,26 @@ import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
 import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
-interface ElseBlockProps {
+interface WhileBlockProps {
+  condition: string;
   body: string;
+  onChangeCondition: (text: string) => void;
   onChangeBody: (text: string) => void;
   onDelete?: () => void;
 }
 
-export function ElseBlock({ body, onChangeBody, onDelete }: ElseBlockProps) {
+export function WhileBlock({ condition, body, onChangeCondition, onChangeBody, onDelete }: WhileBlockProps) {
   return (
     <View style={styles.container}>
-      <View style={styles.topRow}>
-        <ThemedText style={styles.label}>else:</ThemedText>
+      <View style={styles.row}>
+        <ThemedText style={styles.label}>while</ThemedText>
+        <TextInput
+          style={styles.conditionInput}
+          value={condition}
+          onChangeText={onChangeCondition}
+          placeholder="condition"
+          placeholderTextColor="#aaa"
+        />
         {onDelete && (
           <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
             <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
@@ -33,27 +42,38 @@ export function ElseBlock({ body, onChangeBody, onDelete }: ElseBlockProps) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#e6f4ea',
+    backgroundColor: '#e6f0ff',
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#b8e6d3',
+    borderColor: '#b3d9ff',
     padding: 12,
     marginBottom: 8,
     gap: 8,
   },
-  topRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 8,
   },
   label: {
     fontWeight: 'bold',
-    color: '#009045',
+    color: '#4da6ff',
     fontSize: 16,
+    marginRight: 4,
+  },
+  conditionInput: {
+    flex: 1,
+    borderBottomWidth: 1,
+    borderColor: '#4da6ff',
+    fontSize: 16,
+    color: '#222',
+    padding: 4,
+    marginHorizontal: 4,
+    minWidth: 60,
   },
   bodyInput: {
     borderWidth: 1,
-    borderColor: '#009045',
+    borderColor: '#4da6ff',
     borderRadius: 6,
     fontSize: 16,
     color: '#222',
