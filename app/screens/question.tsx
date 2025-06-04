@@ -1,7 +1,14 @@
+import DescriptionBox from '@/components/codeblocks/DescriptionBox';
+import { ElseBlock } from '@/components/codeblocks/ElseBlock';
+import { ElseIfBlock } from '@/components/codeblocks/ElseIfBlock';
+import { ForBlock } from '@/components/codeblocks/ForBlock';
+import { IfBlock } from '@/components/codeblocks/IfBlock';
+import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { ThemedText } from '@/components/ThemedText';
+import { apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
 
@@ -17,6 +24,36 @@ interface Analysis {
   score: number;
   stars: number;
 }
+
+interface BoxBlock {
+  type: 'text';
+  value: string;
+}
+interface IfBlockType {
+  type: 'if';
+  condition: string;
+  body: string;
+}
+interface ElseBlockType {
+  type: 'else';
+  body: string;
+}
+interface ElseIfBlockType {
+  type: 'elseif';
+  condition: string;
+  body: string;
+}
+interface WhileBlockType {
+  type: 'while';
+  condition: string;
+  body: string;
+}
+interface ForBlockType {
+  type: 'for';
+  condition: string;
+  body: string;
+}
+type CodeBlock = BoxBlock | IfBlockType | ElseBlockType | ElseIfBlockType | WhileBlockType | ForBlockType;
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
@@ -48,6 +85,8 @@ export default function QuestionScreen() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -71,41 +110,162 @@ export default function QuestionScreen() {
         return '#6564c7';
     }
   };
-
-  function handleSolutionChange(text: string) {
-    setSolution(text);
-  }
   
   async function handleSolveProblem() {
-    if (!solution.trim()) {
+    const combinedSolution = descriptionBoxes.map(block => {
+      if (block.type === 'text') return block.value;
+      if (block.type === 'if') return `if ${block.condition}:\n   ${block.body}`;
+      if (block.type === 'elseif') return `else if ${block.condition}:\n   ${block.body}`;
+      if (block.type === 'else') return `else\n   ${block.body}`;
+      if (block.type === 'while') return `while (${block.condition}):\n   ${block.body}`;
+      if (block.type === 'for') return `for (${block.condition}):\n   ${block.body}`;
+      return '';
+    }).join('\n');
+    if (!combinedSolution.trim()) {
       return;
     }
-
+    setSolution(combinedSolution);
     setIsAnalyzing(true);
+    setAnalysisError(null);
+    console.log('\n' + combinedSolution);
     try {
-      const response = await fetch('http://localhost:3000/api/analyze', {
+      const response = await apiCall('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: solution,
+          code: combinedSolution,
           question: description
         }),
       });
 
       const data = await response.json();
-      if (response.ok) {
-        setAnalysis(data.analysis);
-        setShowAnalysis(true);
-      } else {
-        console.error('Error:', data.error);
-      }
+      setAnalysis(data.analysis);
+      setShowAnalysis(true);
     } catch (error) {
-      console.error('Error:', error);
+      // Show simple error message if both APIs failed
+      setAnalysisError('Both live and local servers failed, try again');
     } finally {
       setIsAnalyzing(false);
     }
+  }
+
+  function handleDescriptionBoxChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'text'
+        ? { ...block, value: text }
+        : block
+    ));
+  }
+
+  function handleAddDescriptionBox() {
+    setDescriptionBoxes(prev => [...prev, { type: 'text', value: '' }]);
+  }
+
+  function handleIfBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'if'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleIfBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'if'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleDeleteBox(index: number) {
+    setDescriptionBoxes(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function handleAddIfBlock() {
+    setDescriptionBoxes(prev => {
+      if (prev.length > 0 && (prev[prev.length - 1].type === 'if' || prev[prev.length - 1].type === 'elseif')) {
+        return [...prev, { type: 'elseif', condition: '', body: '' }];
+      }
+      return [...prev, { type: 'if', condition: '', body: '' }];
+    });
+  }
+
+  function handleElseIfBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'elseif'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleElseIfBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'elseif'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleAddElseBlock() {
+    setDescriptionBoxes(prev => {
+      if (
+        prev.length > 0 &&
+        (prev[prev.length - 1].type === 'if' || prev[prev.length - 1].type === 'elseif')
+      ) {
+        return [...prev, { type: 'else', body: '' }];
+      }
+      return prev;
+    });
+  }
+
+  function handleElseBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'else'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleAddWhileBlock() {
+    setDescriptionBoxes(prev => [...prev, { type: 'while', condition: '', body: '' }]);
+  }
+
+  function handleWhileBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'while'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleWhileBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'while'
+        ? { ...block, body: text }
+        : block
+    ));
+  }
+
+  function handleAddForBlock() {
+    setDescriptionBoxes(prev => [...prev, { type: 'for', condition: '', body: '' }]);
+  }
+
+  function handleForBlockConditionChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'for'
+        ? { ...block, condition: text }
+        : block
+    ));
+  }
+
+  function handleForBlockBodyChange(index: number, text: string) {
+    setDescriptionBoxes(prev => prev.map((block, i) =>
+      i === index && block.type === 'for'
+        ? { ...block, body: text }
+        : block
+    ));
   }
 
   return (
@@ -203,26 +363,137 @@ export default function QuestionScreen() {
         
         <View style={[styles.section, { flex: 1 }]}>
           <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
-          <View style={styles.codeInputContainer}>
-            <TextInput
-              value={solution}
-              onChangeText={handleSolutionChange}
-              style={styles.codeInput}
-              multiline
-              placeholder="Write your solution here...">
-            </TextInput>
-          </View>
+
+          {/* Render all DescriptionBoxes */}
+          {descriptionBoxes.map((block, idx) => {
+            // Check if this block should be connected to the previous block
+            const isConnected = idx > 0 && 
+              (block.type === 'if' || block.type === 'elseif') &&
+              (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
+
+            if (block.type === 'text') {
+              return (
+                <DescriptionBox
+                  key={idx}
+                  value={block.value}
+                  onChangeText={text => handleDescriptionBoxChange(idx, text)}
+                  placeholder="Write your solution here..."
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
+            if (block.type === 'if') {
+              return (
+                <IfBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleIfBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  isConnected={isConnected}
+                />
+              );
+            }
+            if (block.type === 'elseif') {
+              return (
+                <ElseIfBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  isConnected={isConnected}
+                />
+              );
+            }
+            if (block.type === 'else') {
+              return (
+                <ElseBlock
+                  key={idx}
+                  body={block.body}
+                  onChangeBody={text => handleElseBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
+            if (block.type === 'while') {
+              return (
+                <WhileBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
+            if (block.type === 'for') {
+              return (
+                <ForBlock
+                  key={idx}
+                  condition={block.condition}
+                  body={block.body}
+                  onChangeCondition={text => handleForBlockConditionChange(idx, text)}
+                  onChangeBody={text => handleForBlockBodyChange(idx, text)}
+                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                />
+              );
+            }
+            return null;
+          })}
         </View>
 
+        {/* Button Row */}
+        <View style={styles.buttonRow}>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
+              <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
+              <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBoxButton, {
+                opacity:
+                  descriptionBoxes.length > 0 &&
+                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                    ? 1 : 0.5
+              }]}
+              onPress={handleAddElseBlock}
+              disabled={
+                !(
+                  descriptionBoxes.length > 0 &&
+                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                )
+              }
+            >
+              <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
+              <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
+              <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+        {/* Error message for analysis failure */}
+        {analysisError && (
+          <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
+            <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
+          </View>
+        )}
         <View style={styles.buttonContainer}>
           <TouchableOpacity 
             style={[
               styles.solveButton, 
-              (!solution.trim() || isAnalyzing) && styles.solveButtonDisabled,
+              (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
               analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
             ]}
             onPress={handleSolveProblem}
-            disabled={!solution.trim() || isAnalyzing}
+            disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
           >
             {isAnalyzing ? (
               <ActivityIndicator color="#fff" />
@@ -353,8 +624,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 16,
-    marginBottom: 24,
+    marginBottom: 12,
   },
   toggleButton: {
     flex: 1,
@@ -436,7 +706,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   arrowButton: {
-    width: 40,
+    width: 30,
     height: 30,
     borderRadius: 20,
     backgroundColor: '#6564c7',
@@ -557,5 +827,24 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#666',
     lineHeight: 20,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 12,
+    gap: 8,
+  },
+  addBoxButton: {
+    flex: 1,
+    backgroundColor: '#6564c7',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBoxButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
   },
 }); 

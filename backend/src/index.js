@@ -25,6 +25,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
+// Root endpoint
+app.get("/", (req, res) => {
+  res.send("Backend is live! 🚀");
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
@@ -62,7 +67,7 @@ app.post('/api/analyze', async (req, res) => {
 
     Before scoring, do the following:
     - Step 1: Generate your own ideal pseudocode in step-by-step point form (in natural language) that explains the intended algorithm fully.
-    - Step 2: Check how many of these steps the user’s explanation hits, either exactly or paraphrased. No need to be very strict with the phrasing as long as the idea is similar.
+    - Step 2: Check how many of these steps the user's explanation hits, either exactly or paraphrased. No need to be very strict with the phrasing as long as the idea is similar.
     - Step 3: For solutions that are correct, determine explanation detail coverage:
     - < 30% → Very vague or incomplete → Score ≤ 50-60
     - 30-60% → Decent but missing several key steps → Score 60-75
