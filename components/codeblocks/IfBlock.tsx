@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#b8e6d3',
-    padding: 12,
+    padding: 10,
     gap: 8,
   },
   deleteButton: {
