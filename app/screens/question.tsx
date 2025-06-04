@@ -706,7 +706,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   arrowButton: {
-    width: 40,
+    width: 30,
     height: 30,
     borderRadius: 20,
     backgroundColor: '#6564c7',
