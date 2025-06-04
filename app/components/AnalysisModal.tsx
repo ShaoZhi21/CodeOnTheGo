@@ -1,12 +1,12 @@
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
 import { Dimensions, Image, LayoutChangeEvent, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -131,133 +131,131 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
       animationType="none"
       statusBarTranslucent
     >
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Animated.View style={[styles.modalOverlay, overlayStyle]}>
-          <GestureDetector gesture={gesture}>
-            <Animated.View style={[styles.modalContainer, animatedStyle, { height: modalHeight }]}>
-              <View style={styles.dragHandle} />
-              
-              <View style={styles.header}>
-                <View style={styles.headerContent}>
-                  <ThemedText style={styles.title}>Analysis</ThemedText>
-                  <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                    <Image 
-                      source={require('@/assets/images/icons/wrong-icon.png')}
-                      style={styles.closeIcon}
-                    />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.analysisButtonContainer}>
-                <TouchableOpacity 
-                  style={[
-                    styles.analysisButton, 
-                    selectedAnalysisSection === 'correctness' && styles.selectedAnalysisButton,
-                    analysis.correctness === '✓' && styles.correctButton,
-                    analysis.correctness === '✗' && styles.wrongButton
-                  ]} 
-                  onPress={() => handleSectionChange('correctness')}
-                >
+      <Animated.View style={[styles.modalOverlay, overlayStyle]}>
+        <GestureDetector gesture={gesture}>
+          <Animated.View style={[styles.modalContainer, animatedStyle, { height: modalHeight }]}>
+            <View style={styles.dragHandle} />
+            
+            <View style={styles.header}>
+              <View style={styles.headerContent}>
+                <ThemedText style={styles.title}>Analysis</ThemedText>
+                <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                   <Image 
-                    source={
-                      analysis.correctness === '✓' 
-                        ? require('@/assets/images/icons/correct-icon.png')
-                        : require('@/assets/images/icons/wrong-icon.png')
-                    } 
-                    style={styles.correctnessIcon}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.analysisButton, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButton]} 
-                  onPress={() => handleSectionChange('efficiency')}
-                >
-                  <Image 
-                    source={require('@/assets/images/icons/efficient-icon.png')}
-                    style={[styles.analysisIcon, { marginBottom: 4 }]}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.analysisButton, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButton]} 
-                  onPress={() => handleSectionChange('edgeCases')}
-                >
-                  <Image 
-                    source={require('@/assets/images/icons/checklist-icon.png')}
-                    style={[styles.analysisIcon, { marginBottom: 4 }, { marginLeft: 4 }]}
-                  />
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.analysisButton, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButton]} 
-                  onPress={() => handleSectionChange('suggestions')}
-                >
-                  <Image 
-                    source={require('@/assets/images/icons/suggestion-icon.png')}
-                    style={[styles.analysisIcon, { marginBottom: 6 }]}
+                    source={require('@/assets/images/icons/wrong-icon.png')}
+                    style={styles.closeIcon}
                   />
                 </TouchableOpacity>
               </View>
+            </View>
 
-              <View style={styles.analysisContainer}>
-                <View style={styles.analysisContent}>
-                  {selectedAnalysisSection === 'correctness' && (
-                    <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'correctness')}>
-                      <View style={styles.correctnessContainer}>
-                        <View style={styles.scoreContainer}>
-                          <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
-                          <ThemedText style={styles.scoreLabel}>/100</ThemedText>
-                        </View>
-                        <View style={styles.starsContainer}>
-                          {[...Array(5)].map((_, index) => (
-                            <Image
-                              key={index}
-                              source={
-                                index < analysis.stars
-                                  ? require('@/assets/images/icons/star-icon.png')
-                                  : require('@/assets/images/icons/empty-star.png')
-                              }
-                              style={styles.largeStarIcon}
-                            />
-                          ))}
-                        </View>
+            <View style={styles.analysisButtonContainer}>
+              <TouchableOpacity 
+                style={[
+                  styles.analysisButton, 
+                  selectedAnalysisSection === 'correctness' && styles.selectedAnalysisButton,
+                  analysis.correctness === '✓' && styles.correctButton,
+                  analysis.correctness === '✗' && styles.wrongButton
+                ]} 
+                onPress={() => handleSectionChange('correctness')}
+              >
+                <Image 
+                  source={
+                    analysis.correctness === '✓' 
+                      ? require('@/assets/images/icons/correct-icon.png')
+                      : require('@/assets/images/icons/wrong-icon.png')
+                  } 
+                  style={styles.correctnessIcon}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'efficiency' && styles.selectedAnalysisButton]} 
+                onPress={() => handleSectionChange('efficiency')}
+              >
+                <Image 
+                  source={require('@/assets/images/icons/efficient-icon.png')}
+                  style={[styles.analysisIcon, { marginBottom: 4 }]}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'edgeCases' && styles.selectedAnalysisButton]} 
+                onPress={() => handleSectionChange('edgeCases')}
+              >
+                <Image 
+                  source={require('@/assets/images/icons/checklist-icon.png')}
+                  style={[styles.analysisIcon, { marginBottom: 4 }, { marginLeft: 4 }]}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.analysisButton, selectedAnalysisSection === 'suggestions' && styles.selectedAnalysisButton]} 
+                onPress={() => handleSectionChange('suggestions')}
+              >
+                <Image 
+                  source={require('@/assets/images/icons/suggestion-icon.png')}
+                  style={[styles.analysisIcon, { marginBottom: 6 }]}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.analysisContainer}>
+              <View style={styles.analysisContent}>
+                {selectedAnalysisSection === 'correctness' && (
+                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'correctness')}>
+                    <View style={styles.correctnessContainer}>
+                      <View style={styles.scoreContainer}>
+                        <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
+                        <ThemedText style={styles.scoreLabel}>/100</ThemedText>
+                      </View>
+                      <View style={styles.starsContainer}>
+                        {[...Array(5)].map((_, index) => (
+                          <Image
+                            key={index}
+                            source={
+                              index < analysis.stars
+                                ? require('@/assets/images/icons/star-icon.png')
+                                : require('@/assets/images/icons/empty-star.png')
+                            }
+                            style={styles.largeStarIcon}
+                          />
+                        ))}
                       </View>
                     </View>
-                  )}
+                  </View>
+                )}
 
-                  {selectedAnalysisSection === 'efficiency' && (
-                    <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'efficiency')}>
-                      <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
-                      <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
-                      <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
-                      <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
-                    </View>
-                  )}
+                {selectedAnalysisSection === 'efficiency' && (
+                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'efficiency')}>
+                    <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
+                    <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
+                    <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
+                    <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
+                  </View>
+                )}
 
-                  {selectedAnalysisSection === 'edgeCases' && (
-                    <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'edgeCases')}>
-                      <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
-                      {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                        <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
-                      ))}
-                    </View>
-                  )}
+                {selectedAnalysisSection === 'edgeCases' && (
+                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'edgeCases')}>
+                    <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
+                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
+                      <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
+                    ))}
+                  </View>
+                )}
 
-                  {selectedAnalysisSection === 'suggestions' && (
-                    <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'suggestions')}>
-                      <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
-                      {analysis.suggestions.map((suggestion: string, index: number) => (
-                        <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
-                      ))}
-                    </View>
-                  )}
-                </View>
+                {selectedAnalysisSection === 'suggestions' && (
+                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'suggestions')}>
+                    <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
+                    {analysis.suggestions.map((suggestion: string, index: number) => (
+                      <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
+                    ))}
+                  </View>
+                )}
               </View>
-            </Animated.View>
-          </GestureDetector>
-        </Animated.View>
-      </GestureHandlerRootView>
+            </View>
+          </Animated.View>
+        </GestureDetector>
+      </Animated.View>
     </Modal>
   );
 }
