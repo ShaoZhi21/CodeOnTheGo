@@ -6,11 +6,17 @@ import { IfBlock } from '@/components/codeblocks/IfBlock';
 import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
+import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
+
+// Supabase configuration
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Analysis {
   correctness: string;
@@ -23,6 +29,24 @@ interface Analysis {
   suggestions: string[];
   score: number;
   stars: number;
+}
+
+interface Example {
+  id?: number;
+  input: string;
+  output: string;
+  explanation: string;
+}
+
+interface Problem {
+  id: number;
+  leetcode_id: number;
+  title: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  description_text: string;
+  examples: Example[];
+  constraints: string[];
+  hints: string[];
 }
 
 interface BoxBlock {
@@ -58,26 +82,13 @@ type CodeBlock = BoxBlock | IfBlockType | ElseBlockType | ElseIfBlockType | Whil
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty } = params;
-  const [description] = useState(
-    "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution, and you may not use the same element twice. You can return the answer in any order."
-  );
-  const [examples] = useState([
-    {
-      input: "nums = [2,7,11,15], target = 9",
-      output: "[0,1]",
-      explanation: "Because nums[0] + nums[1] == 9, we return [0, 1]."
-    },
-    {
-      input: "nums = [3,2,4], target = 6",
-      output: "[1,2]",
-      explanation: "Because nums[1] + nums[2] == 6, we return [1, 2]."
-    },
-    {
-      input: "nums = [3,3], target = 6",
-      output: "[0,1]",
-      explanation: "Because nums[0] + nums[1] == 6, we return [0, 1]."
-    }
-  ]);
+  
+  // Dynamic data states
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // UI states
   const [showProblem, setShowProblem] = useState(true);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
   const [solution, setSolution] = useState("");
@@ -87,6 +98,69 @@ export default function QuestionScreen() {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  // Fetch problem data from Supabase
+  const fetchProblemData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase
+        .from('leetcode_problems')
+        .select('id, leetcode_id, title, difficulty, description_text, examples, constraints, hints')
+        .eq('leetcode_id', parseInt(id as string))
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('Problem not found');
+      }
+
+      // Parse examples if they're stored as JSON
+      let parsedExamples: Example[] = [];
+      if (data.examples) {
+        try {
+          parsedExamples = Array.isArray(data.examples) ? data.examples : [];
+        } catch (e) {
+          console.warn('Failed to parse examples:', e);
+          parsedExamples = [];
+        }
+      }
+
+      // Ensure we have at least one example (fallback)
+      if (parsedExamples.length === 0) {
+        parsedExamples = [
+          {
+            input: "No example available",
+            output: "No example available", 
+            explanation: "No example available for this problem."
+          }
+        ];
+      }
+
+      setProblem({
+        ...data,
+        examples: parsedExamples,
+        constraints: data.constraints || [],
+        hints: data.hints || []
+      });
+
+    } catch (err) {
+      console.error('Error fetching problem:', err);
+      setError('Failed to load problem. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (id) {
+      fetchProblemData();
+    }
+  }, [id]);
 
   useEffect(() => {
     return () => {
@@ -112,6 +186,8 @@ export default function QuestionScreen() {
   };
   
   async function handleSolveProblem() {
+    if (!problem) return;
+    
     const combinedSolution = descriptionBoxes.map(block => {
       if (block.type === 'text') return block.value;
       if (block.type === 'if') return `if ${block.condition}:\n   ${block.body}`;
@@ -136,7 +212,7 @@ export default function QuestionScreen() {
         },
         body: JSON.stringify({
           code: combinedSolution,
-          question: description
+          question: problem.description_text
         }),
       });
 
@@ -276,245 +352,259 @@ export default function QuestionScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={styles.titleContainer}>
-          <View style={styles.questionHeader}>
-            <ThemedText style={styles.questionId}>#{id}</ThemedText>
-            <ThemedText style={styles.title}>{name}</ThemedText>
-            <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(difficulty as string) }]}>
-              <ThemedText style={styles.difficultyText}>{difficulty}</ThemedText>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6564c7" />
+          <ThemedText style={styles.loadingText}>Loading problem...</ThemedText>
+        </View>
+      ) : error ? (
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchProblemData}>
+            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        </View>
+      ) : problem ? (
+        <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }}>
+          <View style={styles.titleContainer}>
+            <View style={styles.questionHeader}>
+              <ThemedText style={styles.questionId}>#{problem.leetcode_id}</ThemedText>
+              <ThemedText style={styles.title}>{problem.title}</ThemedText>
+              <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(problem.difficulty) }]}>
+                <ThemedText style={styles.difficultyText}>{problem.difficulty}</ThemedText>
+              </View>
             </View>
           </View>
-        </View>
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
-            <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
-            <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-            <View style={styles.descriptionContainer}>
-              {showProblem ? 
-              <ThemedText style={styles.description}>{description}</ThemedText>
-               : (
-                <>
-                  <View style={styles.exampleContent}>
-                    <View style={styles.exampleSection}>
-                      <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
-                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].input}</ThemedText>
-                    </View>
-
-                    <View style={styles.exampleSection}>
-                      <ThemedText style={styles.exampleLabel}>Output:</ThemedText>
-                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].output}</ThemedText>
-                    </View>
-
-                    <View style={styles.exampleSection}>
-                      <ThemedText style={styles.exampleLabel}>Explanation:</ThemedText>
-                      <ThemedText style={styles.exampleText}>{examples[currentExampleIndex].explanation}</ThemedText>
-                    </View>
-                  </View>
-
-                  <View style={styles.exampleNavigation}>
-                    <TouchableOpacity 
-                      style={[styles.arrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
-                      onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
-                      disabled={currentExampleIndex === 0}
-                    >
-                      <ThemedText style={styles.arrowButtonText}>{'<'}</ThemedText>
-                    </TouchableOpacity>
-                    
-                    <View style={styles.exampleNumberContainer}>
-                      {examples.map((_, index) => (
-                        <TouchableOpacity 
-                          key={index}
-                          onPress={() => setCurrentExampleIndex(index)}
-                          style={[
-                            styles.exampleIndicator,
-                            currentExampleIndex === index && styles.activeExampleIndicator
-                          ]}
-                        >
-                          <ThemedText style={[
-                            styles.exampleIndicatorText,
-                            currentExampleIndex === index && styles.activeExampleIndicatorText
-                          ]}>
-                            {index + 1}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <TouchableOpacity 
-                      style={[styles.arrowButton, currentExampleIndex === examples.length - 1 && styles.disabledNavButton]}
-                      onPress={() => setCurrentExampleIndex(prev => Math.min(examples.length - 1, prev + 1))}
-                      disabled={currentExampleIndex === examples.length - 1}
-                    >
-                      <ThemedText style={styles.arrowButtonText}>{'>'}</ThemedText>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              )}
-            </View>
-        </View>
-        
-        <View style={[styles.section, { flex: 1 }]}>
-          <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
-
-          {/* Render all DescriptionBoxes */}
-          {descriptionBoxes.map((block, idx) => {
-            // Check if this block should be connected to the previous block
-            const isConnected = idx > 0 && 
-              (block.type === 'if' || block.type === 'elseif') &&
-              (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
-
-            if (block.type === 'text') {
-              return (
-                <DescriptionBox
-                  key={idx}
-                  value={block.value}
-                  onChangeText={text => handleDescriptionBoxChange(idx, text)}
-                  placeholder="Write your solution here..."
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                />
-              );
-            }
-            if (block.type === 'if') {
-              return (
-                <IfBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleIfBlockBodyChange(idx, text)}
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  isConnected={isConnected}
-                />
-              );
-            }
-            if (block.type === 'elseif') {
-              return (
-                <ElseIfBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  isConnected={isConnected}
-                />
-              );
-            }
-            if (block.type === 'else') {
-              return (
-                <ElseBlock
-                  key={idx}
-                  body={block.body}
-                  onChangeBody={text => handleElseBlockBodyChange(idx, text)}
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                />
-              );
-            }
-            if (block.type === 'while') {
-              return (
-                <WhileBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                />
-              );
-            }
-            if (block.type === 'for') {
-              return (
-                <ForBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleForBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleForBlockBodyChange(idx, text)}
-                  onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                />
-              );
-            }
-            return null;
-          })}
-        </View>
-
-        {/* Button Row */}
-        <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
-              <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
+              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
-              <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
+              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBoxButton, {
-                opacity:
-                  descriptionBoxes.length > 0 &&
-                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
-                    ? 1 : 0.5
-              }]}
-              onPress={handleAddElseBlock}
-              disabled={
-                !(
-                  descriptionBoxes.length > 0 &&
-                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
-                )
+          </View>
+
+          <View style={styles.section}>
+              <View style={styles.descriptionContainer}>
+                {showProblem ? 
+                <ThemedText style={styles.description}>{problem.description_text}</ThemedText>
+                 : (
+                  <>
+                    <View style={styles.exampleContent}>
+                      <View style={styles.exampleSection}>
+                        <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
+                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.input || 'No input available'}</ThemedText>
+                      </View>
+
+                      <View style={styles.exampleSection}>
+                        <ThemedText style={styles.exampleLabel}>Output:</ThemedText>
+                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.output || 'No output available'}</ThemedText>
+                      </View>
+
+                      <View style={styles.exampleSection}>
+                        <ThemedText style={styles.exampleLabel}>Explanation:</ThemedText>
+                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.explanation || 'No explanation available'}</ThemedText>
+                      </View>
+                    </View>
+
+                    <View style={styles.exampleNavigation}>
+                      <TouchableOpacity 
+                        style={[styles.arrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
+                        onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentExampleIndex === 0}
+                      >
+                        <ThemedText style={styles.arrowButtonText}>{'<'}</ThemedText>
+                      </TouchableOpacity>
+                      
+                      <View style={styles.exampleNumberContainer}>
+                        {problem.examples.map((_, index) => (
+                          <TouchableOpacity 
+                            key={index}
+                            onPress={() => setCurrentExampleIndex(index)}
+                            style={[
+                              styles.exampleIndicator,
+                              currentExampleIndex === index && styles.activeExampleIndicator
+                            ]}
+                          >
+                            <ThemedText style={[
+                              styles.exampleIndicatorText,
+                              currentExampleIndex === index && styles.activeExampleIndicatorText
+                            ]}>
+                              {index + 1}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TouchableOpacity 
+                        style={[styles.arrowButton, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavButton]}
+                        onPress={() => setCurrentExampleIndex(prev => Math.min(problem.examples.length - 1, prev + 1))}
+                        disabled={currentExampleIndex === problem.examples.length - 1}
+                      >
+                        <ThemedText style={styles.arrowButtonText}>{'>'}</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+          </View>
+          
+          <View style={[styles.section, { flex: 1 }]}>
+            <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+
+            {/* Render all DescriptionBoxes */}
+            {descriptionBoxes.map((block, idx) => {
+              // Check if this block should be connected to the previous block
+              const isConnected = idx > 0 && 
+                (block.type === 'if' || block.type === 'elseif') &&
+                (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
+
+              if (block.type === 'text') {
+                return (
+                  <DescriptionBox
+                    key={idx}
+                    value={block.value}
+                    onChangeText={text => handleDescriptionBoxChange(idx, text)}
+                    placeholder="Write your solution here..."
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  />
+                );
               }
-            >
-              <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
-              <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
-              <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
-            </TouchableOpacity>
+              if (block.type === 'if') {
+                return (
+                  <IfBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleIfBlockBodyChange(idx, text)}
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    isConnected={isConnected}
+                  />
+                );
+              }
+              if (block.type === 'elseif') {
+                return (
+                  <ElseIfBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    isConnected={isConnected}
+                  />
+                );
+              }
+              if (block.type === 'else') {
+                return (
+                  <ElseBlock
+                    key={idx}
+                    body={block.body}
+                    onChangeBody={text => handleElseBlockBodyChange(idx, text)}
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  />
+                );
+              }
+              if (block.type === 'while') {
+                return (
+                  <WhileBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  />
+                );
+              }
+              if (block.type === 'for') {
+                return (
+                  <ForBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleForBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleForBlockBodyChange(idx, text)}
+                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                  />
+                );
+              }
+              return null;
+            })}
           </View>
 
-        {/* Error message for analysis failure */}
-        {analysisError && (
-          <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
-            <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
-          </View>
-        )}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={[
-              styles.solveButton, 
-              (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
-              analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
-            ]}
-            onPress={handleSolveProblem}
-            disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
-          >
-            {isAnalyzing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
-            )}
-          </TouchableOpacity>
+          {/* Button Row */}
+          <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
+                <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
+                <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addBoxButton, {
+                  opacity:
+                    descriptionBoxes.length > 0 &&
+                    (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                      ? 1 : 0.5
+                }]}
+                onPress={handleAddElseBlock}
+                disabled={
+                  !(
+                    descriptionBoxes.length > 0 &&
+                    (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                  )
+                }
+              >
+                <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
+                <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
+                <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
+              </TouchableOpacity>
+            </View>
 
-          {analysis && (
-            <TouchableOpacity 
-              style={styles.analysisToggleButton}
-              onPress={() => setShowAnalysis(true)}
-            >
-              <Image 
-                source={require('@/assets/images/icons/up-arrow.png')}
-                style={styles.analysisToggleIcon}
-              />
-            </TouchableOpacity>
+          {/* Error message for analysis failure */}
+          {analysisError && (
+            <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
+              <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
+            </View>
           )}
-        </View>
-      </ScrollView>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[
+                styles.solveButton, 
+                (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
+                analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
+              ]}
+              onPress={handleSolveProblem}
+              disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
+            >
+              {isAnalyzing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+              )}
+            </TouchableOpacity>
+
+            {analysis && (
+              <TouchableOpacity 
+                style={styles.analysisToggleButton}
+                onPress={() => setShowAnalysis(true)}
+              >
+                <Image 
+                  source={require('@/assets/images/icons/up-arrow.png')}
+                  style={styles.analysisToggleIcon}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      ) : null}
 
       <AnalysisModal
         visible={showAnalysis}
@@ -846,5 +936,39 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#6564c7',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  errorText: {
+    color: '#FF375F',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#6564c7',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
   },
 }); 
