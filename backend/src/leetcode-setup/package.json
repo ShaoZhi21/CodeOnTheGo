@@ -1,0 +1,20 @@
+{
+  "name": "leetcode-data-setup",
+  "version": "1.0.0",
+  "description": "LeetCode data fetching and Supabase population scripts",
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup-database.js",
+    "populate": "node scripts/populate-problems.js",
+    "sync": "node scripts/sync-new-problems.js",
+    "test-connection": "node scripts/test-connection.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "leetcode-query": "^2.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0"
+  }
+} 
