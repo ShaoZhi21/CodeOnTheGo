@@ -4,11 +4,12 @@ import { ElseIfBlock } from '@/components/codeblocks/ElseIfBlock';
 import { ForBlock } from '@/components/codeblocks/ForBlock';
 import { IfBlock } from '@/components/codeblocks/IfBlock';
 import { WhileBlock } from '@/components/codeblocks/WhileBlock';
+import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
@@ -36,6 +37,7 @@ interface Example {
   input: string;
   output: string;
   explanation: string;
+  image?: string;
 }
 
 interface Problem {
@@ -43,7 +45,7 @@ interface Problem {
   leetcode_id: number;
   title: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
-  description_text: string;
+  description: string;
   examples: Example[];
   constraints: string[];
   hints: string[];
@@ -83,10 +85,15 @@ export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty } = params;
   
+  // Refs
+  const exampleScrollViewRef = useRef<ScrollView>(null);
+  
   // Dynamic data states
   const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [parsedExamples, setParsedExamples] = useState<Example[]>([]);
+  const [cleanedDescription, setCleanedDescription] = useState<string>('');
   
   // UI states
   const [showProblem, setShowProblem] = useState(true);
@@ -99,6 +106,153 @@ export default function QuestionScreen() {
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // Function to parse examples from HTML content (improved)
+  const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
+    const examples: Example[] = [];
+    let cleanedHtml = htmlContent;
+    
+    // Multiple regex patterns to handle different example formats
+    const examplePatterns = [
+      // Pattern 1: With class="example"
+      /<p><strong[^>]*class="example"[^>]*>Example\s+\d+:<\/strong><\/p>([\s\S]*?)(?=<p><strong[^>]*class="example"[^>]*>Example\s+\d+:<\/strong><\/p>|<p>&nbsp;<\/p>|<p><strong[^>]*>Constraints:<\/strong><\/p>|$)/gi,
+      
+      // Pattern 2: Simple strong tag
+      /<p><strong[^>]*>Example\s+\d+:<\/strong><\/p>([\s\S]*?)(?=<p><strong[^>]*>Example\s+\d+:<\/strong><\/p>|<p>&nbsp;<\/p>|<p><strong[^>]*>Constraints:<\/strong><\/p>|$)/gi,
+      
+      // Pattern 3: With class="example" but different structure
+      /<strong[^>]*class="example"[^>]*>Example\s+\d+:<\/strong>([\s\S]*?)(?=<strong[^>]*class="example"[^>]*>Example\s+\d+:<\/strong>|<p>&nbsp;<\/p>|<p><strong[^>]*>Constraints:<\/strong><\/p>|$)/gi,
+      
+      // Pattern 4: Very simple format
+      /<strong>Example\s+\d+:<\/strong>([\s\S]*?)(?=<strong>Example\s+\d+:<\/strong>|<strong>Constraints:<\/strong>|$)/gi,
+    ];
+    
+    let exampleMatches: RegExpExecArray[] = [];
+    
+    // Try each pattern until we find examples
+    for (const pattern of examplePatterns) {
+      pattern.lastIndex = 0; // Reset regex
+      let match;
+      while ((match = pattern.exec(htmlContent)) !== null) {
+        exampleMatches.push(match);
+      }
+      if (exampleMatches.length > 0) break;
+    }
+    
+    // If still no matches, try a more general approach
+    if (exampleMatches.length === 0) {
+      const generalPattern = /Example\s+\d+:([\s\S]*?)(?=Example\s+\d+:|Constraints:|$)/gi;
+      let match;
+      while ((match = generalPattern.exec(htmlContent)) !== null) {
+        exampleMatches.push(match);
+      }
+    }
+    
+    exampleMatches.forEach((match, index) => {
+      const exampleContent = match[1];
+      
+      // Extract image if present
+      const imgMatch = exampleContent.match(/<img[^>]*src=["']([^"']*)["'][^>]*>/i);
+      const imageUrl = imgMatch ? imgMatch[1] : '';
+      
+      // Extract input, output, and explanation from pre blocks
+      const preMatches = exampleContent.match(/<pre[^>]*>([\s\S]*?)<\/pre>/gi) || [];
+      
+      let input = '';
+      let output = '';
+      let explanation = '';
+      
+      // Try to parse from pre blocks first
+      preMatches.forEach(preBlock => {
+        const preContent = preBlock.replace(/<[^>]*>/g, '').trim();
+        const lines = preContent.split('\n').filter(line => line.trim());
+        
+        lines.forEach(line => {
+          if (line.toLowerCase().includes('input:')) {
+            input = line.replace(/^.*input:\s*/i, '').trim();
+          } else if (line.toLowerCase().includes('output:')) {
+            output = line.replace(/^.*output:\s*/i, '').trim();
+          } else if (line.toLowerCase().includes('explanation:')) {
+            explanation = line.replace(/^.*explanation:\s*/i, '').trim();
+          }
+        });
+      });
+      
+      // If no structured pre blocks, try to extract from the content directly
+      if (!input || !output) {
+        // More flexible patterns for input/output extraction
+        const inputPatterns = [
+          /<strong>Input:<\/strong>\s*([^<\n]*)/i,
+          /Input:\s*([^<\n]*)/i,
+          /<strong>Input:<\/strong>\s*<code>([^<]*)<\/code>/i,
+        ];
+        
+        const outputPatterns = [
+          /<strong>Output:<\/strong>\s*([^<\n]*)/i,
+          /Output:\s*([^<\n]*)/i,
+          /<strong>Output:<\/strong>\s*<code>([^<]*)<\/code>/i,
+        ];
+        
+        const explanationPatterns = [
+          /<strong>Explanation:<\/strong>\s*([^<]*?)(?=<|$)/i,
+          /Explanation:\s*([^<]*?)(?=<|$)/i,
+        ];
+        
+        // Try input patterns
+        for (const pattern of inputPatterns) {
+          const match = exampleContent.match(pattern);
+          if (match && match[1].trim()) {
+            input = match[1].trim();
+            break;
+          }
+        }
+        
+        // Try output patterns
+        for (const pattern of outputPatterns) {
+          const match = exampleContent.match(pattern);
+          if (match && match[1].trim()) {
+            output = match[1].trim();
+            break;
+          }
+        }
+        
+        // Try explanation patterns
+        for (const pattern of explanationPatterns) {
+          const match = exampleContent.match(pattern);
+          if (match && match[1].trim()) {
+            explanation = match[1].trim();
+            break;
+          }
+        }
+      }
+      
+      // Clean up extracted text
+      input = input.replace(/<[^>]*>/g, '').trim();
+      output = output.replace(/<[^>]*>/g, '').trim();
+      explanation = explanation.replace(/<[^>]*>/g, '').trim();
+      
+      examples.push({
+        input: input || 'No input available',
+        output: output || 'No output available',
+        explanation: explanation || 'No explanation available',
+        image: imageUrl
+      });
+      
+      // Remove this example from the cleaned HTML
+      cleanedHtml = cleanedHtml.replace(match[0], '');
+    });
+    
+    // Clean up the HTML further
+    cleanedHtml = cleanedHtml
+      .replace(/<p>&nbsp;<\/p>/g, '') // Remove empty paragraphs
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .trim();
+    
+    return {
+      examples: examples.length > 0 ? examples : [],
+      cleanedHtml: cleanedHtml
+    };
+  };
+
   // Fetch problem data from Supabase
   const fetchProblemData = async () => {
     try {
@@ -107,7 +261,7 @@ export default function QuestionScreen() {
 
       const { data, error } = await supabase
         .from('leetcode_problems')
-        .select('id, leetcode_id, title, difficulty, description_text, examples, constraints, hints')
+        .select('id, leetcode_id, title, difficulty, description, examples, constraints, hints')
         .eq('leetcode_id', parseInt(id as string))
         .single();
 
@@ -119,20 +273,40 @@ export default function QuestionScreen() {
         throw new Error('Problem not found');
       }
 
-      // Parse examples if they're stored as JSON
-      let parsedExamples: Example[] = [];
-      if (data.examples) {
-        try {
-          parsedExamples = Array.isArray(data.examples) ? data.examples : [];
-        } catch (e) {
-          console.warn('Failed to parse examples:', e);
-          parsedExamples = [];
+      console.log('Raw description length:', data.description?.length);
+      console.log('Description preview:', data.description?.substring(0, 200));
+
+      // Parse examples from description HTML - prioritize this method
+      const { examples: htmlExamples, cleanedHtml } = parseExamplesFromHtmlSimple(data.description || '');
+      
+      console.log('Parsed examples from HTML:', htmlExamples.length);
+      console.log('Examples:', htmlExamples);
+      console.log('Cleaned HTML length:', cleanedHtml.length);
+      
+      // Use parsed examples from HTML if available, otherwise fall back to stored examples
+      let finalExamples: Example[] = [];
+      
+      // Always prioritize HTML-parsed examples
+      if (htmlExamples.length > 0) {
+        finalExamples = htmlExamples;
+        console.log('✅ Using HTML-parsed examples');
+      } else {
+        console.log('⚠️ No examples found in HTML, checking Supabase examples...');
+        if (data.examples) {
+          try {
+            finalExamples = Array.isArray(data.examples) ? data.examples : [];
+            console.log('📦 Using Supabase examples:', finalExamples.length);
+          } catch (e) {
+            console.warn('Failed to parse stored examples:', e);
+            finalExamples = [];
+          }
         }
       }
 
       // Ensure we have at least one example (fallback)
-      if (parsedExamples.length === 0) {
-        parsedExamples = [
+      if (finalExamples.length === 0) {
+        console.log('🔄 Using fallback example');
+        finalExamples = [
           {
             input: "No example available",
             output: "No example available", 
@@ -141,9 +315,12 @@ export default function QuestionScreen() {
         ];
       }
 
+      setParsedExamples(finalExamples);
+      setCleanedDescription(cleanedHtml || data.description || '');
+      
       setProblem({
         ...data,
-        examples: parsedExamples,
+        examples: finalExamples,
         constraints: data.constraints || [],
         hints: data.hints || []
       });
@@ -212,7 +389,7 @@ export default function QuestionScreen() {
         },
         body: JSON.stringify({
           code: combinedSolution,
-          question: problem.description_text
+          question: problem.description
         }),
       });
 
@@ -344,6 +521,9 @@ export default function QuestionScreen() {
     ));
   }
 
+  // Generate HTML content for WebView with proper styling
+
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -387,49 +567,106 @@ export default function QuestionScreen() {
 
           <View style={styles.section}>
               <View style={styles.descriptionContainer}>
-                {showProblem ? 
-                <ThemedText style={styles.description}>{problem.description_text}</ThemedText>
-                 : (
+                {showProblem ? (
+                  <HtmlRenderer 
+                    htmlContent={cleanedDescription || problem.description || 'No description available'} 
+                    style={styles.webviewContainer}
+                  />
+                ) : (
                   <>
-                    <View style={styles.exampleContent}>
-                      <View style={styles.exampleSection}>
-                        <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
-                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.input || 'No input available'}</ThemedText>
-                      </View>
+                    <ScrollView 
+                      ref={exampleScrollViewRef}
+                      style={styles.exampleScrollView} 
+                      showsVerticalScrollIndicator={false}
+                    >
+                      <View style={styles.exampleContentFormatted}>
 
-                      <View style={styles.exampleSection}>
-                        <ThemedText style={styles.exampleLabel}>Output:</ThemedText>
-                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.output || 'No output available'}</ThemedText>
-                      </View>
+                        <View style={styles.exampleFieldContainer}>
+                          <View style={styles.exampleLabelRowContainer}>
+                            <View style={styles.exampleLabelContainer}>
+                              <ThemedText style={styles.exampleLabelFormatted}>Input:</ThemedText>
+                            </View>
+                            {problem.examples[currentExampleIndex]?.image && (
+                              <TouchableOpacity 
+                                style={styles.imageIndicator}
+                                onPress={() => {
+                                  // Scroll to bottom to show the image
+                                  exampleScrollViewRef.current?.scrollToEnd({ animated: true });
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <View style={styles.imageIconPlaceholder}>
+                                  <ThemedText style={styles.imageIconText}>📷</ThemedText>
+                                </View>
+                                <ThemedText style={styles.imageIndicatorText}>Image present</ThemedText>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                          <View style={styles.exampleValueContainer}>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.input || 'No input available'}</ThemedText>
+                          </View>
+                        </View>
 
-                      <View style={styles.exampleSection}>
-                        <ThemedText style={styles.exampleLabel}>Explanation:</ThemedText>
-                        <ThemedText style={styles.exampleText}>{problem.examples[currentExampleIndex]?.explanation || 'No explanation available'}</ThemedText>
-                      </View>
-                    </View>
+                        <View style={styles.exampleFieldContainer}>
+                          <View style={styles.exampleLabelContainer}>
+                            <ThemedText style={styles.exampleLabelFormatted}>Output:</ThemedText>
+                          </View>
+                          <View style={styles.exampleValueContainer}>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.output || 'No output available'}</ThemedText>
+                          </View>
+                        </View>
 
+                        <View style={styles.exampleFieldContainer}>
+                          <View style={styles.exampleLabelContainer}>
+                            <ThemedText style={styles.exampleLabelFormatted}>Explanation:</ThemedText>
+                          </View>
+                          <View style={styles.exampleValueContainer}>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.explanation || 'No explanation available'}</ThemedText>
+                          </View>
+                        </View>
+
+                        {problem.examples[currentExampleIndex]?.image && (
+                          <View style={styles.exampleFieldContainer}>
+                            <View style={styles.exampleLabelContainer}>
+                              <ThemedText style={styles.exampleLabelFormatted}>Image:</ThemedText>
+                            </View>
+                            <View style={styles.exampleValueContainer}>
+                              <View style={styles.exampleImageContainerFormatted}>
+                                <Image 
+                                  source={{ uri: problem.examples[currentExampleIndex]?.image }}
+                                  style={styles.exampleImageFormatted}
+                                  resizeMode="contain"
+                                />
+                              </View>
+                            </View>
+                          </View>
+                        )}
+                        
+                      </View>
+                    </ScrollView>
+                    
                     <View style={styles.exampleNavigation}>
                       <TouchableOpacity 
-                        style={[styles.arrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
+                        style={[styles.navArrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
                         onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
                         disabled={currentExampleIndex === 0}
                       >
-                        <ThemedText style={styles.arrowButtonText}>{'<'}</ThemedText>
+                        <ThemedText style={[styles.navArrowText, currentExampleIndex === 0 && styles.disabledNavText]}>‹</ThemedText>
                       </TouchableOpacity>
                       
-                      <View style={styles.exampleNumberContainer}>
+                      <View style={styles.exampleIndicatorsContainer}>
                         {problem.examples.map((_, index) => (
                           <TouchableOpacity 
                             key={index}
                             onPress={() => setCurrentExampleIndex(index)}
                             style={[
-                              styles.exampleIndicator,
-                              currentExampleIndex === index && styles.activeExampleIndicator
+                              styles.exampleIndicatorButton,
+                              currentExampleIndex === index && styles.activeExampleIndicatorButton
                             ]}
                           >
                             <ThemedText style={[
-                              styles.exampleIndicatorText,
-                              currentExampleIndex === index && styles.activeExampleIndicatorText
+                              styles.exampleIndicatorNumber,
+                              currentExampleIndex === index && styles.activeExampleIndicatorNumber
                             ]}>
                               {index + 1}
                             </ThemedText>
@@ -438,11 +675,11 @@ export default function QuestionScreen() {
                       </View>
 
                       <TouchableOpacity 
-                        style={[styles.arrowButton, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavButton]}
+                        style={[styles.navArrowButton, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavButton]}
                         onPress={() => setCurrentExampleIndex(prev => Math.min(problem.examples.length - 1, prev + 1))}
                         disabled={currentExampleIndex === problem.examples.length - 1}
                       >
-                        <ThemedText style={styles.arrowButtonText}>{'>'}</ThemedText>
+                        <ThemedText style={[styles.navArrowText, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavText]}>›</ThemedText>
                       </TouchableOpacity>
                     </View>
                   </>
@@ -684,12 +921,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#2d2d2d',
   },
-  description: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#444',
-    height: 226,
-  },
   solveButton: {
     backgroundColor: '#6564c7',
     padding: 16,
@@ -728,12 +959,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   descriptionContainer: {
-    padding: 12,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 12,
     backgroundColor: '#fff',
-    height: 250,
+    height: 300,
   },
   codeInputContainer: {
     flex: 1,
@@ -777,20 +1008,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   exampleIndicator: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: '#e8e7ff',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#6564c7',
   },
   activeExampleIndicator: {
     backgroundColor: '#6564c7',
   },
   exampleIndicatorText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6564c7',
   },
   activeExampleIndicatorText: {
     color: '#fff',
@@ -970,5 +1204,134 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 18,
+  },
+  webviewContainer: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  webview: {
+    flex: 1,
+  },
+  webviewLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exampleScrollView: {
+    flex: 1,
+  },
+  exampleContentFormatted: {
+    flex: 1,
+    padding: 6,
+  },
+  exampleFieldContainer: {
+    marginBottom: 10,
+  },
+  exampleLabelContainer: {
+    marginBottom: 3,
+    flex: 1,
+  },
+  exampleLabelRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  exampleValueContainer: {
+    paddingLeft: 6,
+  },
+  exampleLabelFormatted: {
+    fontWeight: '600',
+    color: '#6564c7',
+    fontSize: 15,
+  },
+  exampleTextFormatted: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#444',
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderRadius: 6,
+    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
+  },
+  exampleImageContainerFormatted: {
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 6,
+  },
+  exampleImageFormatted: {
+    width: '100%',
+    maxWidth: 280,
+    height: 160,
+    borderRadius: 6,
+  },
+  imageIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: '#e8e7ff',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#6564c7',
+  },
+  imageIconPlaceholder: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  imageIconText: {
+    fontSize: 10,
+  },
+  imageIndicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6564c7',
+  },
+  navArrowButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navArrowText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+    paddingRight: "2%",
+  },
+  disabledNavText: {
+    color: '#ccc',
+  },
+  exampleIndicatorsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exampleIndicatorButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeExampleIndicatorButton: {
+    backgroundColor: '#6564c7',
+  },
+  exampleIndicatorNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  activeExampleIndicatorNumber: {
+    color: '#fff',
   },
 }); 
