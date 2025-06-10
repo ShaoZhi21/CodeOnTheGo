@@ -44,6 +44,20 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Code and question are required' });
     }
 
+    // Format the code with line numbers
+    let numberedCode = '';
+    if (Array.isArray(code)) {
+      // Filter out empty blocks - frontend already numbers them
+      const nonEmptyBlocks = code.filter(block => block.trim() !== '');
+      numberedCode = nonEmptyBlocks.join('\n');
+    } else {
+      // If code is a string, use it as is if already numbered
+      numberedCode = code;
+    }
+
+    console.log('PARSED SOLUTION FROM FRONTEND:');
+    console.log(numberedCode);
+
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
       systemInstruction: "You are a helpful and precise assistant. Your job is to evaluate the logic of pseudocode when given a question and a block of pseudocode. Explain whether the logic correctly answers the question, and point out any logical errors or missing steps. Use clear reasoning and suggest improvements if needed. Do not write actual code unless asked.",
@@ -80,21 +94,46 @@ app.post('/api/analyze', async (req, res) => {
     Do not give high marks for correct but very short explanations.
     Mark based on whether the user sufficiently explained their thinking — not just whether the final logic appears valid.
 
-
-Code: ${code}
 Question: ${question}
 
+User's Solution (numbered):
+${numberedCode}
+
 Evaluate the submission as follows:
-1. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
+1. Line-by-Line Analysis –
+   IMPORTANT: You MUST analyze each numbered line from the user's solution above. Use this EXACT format:
+   
+   Line-by-Line Analysis:
+   Line 1:
+   Status: Fully correct/ Can be improved/ Wrong
+   Explanation: [7-word max hint as rhetorical question]
+   
+   Line 2:
+   Status: Fully correct/ Can be improved/ Wrong
+   Explanation: [7-word max hint as rhetorical question]
+   
+   Further lines...
+   
+   CRITICAL FORMATTING RULES:
+   - Use the EXACT line numbers from the numbered solution above (1, 2, 3, etc.)
+   - Write "Status:" followed by exactly ONE of these: "Fully correct", "Can be improved", "Wrong"  
+   - DO NOT write "1) Wrong" or "2) Can be improved" or any numbers before the status
+   - DO NOT use parentheses like "(explanation here)" 
+   - If explanation needed, put it on separate line starting with "Explanation:"
+   - NO numbered lists in your response for status
+   
+   Continue for ALL lines in the user's solution above. DO NOT skip any line numbers.
+
+2. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
    - Do not assume steps the user left out (e.g. sorting, bounds checks, loop conditions).  
    - If the code omits or fails to explain something critical, mark it as ✗ and include that in Suggestions.
    - Ensure the user has included all the steps in the explanation.
    - Ensure the user explains how it reaches the final answer clearly. If not stated, wrong.
-2. Efficiency – 
+3. Efficiency – 
    Time: [state time complexity clearly]  
    Space: [state space complexity]  
    Any more optimal? [Yes/No – If yes, describe why this is not optimal, but do not give the optimal solution]
-3. Edge Cases – 
+4. Edge Cases – 
   - What corner cases could break this code? 
     Write concisely. Give at least 1 and at most 3 strictly.
     Ignore large input cases unless the time complexity is O(n^2) or O(n^3) or worse.
@@ -102,17 +141,26 @@ Evaluate the submission as follows:
   1) Corner case 1 (reasoning 5 words max STRICTLY)
   2) Corner case 2 (reasoning 5 words max STRICTLY)
   3) Corner case 3 (reasoning 5 words max STRICTLY)
-4. Suggestions – 
+5. Track Assessment –
+  Based on correctness and score, determine if the user is on the right track:
+  - Right Track: Correctness is ✓ AND score ≥ 60
+  - Wrong Track: Correctness is ✗ OR score < 60
+6. Suggestions – 
   Give at least 1 and at most 3 specific ways to improve the code strictly. 
   Write concisely only one sentence.
   No need to tell them to explain time or space complexity.
   If logic is ✓, suggest what was missing (e.g. "no sorting step included").
   If logic is ✗, suggest what was missing (e.g. "no sorting step included").
   Include suggestions to include more details in explanation, clarity, performance, or robustness.
-  Give it in the format of:
+  
+  Format based on track assessment:
+  - If Right Track: "You are on the right track!"
+  - If Wrong Track: "You are on the wrong track!"
+  
   1) Suggestion 1 (reasoning 15 words max STRICTLY)
   2) Suggestion 2 (reasoning 15 words max STRICTLY)
   3) Suggestion 3 (reasoning 15 words max STRICTLY)
+  DO NOT INCLUDE ANYTHING ELSE. NO EXTRA EXPLANATION.
 
 Scoring  
 Rate the solution out of 100 using the following scale:
@@ -122,20 +170,7 @@ Rate the solution out of 100 using the following scale:
 - 60–75 – Correct but inefficient, with solid explanation OR Correct and efficient, lacking lots of details (3 stars)
 - 50–60 – Correct but inefficient and not explained clearly (2 stars)
 - 25–50 – Incorrect solution due to minor logical flaws present that could cause significant test case failures (1 star)
-- 0–25 – Completely incorrect solution due to major logical flaw or complete misunderstanding of the problem (0 stars)
-
-Final Output Format:
-
-Correctness: ✓ or ✗  
-
-Efficiency:  
-Time:  
-Space:  
-Any more optimal?  
-
-Edge Cases:  
-
-Suggestions:  
+- 0–25 – Completely incorrect solution due to major logical flaws or complete misunderstanding of the problem (0 stars)
 
 Score: __/100  
 Stars: 0-5
@@ -145,11 +180,12 @@ Stars: 0-5
     const response = await result.response;
     const text = response.text();
 
-    console.log('Raw Gemini response:', text); // Log the raw response
+    console.log('Raw Gemini response:', text);
 
     // Parse the response into structured format
     const lines = text.split('\n');
     const analysis = {
+      lineByLineAnalysis: [],
       correctness: '',
       efficiency: {
         time: '',
@@ -157,44 +193,142 @@ Stars: 0-5
         anyMoreOptimal: ''
       },
       edgeCases: [],
+      trackAssessment: '',
       suggestions: [],
       score: 0,
       stars: 0
     };
 
     let currentSection = '';
+    let currentLineNumber = null; // Track the current line number from "Line X:" headers
+    let pendingStatus = null; // Track the status for the current line
+    
     for (const line of lines) {
       const trimmedLine = line.trim();
       
-      if (trimmedLine.startsWith('Correctness:')) {
-        analysis.correctness = trimmedLine.replace('Correctness:', '').trim();
+      if (trimmedLine.startsWith('Line-by-Line Analysis:')) {
+        currentSection = 'lineByLine';
+      } else if (trimmedLine.includes('Line-by-Line') || trimmedLine.includes('Line by Line')) {
+        currentSection = 'lineByLine';
+      } else if (trimmedLine.startsWith('Correctness:') || trimmedLine.startsWith('**Correctness:**')) {
+        analysis.correctness = trimmedLine.replace(/\*?\*?Correctness:\*?\*?/, '').trim();
+        currentSection = '';
       } else if (trimmedLine.startsWith('Time:')) {
         analysis.efficiency.time = trimmedLine.replace('Time:', '').trim();
       } else if (trimmedLine.startsWith('Space:')) {
         analysis.efficiency.space = trimmedLine.replace('Space:', '').trim();
       } else if (trimmedLine.startsWith('Any more optimal?')) {
         analysis.efficiency.anyMoreOptimal = trimmedLine.replace('Any more optimal?', '').trim();
-      } else if (trimmedLine.startsWith('Edge Cases:')) {
+      } else if (trimmedLine.startsWith('Edge Cases:') || trimmedLine.startsWith('**Edge Cases:**')) {
         currentSection = 'edgeCases';
-      } else if (trimmedLine.startsWith('Suggestions:')) {
+      } else if (trimmedLine.startsWith('Track Assessment:') || trimmedLine.startsWith('**Track Assessment:**')) {
+        analysis.trackAssessment = trimmedLine.replace(/\*?\*?Track Assessment:\*?\*?/, '').trim();
+        currentSection = '';
+      } else if (trimmedLine.startsWith('Suggestions:') || trimmedLine.startsWith('**Suggestions:**')) {
         currentSection = 'suggestions';
-      } else if (trimmedLine.startsWith('Score:')) {
+      } else if (trimmedLine.startsWith('Score:') || trimmedLine.startsWith('**Score:') || trimmedLine.match(/Score:\s*\d+\/100/)) {
         const scoreMatch = trimmedLine.match(/(\d+)\/100/);
         if (scoreMatch) {
           analysis.score = parseInt(scoreMatch[1]);
+          console.log('Parsed score:', analysis.score);
         }
-      } else if (trimmedLine.startsWith('Stars:')) {
+      } else if (trimmedLine.startsWith('Stars:') || trimmedLine.startsWith('**Stars:') || trimmedLine.match(/Stars:\s*\d+/)) {
         const starsMatch = trimmedLine.match(/(\d+)/);
         if (starsMatch) {
           analysis.stars = parseInt(starsMatch[1]);
+          console.log('Parsed stars:', analysis.stars);
+        }
+      } else if (trimmedLine && currentSection === 'lineByLine') {
+        // Check if this is a line number header like "Line 3:"
+        const lineHeaderMatch = trimmedLine.match(/^Line\s+(\d+):?$/i);
+        if (lineHeaderMatch) {
+          // If we have a pending analysis from previous line, save it first
+          if (currentLineNumber !== null && pendingStatus !== null) {
+            const lineAnalysis = {
+              lineNumber: currentLineNumber,
+              status: pendingStatus,
+              explanation: null
+            };
+            analysis.lineByLineAnalysis.push(lineAnalysis);
+          }
+          
+          currentLineNumber = parseInt(lineHeaderMatch[1]);
+          pendingStatus = null;
+          continue;
+        }
+        
+        // Check if this is a status line
+        if (currentLineNumber !== null && pendingStatus === null) {
+          const statusMatch = trimmedLine.match(/^Status:\s*(Fully correct|Can be improved|Wrong)$/i);
+          if (statusMatch) {
+            let status = statusMatch[1].toLowerCase().trim();
+            
+            // Normalize the status
+            if (status.includes('fully') && status.includes('correct')) {
+              status = 'fully_correct';
+            } else if (status.includes('improved') || status.includes('improve')) {
+              status = 'can_be_improved';
+            } else if (status.includes('wrong')) {
+              status = 'wrong';
+            }
+            
+            pendingStatus = status;
+            continue;
+          }
+        }
+        
+        // Check if this is an explanation line
+        if (currentLineNumber !== null && pendingStatus !== null && trimmedLine.startsWith('Explanation:')) {
+          const explanation = trimmedLine.replace('Explanation:', '').trim();
+          
+          const lineAnalysis = {
+            lineNumber: currentLineNumber,
+            status: pendingStatus,
+            explanation: explanation || null
+          };
+          analysis.lineByLineAnalysis.push(lineAnalysis);
+          
+          // Reset for next line
+          currentLineNumber = null;
+          pendingStatus = null;
         }
       } else if (trimmedLine && currentSection === 'edgeCases') {
         analysis.edgeCases.push(trimmedLine);
       } else if (trimmedLine && currentSection === 'suggestions') {
-        analysis.suggestions.push(trimmedLine);
+        // Don't add Score: or Stars: lines to suggestions
+        if (!trimmedLine.startsWith('Score:') && !trimmedLine.startsWith('Stars:') && 
+            !trimmedLine.match(/Score:\s*\d+\/100/) && !trimmedLine.match(/Stars:\s*\d+/)) {
+          analysis.suggestions.push(trimmedLine);
+        }
       }
     }
-    res.json({ analysis });
+    
+    // Handle any remaining pending analysis at the end
+    if (currentLineNumber !== null && pendingStatus !== null) {
+      const lineAnalysis = {
+        lineNumber: currentLineNumber,
+        status: pendingStatus,
+        explanation: null
+      };
+      analysis.lineByLineAnalysis.push(lineAnalysis);
+    }
+
+    console.log('Final analysis sent to frontend:');
+    console.log('Score:', analysis.score);
+    console.log('Stars:', analysis.stars);
+    console.log('Correctness:', analysis.correctness);
+    console.log('Total line analyses:', analysis.lineByLineAnalysis.length);
+    console.log('Line-by-line breakdown:');
+    analysis.lineByLineAnalysis.forEach(line => {
+      console.log(`Line ${line.lineNumber}: ${line.status}${line.explanation ? ` (${line.explanation})` : ''}`);
+    });
+    console.log('Edge cases:', analysis.edgeCases);
+    console.log('Suggestions:', analysis.suggestions);
+
+    res.json({ 
+      analysis,
+      rawResponse: text // Add raw response for debugging
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Failed to analyze code' });
