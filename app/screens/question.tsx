@@ -950,9 +950,16 @@ export default function QuestionScreen() {
                 style={styles.deleteToggleButton}
                 onPress={() => setDeleteMode(!deleteMode)}
               >
-                <ThemedText style={styles.deleteToggleButtonText}>
-                  {deleteMode ? 'Done' : 'Delete'}
-                </ThemedText>
+                {deleteMode ? (
+                  <ThemedText style={styles.deleteToggleButtonText}>
+                    Done
+                  </ThemedText>
+                ) : (
+                  <Image 
+                    source={require('@/assets/images/icons/trash-delete-icon.png')}
+                    style={styles.deleteToggleIcon}
+                  />
+                )}
               </TouchableOpacity>
             </View>
 
@@ -1217,8 +1224,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginLeft: '1%',
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 0,
     color: '#2d2d2d',
+    lineHeight: 30,
+    textAlignVertical: 'center',
   },
   solveButton: {
     backgroundColor: '#6564c7',
@@ -1691,6 +1700,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    minHeight: 30,
   },
   deleteToggleButton: {
     backgroundColor: '#fff',
@@ -1698,12 +1708,24 @@ const styles = StyleSheet.create({
     borderColor: '#FF375F',
     borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
+    minWidth: 60,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteToggleButtonText: {
     color: '#FF375F',
     fontSize: 14,
     fontWeight: '600',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 14,
+  },
+  deleteToggleIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#FF375F',
   },
   solveButtonWithProgress: {
     borderTopLeftRadius: 0, // Remove top left radius to connect with extension

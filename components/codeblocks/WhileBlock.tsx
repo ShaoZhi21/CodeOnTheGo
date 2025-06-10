@@ -27,7 +27,7 @@ export function WhileBlock({ condition, body, onChangeCondition, onChangeBody, o
           />
           {onDelete && (
             <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-              <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
+              <Image source={require('@/assets/images/icons/trash-delete-icon.png')} style={styles.deleteIcon} />
             </TouchableOpacity>
           )}
         </View>
