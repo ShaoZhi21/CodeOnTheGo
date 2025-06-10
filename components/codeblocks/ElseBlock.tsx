@@ -15,7 +15,7 @@ export function ElseBlock({ body, onChangeBody, onDelete, borderStyle, explanati
     <View style={{ marginBottom: 8 }}>
       <View style={[styles.container, borderStyle]}>
         <View style={styles.topRow}>
-          <ThemedText style={styles.label}>else:</ThemedText>
+          <ThemedText style={styles.label}>else</ThemedText>
           {onDelete && (
             <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
               <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />

@@ -57,14 +57,14 @@ const styles = StyleSheet.create({
     marginBottom: 0, // Remove margin when explanation is present
     gap: 8,
     borderWidth: 2,
-    borderColor: '#C4B5FD',
+    borderColor: '#d9b3ff',
     borderRadius: 12,
-    backgroundColor: '#E6D3FF',
+    backgroundColor: '#f0e6ff',
   },
   codeInputContainer: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#9333EA',
+    borderColor: '#a855f7',
     borderRadius: 10,
     backgroundColor: '#fff',
     padding: 12,
@@ -104,15 +104,15 @@ const styles = StyleSheet.create({
     borderRightWidth: 3,
     borderBottomWidth: 3,
     borderTopWidth: 0,
-    borderColor: '#C4B5FD',
+    borderColor: '#d9b3ff',
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
-    backgroundColor: '#F8F4FF',
+    backgroundColor: '#faf5ff',
     marginTop: -2, // Slight overlap to connect visually
   },
   explanationText: {
     fontSize: 14,
-    color: '#6B46C1',
+    color: '#7c3aed',
     fontStyle: 'italic',
   },
 });

@@ -44,6 +44,20 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Code and question are required' });
     }
 
+    // Format the code with line numbers
+    let numberedCode = '';
+    if (Array.isArray(code)) {
+      // Filter out empty blocks - frontend already numbers them
+      const nonEmptyBlocks = code.filter(block => block.trim() !== '');
+      numberedCode = nonEmptyBlocks.join('\n');
+    } else {
+      // If code is a string, use it as is if already numbered
+      numberedCode = code;
+    }
+
+    console.log('PARSED SOLUTION FROM FRONTEND:');
+    console.log(numberedCode);
+
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
       systemInstruction: "You are a helpful and precise assistant. Your job is to evaluate the logic of pseudocode when given a question and a block of pseudocode. Explain whether the logic correctly answers the question, and point out any logical errors or missing steps. Use clear reasoning and suggest improvements if needed. Do not write actual code unless asked.",
@@ -80,30 +94,35 @@ app.post('/api/analyze', async (req, res) => {
     Do not give high marks for correct but very short explanations.
     Mark based on whether the user sufficiently explained their thinking — not just whether the final logic appears valid.
 
-
-Code: ${code}
 Question: ${question}
+
+User's Solution (numbered):
+${numberedCode}
 
 Evaluate the submission as follows:
 1. Line-by-Line Analysis –
-   IMPORTANT: You MUST analyze each numbered line independently. Use EXACTLY this format:
+   IMPORTANT: You MUST analyze each numbered line from the user's solution above. Use this EXACT format:
    
    Line-by-Line Analysis:
-   1) Fully correct
-   2) Can be improved (What about the logic here?)
-   3) Wrong (Does this solve the problem?)
+   Line 1:
+   Status: Fully correct/ Can be improved/ Wrong
+   Explanation: [7-word max hint as rhetorical question]
    
-   For each line, choose ONE of these EXACT options:
-   - "Fully correct" - Line is accurate and complete
-   - "Can be improved" - Line has right idea but needs refinement (add 7-word max hint as rhetorical question in parentheses)
-   - "Wrong" - Line is incorrect or irrelevant (add 7-word max hint as rhetorical question in parentheses)
+   Line 2:
+   Status: Fully correct/ Can be improved/ Wrong
+   Explanation: [7-word max hint as rhetorical question]
    
-   EXAMPLE FORMAT:
-   1) Fully correct
-   2) Can be improved (Should you check array bounds first?)
-   3) Wrong (Does this handle edge cases properly?)
+   Further lines...
    
-   Continue for ALL lines in the user's solution.
+   CRITICAL FORMATTING RULES:
+   - Use the EXACT line numbers from the numbered solution above (1, 2, 3, etc.)
+   - Write "Status:" followed by exactly ONE of these: "Fully correct", "Can be improved", "Wrong"  
+   - DO NOT write "1) Wrong" or "2) Can be improved" or any numbers before the status
+   - DO NOT use parentheses like "(explanation here)" 
+   - If explanation needed, put it on separate line starting with "Explanation:"
+   - NO numbered lists in your response for status
+   
+   Continue for ALL lines in the user's solution above. DO NOT skip any line numbers.
 
 2. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
    - Do not assume steps the user left out (e.g. sorting, bounds checks, loop conditions).  
@@ -151,39 +170,7 @@ Rate the solution out of 100 using the following scale:
 - 60–75 – Correct but inefficient, with solid explanation OR Correct and efficient, lacking lots of details (3 stars)
 - 50–60 – Correct but inefficient and not explained clearly (2 stars)
 - 25–50 – Incorrect solution due to minor logical flaws present that could cause significant test case failures (1 star)
-- 0–25 – Completely incorrect solution due to major logical flaw or complete misunderstanding of the problem (0 stars)
-
-Final Output Format:
-
-Line-by-Line Analysis:
-
-Line 1: 
-1) Fully correct
-2) Can be improved (What about the logic here?)
-3) Wrong (Does this solve the problem?)
-
-Line 2:
-1) Fully correct
-2) Can be improved (What about the logic here?)
-3) Wrong (Does this solve the problem?)
-
-...
-
-Continue for ALL lines in the user's solution.
-
-
-Correctness: ✓ or ✗  
-
-Efficiency:  
-Time:  
-Space:  
-Any more optimal?  
-
-Edge Cases:  
-
-Track Assessment: Right Track / Wrong Track
-
-Suggestions:  
+- 0–25 – Completely incorrect solution due to major logical flaws or complete misunderstanding of the problem (0 stars)
 
 Score: __/100  
 Stars: 0-5
@@ -193,7 +180,7 @@ Stars: 0-5
     const response = await result.response;
     const text = response.text();
 
-    console.log('Raw Gemini response:', text); // Log the raw response
+    console.log('Raw Gemini response:', text);
 
     // Parse the response into structured format
     const lines = text.split('\n');
@@ -213,91 +200,95 @@ Stars: 0-5
     };
 
     let currentSection = '';
+    let currentLineNumber = null; // Track the current line number from "Line X:" headers
+    let pendingStatus = null; // Track the status for the current line
+    
     for (const line of lines) {
       const trimmedLine = line.trim();
       
-      console.log(`Processing line: "${trimmedLine}", current section: ${currentSection}`);
-      
       if (trimmedLine.startsWith('Line-by-Line Analysis:')) {
         currentSection = 'lineByLine';
-        console.log('Switched to lineByLine section');
       } else if (trimmedLine.includes('Line-by-Line') || trimmedLine.includes('Line by Line')) {
         currentSection = 'lineByLine';
-        console.log('Switched to lineByLine section (alternative header)');
-      } else if (trimmedLine.startsWith('Correctness:')) {
-        analysis.correctness = trimmedLine.replace('Correctness:', '').trim();
+      } else if (trimmedLine.startsWith('Correctness:') || trimmedLine.startsWith('**Correctness:**')) {
+        analysis.correctness = trimmedLine.replace(/\*?\*?Correctness:\*?\*?/, '').trim();
         currentSection = '';
-        console.log(`Set correctness: ${analysis.correctness}`);
       } else if (trimmedLine.startsWith('Time:')) {
         analysis.efficiency.time = trimmedLine.replace('Time:', '').trim();
       } else if (trimmedLine.startsWith('Space:')) {
         analysis.efficiency.space = trimmedLine.replace('Space:', '').trim();
       } else if (trimmedLine.startsWith('Any more optimal?')) {
         analysis.efficiency.anyMoreOptimal = trimmedLine.replace('Any more optimal?', '').trim();
-      } else if (trimmedLine.startsWith('Edge Cases:')) {
+      } else if (trimmedLine.startsWith('Edge Cases:') || trimmedLine.startsWith('**Edge Cases:**')) {
         currentSection = 'edgeCases';
-      } else if (trimmedLine.startsWith('Track Assessment:')) {
-        analysis.trackAssessment = trimmedLine.replace('Track Assessment:', '').trim();
+      } else if (trimmedLine.startsWith('Track Assessment:') || trimmedLine.startsWith('**Track Assessment:**')) {
+        analysis.trackAssessment = trimmedLine.replace(/\*?\*?Track Assessment:\*?\*?/, '').trim();
         currentSection = '';
-        console.log(`Set track assessment: ${analysis.trackAssessment}`);
-      } else if (trimmedLine.startsWith('Suggestions:')) {
+      } else if (trimmedLine.startsWith('Suggestions:') || trimmedLine.startsWith('**Suggestions:**')) {
         currentSection = 'suggestions';
-      } else if (trimmedLine.startsWith('Score:')) {
+      } else if (trimmedLine.startsWith('Score:') || trimmedLine.startsWith('**Score:')) {
         const scoreMatch = trimmedLine.match(/(\d+)\/100/);
         if (scoreMatch) {
           analysis.score = parseInt(scoreMatch[1]);
         }
-      } else if (trimmedLine.startsWith('Stars:')) {
+      } else if (trimmedLine.startsWith('Stars:') || trimmedLine.startsWith('**Stars:')) {
         const starsMatch = trimmedLine.match(/(\d+)/);
         if (starsMatch) {
           analysis.stars = parseInt(starsMatch[1]);
         }
       } else if (trimmedLine && currentSection === 'lineByLine') {
-        // Parse line-by-line analysis with more flexible matching
-        console.log(`Attempting to parse lineByLine: "${trimmedLine}"`);
-        
-        // Try multiple regex patterns to catch variations
-        let lineMatch = trimmedLine.match(/^(\d+)\)\s*(Fully correct|Can be improved|Wrong)(?:\s*\(([^)]+)\))?$/i);
-        
-        // If first pattern fails, try without case sensitivity and with more flexibility
-        if (!lineMatch) {
-          lineMatch = trimmedLine.match(/^(\d+)\)\s*(fully\s*correct|can\s*be\s*improved|wrong)(?:\s*\(([^)]+)\))?$/i);
-        }
-        
-        // Try even more flexible pattern
-        if (!lineMatch) {
-          lineMatch = trimmedLine.match(/^(\d+)\)\s*([^(]+?)(?:\s*\(([^)]+)\))?$/);
-          if (lineMatch) {
-            const statusText = lineMatch[2].trim().toLowerCase();
-            if (!statusText.includes('fully correct') && !statusText.includes('can be improved') && !statusText.includes('wrong')) {
-              lineMatch = null; // Invalid status, don't match
-            }
-          }
-        }
-        
-        if (lineMatch) {
-          let status = lineMatch[2].toLowerCase().trim();
-          // Normalize the status
-          if (status.includes('fully') && status.includes('correct')) {
-            status = 'fully_correct';
-          } else if (status.includes('improved') || status.includes('improve')) {
-            status = 'can_be_improved';
-          } else if (status.includes('wrong')) {
-            status = 'wrong';
-          } else {
-            // Try to map other possible responses
-            status = status.replace(/\s+/g, '_');
+        // Check if this is a line number header like "Line 3:"
+        const lineHeaderMatch = trimmedLine.match(/^Line\s+(\d+):?$/i);
+        if (lineHeaderMatch) {
+          // If we have a pending analysis from previous line, save it first
+          if (currentLineNumber !== null && pendingStatus !== null) {
+            const lineAnalysis = {
+              lineNumber: currentLineNumber,
+              status: pendingStatus,
+              explanation: null
+            };
+            analysis.lineByLineAnalysis.push(lineAnalysis);
           }
           
+          currentLineNumber = parseInt(lineHeaderMatch[1]);
+          pendingStatus = null;
+          continue;
+        }
+        
+        // Check if this is a status line
+        if (currentLineNumber !== null && pendingStatus === null) {
+          const statusMatch = trimmedLine.match(/^Status:\s*(Fully correct|Can be improved|Wrong)$/i);
+          if (statusMatch) {
+            let status = statusMatch[1].toLowerCase().trim();
+            
+            // Normalize the status
+            if (status.includes('fully') && status.includes('correct')) {
+              status = 'fully_correct';
+            } else if (status.includes('improved') || status.includes('improve')) {
+              status = 'can_be_improved';
+            } else if (status.includes('wrong')) {
+              status = 'wrong';
+            }
+            
+            pendingStatus = status;
+            continue;
+          }
+        }
+        
+        // Check if this is an explanation line
+        if (currentLineNumber !== null && pendingStatus !== null && trimmedLine.startsWith('Explanation:')) {
+          const explanation = trimmedLine.replace('Explanation:', '').trim();
+          
           const lineAnalysis = {
-            lineNumber: parseInt(lineMatch[1]),
-            status: status,
-            explanation: lineMatch[3] || null
+            lineNumber: currentLineNumber,
+            status: pendingStatus,
+            explanation: explanation || null
           };
           analysis.lineByLineAnalysis.push(lineAnalysis);
-          console.log(`Successfully parsed line analysis:`, lineAnalysis);
-        } else {
-          console.log(`Failed to match lineByLine format: "${trimmedLine}"`);
+          
+          // Reset for next line
+          currentLineNumber = null;
+          pendingStatus = null;
         }
       } else if (trimmedLine && currentSection === 'edgeCases') {
         analysis.edgeCases.push(trimmedLine);
@@ -305,19 +296,23 @@ Stars: 0-5
         analysis.suggestions.push(trimmedLine);
       }
     }
+    
+    // Handle any remaining pending analysis at the end
+    if (currentLineNumber !== null && pendingStatus !== null) {
+      const lineAnalysis = {
+        lineNumber: currentLineNumber,
+        status: pendingStatus,
+        explanation: null
+      };
+      analysis.lineByLineAnalysis.push(lineAnalysis);
+    }
 
-    // Console log the line-by-line analysis
-    console.log('Line-by-Line Analysis:');
+    console.log('Final analysis sent to frontend:');
+    console.log('Total line analyses:', analysis.lineByLineAnalysis.length);
+    console.log('Line-by-line breakdown:');
     analysis.lineByLineAnalysis.forEach(line => {
-      const statusDisplay = line.status.replace('_', ' ');
-      const explanation = line.explanation ? ` (${line.explanation})` : '';
-      console.log(`${line.lineNumber}) ${statusDisplay}${explanation}`);
+      console.log(`Line ${line.lineNumber}: ${line.status}${line.explanation ? ` (${line.explanation})` : ''}`);
     });
-
-    console.log('\n=== FINAL ANALYSIS STRUCTURE ===');
-    console.log('Total lines parsed:', analysis.lineByLineAnalysis.length);
-    console.log('Full analysis object:', JSON.stringify(analysis, null, 2));
-    console.log('===============================\n');
 
     res.json({ 
       analysis,
