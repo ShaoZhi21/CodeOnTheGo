@@ -58,6 +58,7 @@ const styles = StyleSheet.create({
     borderColor: '#d9b3ff',
     padding: 10,
     gap: 8,
+    zIndex: 1,
   },
   deleteButton: {
     width: 32,
@@ -115,7 +116,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     backgroundColor: '#faf5ff',
-    marginTop: -2,
+    marginTop: -3,
   },
   explanationText: {
     fontSize: 14,

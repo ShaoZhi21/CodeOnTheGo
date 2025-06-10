@@ -60,6 +60,9 @@ const styles = StyleSheet.create({
     borderColor: '#d9b3ff',
     borderRadius: 12,
     backgroundColor: '#f0e6ff',
+    paddingLeft: 6,
+    paddingVertical: 6,
+    zIndex: 1, // Ensure main block border appears above explanation
   },
   codeInputContainer: {
     flex: 1,
@@ -108,7 +111,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
     backgroundColor: '#faf5ff',
-    marginTop: -2, // Slight overlap to connect visually
+    marginTop: -5, // Move up to overlap with main block
   },
   explanationText: {
     fontSize: 14,

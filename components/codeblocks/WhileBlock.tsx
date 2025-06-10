@@ -58,6 +58,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
     gap: 8,
+    zIndex: 1,
   },
   row: {
     flexDirection: 'row',
@@ -115,7 +116,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     backgroundColor: '#faf5ff',
-    marginTop: -2,
+    marginTop: -10,
   },
   explanationText: {
     fontSize: 14,

@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
     gap: 8,
+    zIndex: 1,
   },
   connectedContainer: {
     marginBottom: 2,
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     backgroundColor: '#faf5ff',
-    marginTop: -2,
+    marginTop: -3,
   },
   explanationText: {
     fontSize: 14,
