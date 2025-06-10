@@ -1047,7 +1047,7 @@ export default function QuestionScreen() {
             </View>
           )}
           
-          {/* Progress Bar Extension - extends upward from solve button */}
+                    {/* Progress Bar Extension - pops up from top and slides underneath */}
           {analysis && (
             <View style={styles.progressExtensionContainer}>
               <View style={styles.progressExtension}>
@@ -1055,7 +1055,7 @@ export default function QuestionScreen() {
               </View>
             </View>
           )}
-          
+
           <View style={[
             styles.unifiedButtonContainer,
             analysis && styles.unifiedButtonWithProgress
@@ -1595,10 +1595,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0e6ff', // Same light purple as description boxes
     borderWidth: 2,
     borderColor: '#d9b3ff',
-    borderBottomWidth: 0, // No bottom border to connect with button
-    padding: 16,
-    paddingBottom: 8, // Less padding at bottom for seamless connection
-    marginBottom: 0, // No margin, direct connection
+    borderBottomWidth: 0, // No bottom border to slide under button
+    padding: 12, // Reduced padding to take up less space
+    paddingBottom: 20, // Extra bottom padding to account for sliding under
+    marginBottom: -24, // More negative margin to slide further underneath
     width: '100%', // Full width to match unified button
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
@@ -1620,10 +1620,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   unifiedButtonWithProgress: {
-    borderTopLeftRadius: 0, // Remove top radius to connect with extension
-    borderTopRightRadius: 0, // Remove top radius to connect with extension
-    borderTopWidth: 0, // Remove top border to seamlessly connect
-    marginTop: 0, // No margin for seamless connection
+    // Keep top radius and border for visual separation
+    marginTop: 0, // No margin for tight spacing
   },
   solveButtonUnified: {
     flex: 1,
