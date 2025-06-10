@@ -662,12 +662,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    textAlign: 'left',
   },
   headerCellText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   row: {
     flexDirection: 'row',
@@ -688,8 +689,9 @@ const styles = StyleSheet.create({
   },
   titleCell: {
     justifyContent: 'flex-start',
-    alignItems: 'flex-start',
-    borderWidth: 2,
+    alignItems: 'flex-start', 
+    marginRight: 8,
+    marginLeft: 4,
   },
   titleText: {
     fontSize: 15,
