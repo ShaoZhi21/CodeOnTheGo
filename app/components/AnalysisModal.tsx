@@ -3,10 +3,10 @@ import React from 'react';
 import { Dimensions, Image, LayoutChangeEvent, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -14,6 +14,11 @@ const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.75;
 const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
 
 interface Analysis {
+  lineByLineAnalysis: {
+    lineNumber: number;
+    status: string;
+    explanation?: string;
+  }[];
   correctness: string;
   efficiency: {
     time: string;
@@ -21,6 +26,7 @@ interface Analysis {
     anyMoreOptimal: string;
   };
   edgeCases: string[];
+  trackAssessment: string;
   suggestions: string[];
   score: number;
   stars: number;

@@ -20,6 +20,11 @@ const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Analysis {
+  lineByLineAnalysis: {
+    lineNumber: number;
+    status: string;
+    explanation?: string;
+  }[];
   correctness: string;
   efficiency: {
     time: string;
@@ -27,6 +32,7 @@ interface Analysis {
     anyMoreOptimal: string;
   };
   edgeCases: string[];
+  trackAssessment: string;
   suggestions: string[];
   score: number;
   stars: number;
@@ -377,15 +383,172 @@ export default function QuestionScreen() {
 
   const getDifficultyAccentColor = (diff: string) => {
     switch (diff) {
-      case 'Easy':
-        return '#22C55E'; // Green accent
-      case 'Medium':
-        return '#F97316'; // Orange accent  
-      case 'Hard':
-        return '#EF4444'; // Red accent
-      default:
-        return '#8B5CF6';
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
+      default: return '#6564c7';
     }
+  };
+
+  const getLineAnalysisBorderStyle = (lineNumber: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      console.log(`No analysis data for line ${lineNumber}`);
+      return {};
+    }
+    
+    console.log(`Checking line ${lineNumber}, available analysis:`, analysis.lineByLineAnalysis);
+    
+    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
+    if (!lineAnalysis) {
+      console.log(`No analysis found for line ${lineNumber}`);
+      return {};
+    }
+
+    console.log(`Found analysis for line ${lineNumber}:`, lineAnalysis);
+
+    switch (lineAnalysis.status) {
+      case 'fully_correct':
+        console.log(`Applying green border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#4CAF50', // Green
+        };
+      case 'can_be_improved':
+        console.log(`Applying orange border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#FF9800', // Orange
+        };
+      case 'wrong':
+        console.log(`Applying red border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#F44336', // Red
+        };
+      default:
+        console.log(`Unknown status for line ${lineNumber}: ${lineAnalysis.status}`);
+        return {};
+    }
+  };
+
+  const getLineAnalysisExplanation = (lineNumber: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return undefined;
+    }
+    
+    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
+    if (!lineAnalysis) {
+      return undefined;
+    }
+
+    // Only show explanations for lines that can be improved or are wrong
+    if (lineAnalysis.status === 'can_be_improved' || lineAnalysis.status === 'wrong') {
+      return lineAnalysis.explanation || undefined;
+    }
+    
+    return undefined;
+  };
+
+  // Calculate which line numbers each block spans
+  const getBlockLineRanges = () => {
+    let currentLineNumber = 1;
+    const blockRanges: {blockIndex: number, startLine: number, endLine: number}[] = [];
+    
+    descriptionBoxes.forEach((block, idx) => {
+      const startLine = currentLineNumber;
+      let lineCount = 1; // Default to 1 line
+      
+      // Calculate how many lines this block generates
+      if (block.type === 'text') {
+        // Text blocks are single line (filtered content)
+        const lines = block.value.split('\n').filter(line => line.trim() !== '');
+        lineCount = Math.max(1, lines.length);
+      } else if (block.type === 'if' || block.type === 'elseif' || block.type === 'while' || block.type === 'for') {
+        // These blocks generate 2 lines: condition + body
+        lineCount = 2;
+      } else if (block.type === 'else') {
+        // Else blocks generate 2 lines: else + body
+        lineCount = 2;
+      }
+      
+      const endLine = startLine + lineCount - 1;
+      blockRanges.push({
+        blockIndex: idx,
+        startLine,
+        endLine
+      });
+      
+      currentLineNumber = endLine + 1;
+    });
+    
+    return blockRanges;
+  };
+
+  const getBlockBorderStyle = (blockIndex: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return {};
+    }
+    
+    const blockRanges = getBlockLineRanges();
+    const blockRange = blockRanges.find(range => range.blockIndex === blockIndex);
+    if (!blockRange) return {};
+    
+    console.log(`Block ${blockIndex} spans lines ${blockRange.startLine}-${blockRange.endLine}`);
+    
+    // Get analysis for all lines in this block's range
+    const blockAnalyses = analysis.lineByLineAnalysis.filter(line => 
+      line.lineNumber >= blockRange.startLine && line.lineNumber <= blockRange.endLine
+    );
+    
+    console.log(`Block ${blockIndex} analysis:`, blockAnalyses);
+    
+    if (blockAnalyses.length === 0) return {};
+    
+    // Determine the "worst" status for border color
+    const hasWrong = blockAnalyses.some(a => a.status === 'wrong');
+    const hasImproved = blockAnalyses.some(a => a.status === 'can_be_improved');
+    
+    if (hasWrong) {
+      console.log(`Applying red border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#F44336', // Red
+      };
+    } else if (hasImproved) {
+      console.log(`Applying orange border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#FF9800', // Orange
+      };
+    } else {
+      console.log(`Applying green border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#4CAF50', // Green
+      };
+    }
+  };
+
+  const getBlockExplanation = (blockIndex: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return undefined;
+    }
+    
+    const blockRanges = getBlockLineRanges();
+    const blockRange = blockRanges.find(range => range.blockIndex === blockIndex);
+    if (!blockRange) return undefined;
+    
+    // Get analysis for all lines in this block's range
+    const blockAnalyses = analysis.lineByLineAnalysis.filter(line => 
+      line.lineNumber >= blockRange.startLine && line.lineNumber <= blockRange.endLine
+    );
+    
+    // Find the first explanation that needs improvement or is wrong
+    const explanationAnalysis = blockAnalyses.find(a => 
+      (a.status === 'can_be_improved' || a.status === 'wrong') && a.explanation
+    );
+    
+    return explanationAnalysis?.explanation || undefined;
   };
   
   async function handleSolveProblem() {
@@ -400,13 +563,22 @@ export default function QuestionScreen() {
       if (block.type === 'for') return `for (${block.condition}):\n   ${block.body}`;
       return '';
     }).join('\n');
+    
     if (!combinedSolution.trim()) {
       return;
     }
-    setSolution(combinedSolution);
+    
+    // Add line numbers to the solution
+    const numberedSolution = combinedSolution
+      .split('\n')
+      .filter(line => line.trim() !== '') // Remove empty lines
+      .map((line, index) => `${index + 1}) ${line.trim()}`)
+      .join('\n');
+    
+    setSolution(numberedSolution);
     setIsAnalyzing(true);
     setAnalysisError(null);
-    console.log('\n' + combinedSolution);
+    console.log('\n' + numberedSolution);
     try {
       const response = await apiCall('/api/analyze', {
         method: 'POST',
@@ -414,14 +586,31 @@ export default function QuestionScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: combinedSolution,
+          code: numberedSolution,
           question: problem.description
         }),
       });
 
-      const data = await response.json();
-      setAnalysis(data.analysis);
-      setShowAnalysis(true);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Received analysis data:', data);
+        console.log('Line-by-line analysis:', data.analysis?.lineByLineAnalysis);
+        console.log('\n=== RAW AI RESPONSE ===');
+        console.log(data.rawResponse);
+        console.log('=====================\n');
+        setAnalysis(data.analysis);
+        
+        // Debug: Show block to line mappings
+        if (data.analysis?.lineByLineAnalysis) {
+          const blockRanges = getBlockLineRanges();
+          console.log('Block to line mappings:', blockRanges);
+        }
+        
+        setShowAnalysis(true);
+      } else {
+        console.error('Analysis failed:', response.status);
+        setAnalysisError('Analysis failed. Please try again.');
+      }
     } catch (error) {
       // Show simple error message if both APIs failed
       setAnalysisError('Both live and local servers failed, try again');
@@ -738,6 +927,8 @@ export default function QuestionScreen() {
                     onChangeText={text => handleDescriptionBoxChange(idx, text)}
                     placeholder="Write your solution here..."
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -751,6 +942,8 @@ export default function QuestionScreen() {
                     onChangeBody={text => handleIfBlockBodyChange(idx, text)}
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -764,6 +957,8 @@ export default function QuestionScreen() {
                     onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -774,6 +969,8 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeBody={text => handleElseBlockBodyChange(idx, text)}
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -786,6 +983,8 @@ export default function QuestionScreen() {
                     onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
                     onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -798,6 +997,8 @@ export default function QuestionScreen() {
                     onChangeCondition={text => handleForBlockConditionChange(idx, text)}
                     onChangeBody={text => handleForBlockBodyChange(idx, text)}
                     onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }

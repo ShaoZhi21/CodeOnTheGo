@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
-import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface ForBlockProps {
   condition: string;
@@ -8,34 +8,43 @@ interface ForBlockProps {
   onChangeCondition: (text: string) => void;
   onChangeBody: (text: string) => void;
   onDelete?: () => void;
+  borderStyle?: object;
+  explanation?: string;
 }
 
-export function ForBlock({ condition, body, onChangeCondition, onChangeBody, onDelete }: ForBlockProps) {
+export function ForBlock({ condition, body, onChangeCondition, onChangeBody, onDelete, borderStyle, explanation }: ForBlockProps) {
   return (
-    <View style={styles.container}>
-      <View style={styles.row}>
-        <ThemedText style={styles.label}>for</ThemedText>
+    <View style={{ marginBottom: 8 }}>
+      <View style={[styles.container, borderStyle]}>
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>for</ThemedText>
+          <TextInput
+            style={styles.conditionInput}
+            value={condition}
+            onChangeText={onChangeCondition}
+            placeholder="condition"
+            placeholderTextColor="#aaa"
+          />
+          {onDelete && (
+            <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
+              <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
+            </TouchableOpacity>
+          )}
+        </View>
         <TextInput
-          style={styles.conditionInput}
-          value={condition}
-          onChangeText={onChangeCondition}
-          placeholder="condition"
+          style={styles.bodyInput}
+          value={body}
+          onChangeText={onChangeBody}
+          placeholder="do..."
           placeholderTextColor="#aaa"
+          multiline
         />
-        {onDelete && (
-          <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
-            <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.deleteIcon} />
-          </TouchableOpacity>
-        )}
       </View>
-      <TextInput
-        style={styles.bodyInput}
-        value={body}
-        onChangeText={onChangeBody}
-        placeholder="then..."
-        placeholderTextColor="#aaa"
-        multiline
-      />
+      {explanation && (
+        <View style={styles.explanationContainer}>
+          <Text style={styles.explanationText}>💡 {explanation}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -95,5 +104,22 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     tintColor: '#FF375F',
+  },
+  explanationContainer: {
+    padding: 12,
+    borderLeftWidth: 3,
+    borderRightWidth: 3,
+    borderBottomWidth: 3,
+    borderTopWidth: 0,
+    borderColor: '#d9b3ff',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: '#faf5ff',
+    marginTop: -2,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: '#7c3aed',
+    fontStyle: 'italic',
   },
 }); 

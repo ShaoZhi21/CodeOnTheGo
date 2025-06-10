@@ -85,16 +85,36 @@ Code: ${code}
 Question: ${question}
 
 Evaluate the submission as follows:
-1. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
+1. Line-by-Line Analysis –
+   IMPORTANT: You MUST analyze each numbered line independently. Use EXACTLY this format:
+   
+   Line-by-Line Analysis:
+   1) Fully correct
+   2) Can be improved (What about the logic here?)
+   3) Wrong (Does this solve the problem?)
+   
+   For each line, choose ONE of these EXACT options:
+   - "Fully correct" - Line is accurate and complete
+   - "Can be improved" - Line has right idea but needs refinement (add 7-word max hint as rhetorical question in parentheses)
+   - "Wrong" - Line is incorrect or irrelevant (add 7-word max hint as rhetorical question in parentheses)
+   
+   EXAMPLE FORMAT:
+   1) Fully correct
+   2) Can be improved (Should you check array bounds first?)
+   3) Wrong (Does this handle edge cases properly?)
+   
+   Continue for ALL lines in the user's solution.
+
+2. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
    - Do not assume steps the user left out (e.g. sorting, bounds checks, loop conditions).  
    - If the code omits or fails to explain something critical, mark it as ✗ and include that in Suggestions.
    - Ensure the user has included all the steps in the explanation.
    - Ensure the user explains how it reaches the final answer clearly. If not stated, wrong.
-2. Efficiency – 
+3. Efficiency – 
    Time: [state time complexity clearly]  
    Space: [state space complexity]  
    Any more optimal? [Yes/No – If yes, describe why this is not optimal, but do not give the optimal solution]
-3. Edge Cases – 
+4. Edge Cases – 
   - What corner cases could break this code? 
     Write concisely. Give at least 1 and at most 3 strictly.
     Ignore large input cases unless the time complexity is O(n^2) or O(n^3) or worse.
@@ -102,17 +122,26 @@ Evaluate the submission as follows:
   1) Corner case 1 (reasoning 5 words max STRICTLY)
   2) Corner case 2 (reasoning 5 words max STRICTLY)
   3) Corner case 3 (reasoning 5 words max STRICTLY)
-4. Suggestions – 
+5. Track Assessment –
+  Based on correctness and score, determine if the user is on the right track:
+  - Right Track: Correctness is ✓ AND score ≥ 60
+  - Wrong Track: Correctness is ✗ OR score < 60
+6. Suggestions – 
   Give at least 1 and at most 3 specific ways to improve the code strictly. 
   Write concisely only one sentence.
   No need to tell them to explain time or space complexity.
   If logic is ✓, suggest what was missing (e.g. "no sorting step included").
   If logic is ✗, suggest what was missing (e.g. "no sorting step included").
   Include suggestions to include more details in explanation, clarity, performance, or robustness.
-  Give it in the format of:
+  
+  Format based on track assessment:
+  - If Right Track: "You are on the right track! Here are some improvements:"
+  - If Wrong Track: "You are on the wrong track and need to reconsider your approach:"
+  
   1) Suggestion 1 (reasoning 15 words max STRICTLY)
   2) Suggestion 2 (reasoning 15 words max STRICTLY)
   3) Suggestion 3 (reasoning 15 words max STRICTLY)
+  DO NOT INCLUDE ANYTHING ELSE. NO EXTRA EXPLANATION.
 
 Scoring  
 Rate the solution out of 100 using the following scale:
@@ -126,6 +155,23 @@ Rate the solution out of 100 using the following scale:
 
 Final Output Format:
 
+Line-by-Line Analysis:
+
+Line 1: 
+1) Fully correct
+2) Can be improved (What about the logic here?)
+3) Wrong (Does this solve the problem?)
+
+Line 2:
+1) Fully correct
+2) Can be improved (What about the logic here?)
+3) Wrong (Does this solve the problem?)
+
+...
+
+Continue for ALL lines in the user's solution.
+
+
 Correctness: ✓ or ✗  
 
 Efficiency:  
@@ -134,6 +180,8 @@ Space:
 Any more optimal?  
 
 Edge Cases:  
+
+Track Assessment: Right Track / Wrong Track
 
 Suggestions:  
 
@@ -150,6 +198,7 @@ Stars: 0-5
     // Parse the response into structured format
     const lines = text.split('\n');
     const analysis = {
+      lineByLineAnalysis: [],
       correctness: '',
       efficiency: {
         time: '',
@@ -157,6 +206,7 @@ Stars: 0-5
         anyMoreOptimal: ''
       },
       edgeCases: [],
+      trackAssessment: '',
       suggestions: [],
       score: 0,
       stars: 0
@@ -166,8 +216,18 @@ Stars: 0-5
     for (const line of lines) {
       const trimmedLine = line.trim();
       
-      if (trimmedLine.startsWith('Correctness:')) {
+      console.log(`Processing line: "${trimmedLine}", current section: ${currentSection}`);
+      
+      if (trimmedLine.startsWith('Line-by-Line Analysis:')) {
+        currentSection = 'lineByLine';
+        console.log('Switched to lineByLine section');
+      } else if (trimmedLine.includes('Line-by-Line') || trimmedLine.includes('Line by Line')) {
+        currentSection = 'lineByLine';
+        console.log('Switched to lineByLine section (alternative header)');
+      } else if (trimmedLine.startsWith('Correctness:')) {
         analysis.correctness = trimmedLine.replace('Correctness:', '').trim();
+        currentSection = '';
+        console.log(`Set correctness: ${analysis.correctness}`);
       } else if (trimmedLine.startsWith('Time:')) {
         analysis.efficiency.time = trimmedLine.replace('Time:', '').trim();
       } else if (trimmedLine.startsWith('Space:')) {
@@ -176,6 +236,10 @@ Stars: 0-5
         analysis.efficiency.anyMoreOptimal = trimmedLine.replace('Any more optimal?', '').trim();
       } else if (trimmedLine.startsWith('Edge Cases:')) {
         currentSection = 'edgeCases';
+      } else if (trimmedLine.startsWith('Track Assessment:')) {
+        analysis.trackAssessment = trimmedLine.replace('Track Assessment:', '').trim();
+        currentSection = '';
+        console.log(`Set track assessment: ${analysis.trackAssessment}`);
       } else if (trimmedLine.startsWith('Suggestions:')) {
         currentSection = 'suggestions';
       } else if (trimmedLine.startsWith('Score:')) {
@@ -188,13 +252,77 @@ Stars: 0-5
         if (starsMatch) {
           analysis.stars = parseInt(starsMatch[1]);
         }
+      } else if (trimmedLine && currentSection === 'lineByLine') {
+        // Parse line-by-line analysis with more flexible matching
+        console.log(`Attempting to parse lineByLine: "${trimmedLine}"`);
+        
+        // Try multiple regex patterns to catch variations
+        let lineMatch = trimmedLine.match(/^(\d+)\)\s*(Fully correct|Can be improved|Wrong)(?:\s*\(([^)]+)\))?$/i);
+        
+        // If first pattern fails, try without case sensitivity and with more flexibility
+        if (!lineMatch) {
+          lineMatch = trimmedLine.match(/^(\d+)\)\s*(fully\s*correct|can\s*be\s*improved|wrong)(?:\s*\(([^)]+)\))?$/i);
+        }
+        
+        // Try even more flexible pattern
+        if (!lineMatch) {
+          lineMatch = trimmedLine.match(/^(\d+)\)\s*([^(]+?)(?:\s*\(([^)]+)\))?$/);
+          if (lineMatch) {
+            const statusText = lineMatch[2].trim().toLowerCase();
+            if (!statusText.includes('fully correct') && !statusText.includes('can be improved') && !statusText.includes('wrong')) {
+              lineMatch = null; // Invalid status, don't match
+            }
+          }
+        }
+        
+        if (lineMatch) {
+          let status = lineMatch[2].toLowerCase().trim();
+          // Normalize the status
+          if (status.includes('fully') && status.includes('correct')) {
+            status = 'fully_correct';
+          } else if (status.includes('improved') || status.includes('improve')) {
+            status = 'can_be_improved';
+          } else if (status.includes('wrong')) {
+            status = 'wrong';
+          } else {
+            // Try to map other possible responses
+            status = status.replace(/\s+/g, '_');
+          }
+          
+          const lineAnalysis = {
+            lineNumber: parseInt(lineMatch[1]),
+            status: status,
+            explanation: lineMatch[3] || null
+          };
+          analysis.lineByLineAnalysis.push(lineAnalysis);
+          console.log(`Successfully parsed line analysis:`, lineAnalysis);
+        } else {
+          console.log(`Failed to match lineByLine format: "${trimmedLine}"`);
+        }
       } else if (trimmedLine && currentSection === 'edgeCases') {
         analysis.edgeCases.push(trimmedLine);
       } else if (trimmedLine && currentSection === 'suggestions') {
         analysis.suggestions.push(trimmedLine);
       }
     }
-    res.json({ analysis });
+
+    // Console log the line-by-line analysis
+    console.log('Line-by-Line Analysis:');
+    analysis.lineByLineAnalysis.forEach(line => {
+      const statusDisplay = line.status.replace('_', ' ');
+      const explanation = line.explanation ? ` (${line.explanation})` : '';
+      console.log(`${line.lineNumber}) ${statusDisplay}${explanation}`);
+    });
+
+    console.log('\n=== FINAL ANALYSIS STRUCTURE ===');
+    console.log('Total lines parsed:', analysis.lineByLineAnalysis.length);
+    console.log('Full analysis object:', JSON.stringify(analysis, null, 2));
+    console.log('===============================\n');
+
+    res.json({ 
+      analysis,
+      rawResponse: text // Add raw response for debugging
+    });
   } catch (error) {
     console.error('Error:', error);
     res.status(500).json({ error: 'Failed to analyze code' });
