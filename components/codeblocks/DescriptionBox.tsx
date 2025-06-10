@@ -20,7 +20,10 @@ const DescriptionBox: React.FC<DescriptionBoxProps> = ({ value, onChangeText, pl
 
   return (
     <View style={{ marginBottom: 8 }}>
-      <View style={[styles.row, { paddingRight: onDelete ? 10 : 0 }, borderStyle]}>
+      <View style={[styles.row, { 
+        paddingRight: onDelete ? 10 : 8,
+        paddingLeft: onDelete ? 6 : 8,
+      }, borderStyle]}>
         <View style={styles.codeInputContainer}>
           <TextInput
             value={value}
@@ -60,7 +63,6 @@ const styles = StyleSheet.create({
     borderColor: '#d9b3ff',
     borderRadius: 12,
     backgroundColor: '#f0e6ff',
-    paddingLeft: 6,
     paddingVertical: 6,
     zIndex: 1, // Ensure main block border appears above explanation
   },

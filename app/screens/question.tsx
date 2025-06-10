@@ -756,7 +756,7 @@ export default function QuestionScreen() {
           ]}>
             <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(problem?.difficulty || 'Easy') }]} />
             <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-              {problem?.title}
+              {name || problem?.title}
             </ThemedText>
           </View>
         </View>
