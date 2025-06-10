@@ -597,10 +597,27 @@ export default function QuestionScreen() {
         const data = await response.json();
         console.log('Received analysis data:', data);
         console.log('Line-by-line analysis:', data.analysis?.lineByLineAnalysis);
+        console.log('\n=== SCORE AND STARS DEBUG ===');
+        console.log('Score from backend:', data.analysis?.score);
+        console.log('Stars from backend:', data.analysis?.stars);
+        console.log('Score type:', typeof data.analysis?.score);
+        console.log('Stars type:', typeof data.analysis?.stars);
+        console.log('Correctness:', data.analysis?.correctness);
+        console.log('Edge cases:', data.analysis?.edgeCases);
+        console.log('Suggestions:', data.analysis?.suggestions);
+        console.log('============================\n');
         console.log('\n=== RAW AI RESPONSE ===');
         console.log(data.rawResponse);
         console.log('=====================\n');
         setAnalysis(data.analysis);
+        
+        // Verify analysis was set correctly
+        setTimeout(() => {
+          console.log('\n=== FRONTEND STATE VERIFICATION ===');
+          console.log('Analysis state score:', data.analysis?.score);
+          console.log('Analysis state stars:', data.analysis?.stars);
+          console.log('=====================================\n');
+        }, 100);
         
         // Debug: Show block to line mappings
         if (data.analysis?.lineByLineAnalysis) {
