@@ -31,6 +31,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6564c7',
     marginBottom: 16,
+    lineHeight: 40,
   },
   description: {
     fontSize: 16,
