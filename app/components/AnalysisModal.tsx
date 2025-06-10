@@ -240,9 +240,44 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
 
                 {selectedAnalysisSection === 'efficiency' && (
                   <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'efficiency')}>
-                    <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
-                    <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
-                    <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
+                    <ScrollView contentContainerStyle={styles.efficiencyContainer} showsVerticalScrollIndicator={false}>
+                      <View style={styles.efficiencyCard}>
+                        <View style={styles.cardIcon}>
+                          <ThemedText style={styles.iconEmoji}>⏱️</ThemedText>
+                        </View>
+                        <View style={styles.cardContent}>
+                          <ThemedText style={styles.cardLabel}>Time Complexity</ThemedText>
+                          <ThemedText style={styles.cardValue}>{analysis.efficiency.time}</ThemedText>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.efficiencyCard}>
+                        <View style={styles.cardIcon}>
+                          <ThemedText style={styles.iconEmoji}>💾</ThemedText>
+                        </View>
+                        <View style={styles.cardContent}>
+                          <ThemedText style={styles.cardLabel}>Space Complexity</ThemedText>
+                          <ThemedText style={styles.cardValue}>{analysis.efficiency.space}</ThemedText>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.efficiencyCard}>
+                        <View style={styles.cardIcon}>
+                          <ThemedText style={styles.iconEmoji}>🚀</ThemedText>
+                        </View>
+                        <View style={styles.cardContent}>
+                          <ThemedText style={styles.cardLabel}>Can be optimized?</ThemedText>
+                          <ThemedText style={[
+                            styles.cardValue, 
+                            analysis.efficiency.anyMoreOptimal.toLowerCase().includes('yes') || analysis.efficiency.anyMoreOptimal.toLowerCase().includes('can') 
+                              ? styles.optimizableText 
+                              : styles.optimalText
+                          ]}>
+                            {analysis.efficiency.anyMoreOptimal}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </ScrollView>
                   </View>
                 )}
 
@@ -401,5 +436,67 @@ const styles = StyleSheet.create({
   largeStarIcon: {
     width: 40,
     height: 40,
+  },
+  efficiencyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    padding: 4,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  efficiencyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e1e5e9',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  cardContent: {
+    flex: 1,
+  },
+  cardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6c757d',
+    marginBottom: 2,
+  },
+  cardValue: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#2d3436',
+  },
+  optimizableText: {
+    color: '#f39c12',
+  },
+  optimalText: {
+    color: '#27ae60',
+  },
+  iconEmoji: {
+    fontSize: 20,
   },
 }); 
