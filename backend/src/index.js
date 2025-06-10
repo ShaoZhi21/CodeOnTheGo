@@ -226,15 +226,17 @@ Stars: 0-5
         currentSection = '';
       } else if (trimmedLine.startsWith('Suggestions:') || trimmedLine.startsWith('**Suggestions:**')) {
         currentSection = 'suggestions';
-      } else if (trimmedLine.startsWith('Score:') || trimmedLine.startsWith('**Score:')) {
+      } else if (trimmedLine.startsWith('Score:') || trimmedLine.startsWith('**Score:') || trimmedLine.match(/Score:\s*\d+\/100/)) {
         const scoreMatch = trimmedLine.match(/(\d+)\/100/);
         if (scoreMatch) {
           analysis.score = parseInt(scoreMatch[1]);
+          console.log('Parsed score:', analysis.score);
         }
-      } else if (trimmedLine.startsWith('Stars:') || trimmedLine.startsWith('**Stars:')) {
+      } else if (trimmedLine.startsWith('Stars:') || trimmedLine.startsWith('**Stars:') || trimmedLine.match(/Stars:\s*\d+/)) {
         const starsMatch = trimmedLine.match(/(\d+)/);
         if (starsMatch) {
           analysis.stars = parseInt(starsMatch[1]);
+          console.log('Parsed stars:', analysis.stars);
         }
       } else if (trimmedLine && currentSection === 'lineByLine') {
         // Check if this is a line number header like "Line 3:"
@@ -293,7 +295,11 @@ Stars: 0-5
       } else if (trimmedLine && currentSection === 'edgeCases') {
         analysis.edgeCases.push(trimmedLine);
       } else if (trimmedLine && currentSection === 'suggestions') {
-        analysis.suggestions.push(trimmedLine);
+        // Don't add Score: or Stars: lines to suggestions
+        if (!trimmedLine.startsWith('Score:') && !trimmedLine.startsWith('Stars:') && 
+            !trimmedLine.match(/Score:\s*\d+\/100/) && !trimmedLine.match(/Stars:\s*\d+/)) {
+          analysis.suggestions.push(trimmedLine);
+        }
       }
     }
     
@@ -308,11 +314,16 @@ Stars: 0-5
     }
 
     console.log('Final analysis sent to frontend:');
+    console.log('Score:', analysis.score);
+    console.log('Stars:', analysis.stars);
+    console.log('Correctness:', analysis.correctness);
     console.log('Total line analyses:', analysis.lineByLineAnalysis.length);
     console.log('Line-by-line breakdown:');
     analysis.lineByLineAnalysis.forEach(line => {
       console.log(`Line ${line.lineNumber}: ${line.status}${line.explanation ? ` (${line.explanation})` : ''}`);
     });
+    console.log('Edge cases:', analysis.edgeCases);
+    console.log('Suggestions:', analysis.suggestions);
 
     res.json({ 
       analysis,

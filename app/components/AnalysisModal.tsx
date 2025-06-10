@@ -1,7 +1,7 @@
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
-import { Dimensions, Image, LayoutChangeEvent, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -11,8 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.75;
-const MIN_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
+const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
 
 interface Analysis {
   lineByLineAnalysis: {
@@ -42,14 +41,7 @@ interface AnalysisModalProps {
 export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps) {
   const translateY = useSharedValue(MAX_MODAL_HEIGHT);
   const opacity = useSharedValue(0);
-  const [modalHeight, setModalHeight] = React.useState(MAX_MODAL_HEIGHT);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = React.useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
-  const contentHeights = React.useRef({
-    correctness: 0,
-    efficiency: 0,
-    edgeCases: 0,
-    suggestions: 0
-  });
 
   const handleClose = () => {
     translateY.value = withSpring(MAX_MODAL_HEIGHT, {
@@ -84,7 +76,7 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
       }
     })
     .onEnd((event) => {
-      if (event.translationY > modalHeight * 0.3) {
+      if (event.translationY > MAX_MODAL_HEIGHT * 0.3) {
         translateY.value = withSpring(MAX_MODAL_HEIGHT, {
           damping: 20,
           stiffness: 90,
@@ -111,22 +103,8 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
     opacity: opacity.value,
   }));
 
-  const handleContentLayout = (event: LayoutChangeEvent, section: 'correctness' | 'efficiency' | 'edgeCases' | 'suggestions') => {
-    const { height } = event.nativeEvent.layout;
-    contentHeights.current[section] = height;
-    
-    // Calculate new height based on current section
-    const currentSectionHeight = contentHeights.current[selectedAnalysisSection];
-    const newHeight = Math.min(Math.max(currentSectionHeight + 200, MIN_MODAL_HEIGHT), MAX_MODAL_HEIGHT);
-    setModalHeight(newHeight);
-  };
-
   const handleSectionChange = (section: 'correctness' | 'efficiency' | 'edgeCases' | 'suggestions') => {
     setSelectedAnalysisSection(section);
-    // Update height when section changes
-    const sectionHeight = contentHeights.current[section];
-    const newHeight = Math.min(Math.max(sectionHeight + 200, MIN_MODAL_HEIGHT), MAX_MODAL_HEIGHT);
-    setModalHeight(newHeight);
   };
 
   if (!analysis) return null;
@@ -140,7 +118,7 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
     >
       <Animated.View style={[styles.modalOverlay, overlayStyle]}>
         <GestureDetector gesture={gesture}>
-          <Animated.View style={[styles.modalContainer, animatedStyle, { height: modalHeight }]}>
+          <Animated.View style={[styles.modalContainer, animatedStyle, { height: MAX_MODAL_HEIGHT }]}>
             <View style={styles.dragHandle} />
             
             <View style={styles.header}>
@@ -211,97 +189,116 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
               </TouchableOpacity>
             </View>
 
-            <View style={styles.analysisContainer}>
-              <View style={styles.analysisContent}>
-                {selectedAnalysisSection === 'correctness' && (
-                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'correctness')}>
-                    <View style={styles.correctnessContainer}>
-                      <View style={styles.scoreContainer}>
-                        <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
-                        <ThemedText style={styles.scoreLabel}>/100</ThemedText>
-                      </View>
-                      <ProgressBar score={analysis.score} compact={true} />
-                      <View style={styles.starsContainer}>
-                        {[...Array(5)].map((_, index) => (
-                          <Image
-                            key={index}
-                            source={
-                              index < analysis.stars
-                                ? require('@/assets/images/icons/star-icon.png')
-                                : require('@/assets/images/icons/empty-star.png')
-                            }
-                            style={styles.largeStarIcon}
-                          />
-                        ))}
+            <ScrollView style={styles.contentScrollView} showsVerticalScrollIndicator={false}>
+              {selectedAnalysisSection === 'correctness' && (
+                <View style={styles.analysisContainer}>
+                  <View style={styles.analysisContent}>
+                    <View style={styles.analysisSection}>
+                      <View style={styles.correctnessContainer}>
+                        <View style={styles.scoreContainer}>
+                          <ThemedText style={styles.scoreLabel}>Score: </ThemedText>
+                          <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
+                          <ThemedText style={styles.scoreLabel}>/100</ThemedText>
+                        </View>
+                        <ProgressBar score={analysis.score} compact={true} />
+                        <View style={styles.starsContainer}>
+                          {[...Array(5)].map((_, index) => (
+                            <Image
+                              key={index}
+                              source={
+                                index < analysis.stars
+                                  ? require('@/assets/images/icons/star-icon.png')
+                                  : require('@/assets/images/icons/empty-star.png')
+                              }
+                              style={styles.largeStarIcon}
+                            />
+                          ))}
+                        </View>
                       </View>
                     </View>
                   </View>
-                )}
+                </View>
+              )}
 
-                {selectedAnalysisSection === 'efficiency' && (
-                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'efficiency')}>
-                    <ScrollView contentContainerStyle={styles.efficiencyContainer} showsVerticalScrollIndicator={false}>
-                      <View style={styles.efficiencyCard}>
-                        <View style={styles.cardIcon}>
-                          <ThemedText style={styles.iconEmoji}>⏱️</ThemedText>
+              {selectedAnalysisSection === 'efficiency' && (
+                <View style={styles.analysisSection}>
+                  <View style={styles.efficiencyContainer}>
+                    <View style={styles.efficiencyCard}>
+                      <View style={styles.cardIcon}>
+                        <ThemedText style={styles.iconEmoji}>⏱️</ThemedText>
+                      </View>
+                      <View style={styles.cardContent}>
+                        <ThemedText style={styles.cardLabel}>Time Complexity</ThemedText>
+                        <ThemedText style={styles.cardValue}>{analysis.efficiency.time}</ThemedText>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.efficiencyCard}>
+                      <View style={styles.cardIcon}>
+                        <ThemedText style={styles.iconEmoji}>💾</ThemedText>
+                      </View>
+                      <View style={styles.cardContent}>
+                        <ThemedText style={styles.cardLabel}>Space Complexity</ThemedText>
+                        <ThemedText style={styles.cardValue}>{analysis.efficiency.space}</ThemedText>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.efficiencyCard}>
+                      <View style={styles.cardIcon}>
+                        <ThemedText style={styles.iconEmoji}>🚀</ThemedText>
+                      </View>
+                      <View style={styles.cardContent}>
+                        <ThemedText style={styles.cardLabel}>Can be optimized?</ThemedText>
+                        <ThemedText style={[
+                          styles.cardValue, 
+                          analysis.efficiency.anyMoreOptimal.toLowerCase().includes('yes') || analysis.efficiency.anyMoreOptimal.toLowerCase().includes('can') 
+                            ? styles.optimizableText 
+                            : styles.optimalText
+                        ]}>
+                          {analysis.efficiency.anyMoreOptimal}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {selectedAnalysisSection === 'edgeCases' && (
+                <View style={styles.analysisSection}>
+                  <View style={styles.edgeCasesContainer}>
+                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
+                      <View key={index} style={styles.edgeCaseCard}>
+                        <View style={styles.edgeCaseIcon}>
+                          <ThemedText style={styles.edgeCaseNumber}>{index + 1}</ThemedText>
                         </View>
-                        <View style={styles.cardContent}>
-                          <ThemedText style={styles.cardLabel}>Time Complexity</ThemedText>
-                          <ThemedText style={styles.cardValue}>{analysis.efficiency.time}</ThemedText>
+                        <View style={styles.edgeCaseContent}>
+                          <ThemedText style={styles.edgeCaseLabel}>Test Case {index + 1}</ThemedText>
+                          <ThemedText style={styles.edgeCaseText}>{edgeCase}</ThemedText>
                         </View>
                       </View>
-                      
-                      <View style={styles.efficiencyCard}>
-                        <View style={styles.cardIcon}>
-                          <ThemedText style={styles.iconEmoji}>💾</ThemedText>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {selectedAnalysisSection === 'suggestions' && (
+                <View style={styles.analysisSection}>
+                  <View style={styles.suggestionsContainer}>
+                    {analysis.suggestions.map((suggestion: string, index: number) => (
+                      <View key={index} style={styles.suggestionCard}>
+                        <View style={styles.suggestionIcon}>
+                          <ThemedText style={styles.suggestionEmoji}>💡</ThemedText>
                         </View>
-                        <View style={styles.cardContent}>
-                          <ThemedText style={styles.cardLabel}>Space Complexity</ThemedText>
-                          <ThemedText style={styles.cardValue}>{analysis.efficiency.space}</ThemedText>
+                        <View style={styles.suggestionContent}>
+                          <ThemedText style={styles.suggestionLabel}>Tip {index + 1}</ThemedText>
+                          <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
                         </View>
                       </View>
-                      
-                      <View style={styles.efficiencyCard}>
-                        <View style={styles.cardIcon}>
-                          <ThemedText style={styles.iconEmoji}>🚀</ThemedText>
-                        </View>
-                        <View style={styles.cardContent}>
-                          <ThemedText style={styles.cardLabel}>Can be optimized?</ThemedText>
-                          <ThemedText style={[
-                            styles.cardValue, 
-                            analysis.efficiency.anyMoreOptimal.toLowerCase().includes('yes') || analysis.efficiency.anyMoreOptimal.toLowerCase().includes('can') 
-                              ? styles.optimizableText 
-                              : styles.optimalText
-                          ]}>
-                            {analysis.efficiency.anyMoreOptimal}
-                          </ThemedText>
-                        </View>
-                      </View>
-                    </ScrollView>
+                    ))}
                   </View>
-                )}
-
-                {selectedAnalysisSection === 'edgeCases' && (
-                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'edgeCases')}>
-                    <ScrollView>
-                      {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                        <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {selectedAnalysisSection === 'suggestions' && (
-                  <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'suggestions')}>
-                    <ScrollView>
-                      {analysis.suggestions.map((suggestion: string, index: number) => (
-                        <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-            </View>
+                </View>
+              )}
+            </ScrollView>
           </Animated.View>
         </GestureDetector>
       </Animated.View>
@@ -388,6 +385,7 @@ const styles = StyleSheet.create({
   },
   analysisContainer: {
     flex: 1,
+    minHeight: SCREEN_HEIGHT * 0.275,
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 1,
@@ -408,9 +406,8 @@ const styles = StyleSheet.create({
   },
   correctnessContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'space-evenly',
     alignItems: 'center',
-    gap: 16,
   },
   scoreContainer: {
     flexDirection: 'row',
@@ -431,19 +428,20 @@ const styles = StyleSheet.create({
   starsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    width: '80%',
   },
   largeStarIcon: {
     width: 40,
     height: 40,
   },
   efficiencyContainer: {
-    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     gap: 8,
     padding: 4,
-    paddingTop: 12,
+    paddingTop: 6,
     paddingBottom: 12,
   },
   efficiencyCard: {
@@ -498,5 +496,128 @@ const styles = StyleSheet.create({
   },
   iconEmoji: {
     fontSize: 20,
+  },
+  edgeCasesContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    padding: 4,
+    paddingTop: 6,
+    paddingBottom: 12,
+  },
+  edgeCaseCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  edgeCaseIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#eff6ff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#3b82f6',
+    marginTop: 2,
+  },
+  edgeCaseContent: {
+    flex: 1,
+  },
+  edgeCaseLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#3b82f6',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  edgeCaseText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#374151',
+  },
+  edgeCaseNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#3b82f6',
+  },
+  suggestionsContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    padding: 4,
+    paddingTop: 6,
+    paddingBottom: 12,
+  },
+  suggestionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    borderRadius: 12,
+    shadowColor: '#f59e0b',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  suggestionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fef3c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+  },
+  suggestionContent: {
+    flex: 1,
+  },
+  suggestionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#d97706',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  suggestionText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#92400e',
+    fontWeight: '500',
+  },
+  suggestionEmoji: {
+    fontSize: 22,
+  },
+  contentScrollView: {
+    flex: 1,
   },
 }); 
