@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 10,
     backgroundColor: '#faf5ff',
-    marginTop: -5, // Move up to overlap with main block
+    marginTop: -10, // Move up to overlap with main block
   },
   explanationText: {
     fontSize: 14,

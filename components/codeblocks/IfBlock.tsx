@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 8,
     borderBottomRightRadius: 8,
     backgroundColor: '#faf5ff',
-    marginTop: -3,
+    marginTop: -10,
   },
   explanationText: {
     fontSize: 14,

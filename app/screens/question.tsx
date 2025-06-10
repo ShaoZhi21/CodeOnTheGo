@@ -650,7 +650,39 @@ export default function QuestionScreen() {
   }
 
   function handleDeleteBox(index: number) {
+    // Calculate the line range of the block being deleted BEFORE removing it
+    const blockRanges = getBlockLineRanges();
+    const deletedBlockRange = blockRanges.find(range => range.blockIndex === index);
+    
+    // Remove the block
     setDescriptionBoxes(prev => prev.filter((_, i) => i !== index));
+    
+    // Update analysis if it exists
+    if (analysis && analysis.lineByLineAnalysis && deletedBlockRange) {
+      const deletedStartLine = deletedBlockRange.startLine;
+      const deletedEndLine = deletedBlockRange.endLine;
+      const deletedLineCount = deletedEndLine - deletedStartLine + 1;
+      
+      // Filter out analysis entries for the deleted block and adjust line numbers for subsequent blocks
+      const updatedLineByLineAnalysis = analysis.lineByLineAnalysis
+        .filter(lineAnalysis => 
+          // Remove analysis for deleted block lines
+          lineAnalysis.lineNumber < deletedStartLine || lineAnalysis.lineNumber > deletedEndLine
+        )
+        .map(lineAnalysis => ({
+          ...lineAnalysis,
+          // Adjust line numbers for blocks that come after the deleted block
+          lineNumber: lineAnalysis.lineNumber > deletedEndLine 
+            ? lineAnalysis.lineNumber - deletedLineCount 
+            : lineAnalysis.lineNumber
+        }));
+      
+      // Update the analysis with the filtered and adjusted line numbers
+      setAnalysis({
+        ...analysis,
+        lineByLineAnalysis: updatedLineByLineAnalysis
+      });
+    }
   }
 
   function handleAddIfBlock() {
