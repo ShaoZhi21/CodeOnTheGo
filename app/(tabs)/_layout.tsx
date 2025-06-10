@@ -30,7 +30,7 @@ export default function TabLayout() {
           title: 'Learn',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+              source={require('@/assets/images/icons/book-icon.png')}
               style={{
                 width: 28,
                 height: 28,
@@ -47,7 +47,7 @@ export default function TabLayout() {
           title: 'Duel',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+              source={require('@/assets/images/icons/duel-icon.png')}
               style={{
                 width: 28,
                 height: 28,
@@ -81,10 +81,10 @@ export default function TabLayout() {
           title: 'Questions',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+              source={require('@/assets/images/icons/question-icon.png')}
               style={{
                 width: 28,
-                height: 28,
+                height: 28, 
                 opacity: focused ? 1 : 0.5,
                 tintColor: '#6564c7',
               }}
@@ -98,7 +98,7 @@ export default function TabLayout() {
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
             <Image 
-              source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+              source={require('@/assets/images/icons/profile-icon.png')}
               style={{
                 width: 28,
                 height: 28,
