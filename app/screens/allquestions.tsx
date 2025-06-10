@@ -689,6 +689,7 @@ const styles = StyleSheet.create({
   titleCell: {
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
+    borderWidth: 2,
   },
   titleText: {
     fontSize: 15,

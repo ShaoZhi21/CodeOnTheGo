@@ -361,6 +361,32 @@ export default function QuestionScreen() {
         return '#6564c7';
     }
   };
+
+  const getDifficultyBubbleColor = (diff: string) => {
+    switch (diff) {
+      case 'Easy':
+        return 'rgba(255, 255, 255, 0.25)'; // Slightly more opaque white for better contrast
+      case 'Medium':
+        return 'rgba(255, 255, 255, 0.25)'; // Consistent white background
+      case 'Hard':
+        return 'rgba(255, 255, 255, 0.25)'; // Consistent white background
+      default:
+        return 'rgba(255, 255, 255, 0.25)';
+    }
+  };
+
+  const getDifficultyAccentColor = (diff: string) => {
+    switch (diff) {
+      case 'Easy':
+        return '#22C55E'; // Green accent
+      case 'Medium':
+        return '#F97316'; // Orange accent  
+      case 'Hard':
+        return '#EF4444'; // Red accent
+      default:
+        return '#8B5CF6';
+    }
+  };
   
   async function handleSolveProblem() {
     if (!problem) return;
@@ -530,6 +556,23 @@ export default function QuestionScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <View style={[
+            styles.headerTitleBubble, 
+            { 
+              backgroundColor: getDifficultyBubbleColor(problem?.difficulty || 'Easy'),
+              shadowColor: getDifficultyAccentColor(problem?.difficulty || 'Easy'),
+            }
+          ]}>
+            <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(problem?.difficulty || 'Easy') }]} />
+            <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+              {problem?.title}
+            </ThemedText>
+          </View>
+        </View>
+        
+        <View style={styles.headerSpacer} />
       </View>
 
       {loading ? (
@@ -546,16 +589,6 @@ export default function QuestionScreen() {
         </View>
       ) : problem ? (
         <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }}>
-          <View style={styles.titleContainer}>
-            <View style={styles.questionHeader}>
-              <ThemedText style={styles.questionId}>#{problem.leetcode_id}</ThemedText>
-              <ThemedText style={styles.title}>{problem.title}</ThemedText>
-              <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(problem.difficulty) }]}>
-                <ThemedText style={styles.difficultyText}>{problem.difficulty}</ThemedText>
-              </View>
-            </View>
-          </View>
-
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
               <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
@@ -859,11 +892,15 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#6564c7',
-    padding: 16,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: 60,
   },
   backIcon: {
     width: 24,
@@ -871,46 +908,47 @@ const styles = StyleSheet.create({
     marginRight: 8,
     tintColor: '#fff',
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleBubble: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: '60%',
+    maxWidth: '85%',
+  },
+  difficultyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    width: 60,
+  },
+
   content: {
     flex: 1,
     padding: 16,
   },
-  titleContainer: {
-    marginBottom: 5,
-  },
-  questionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 0,
-    justifyContent: 'flex-start',
-    gap: 0,
-    paddingBottom: 8,
-  },
-  questionId: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#6564c7',
-    minWidth: 45,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    flex: 1,
-  },
-  difficultyBadge: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    borderRadius: 12,
-    minWidth: 60,
-  },
-  difficultyText: {
-    color: '#fff',
-    fontWeight: '600',
-    textAlign: 'center',
-    paddingHorizontal: 6,
-    fontSize: 16,
-  },
+
   section: {
     marginBottom: 8,
   },
@@ -1334,4 +1372,4 @@ const styles = StyleSheet.create({
   activeExampleIndicatorNumber: {
     color: '#fff',
   },
-}); 
+    }); 
