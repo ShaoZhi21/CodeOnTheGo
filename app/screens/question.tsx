@@ -5,6 +5,7 @@ import { ForBlock } from '@/components/codeblocks/ForBlock';
 import { IfBlock } from '@/components/codeblocks/IfBlock';
 import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
+import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
@@ -1045,12 +1046,25 @@ export default function QuestionScreen() {
               <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
             </View>
           )}
-          <View style={styles.buttonContainer}>
+          
+          {/* Progress Bar Extension - extends upward from solve button */}
+          {analysis && (
+            <View style={styles.progressExtensionContainer}>
+              <View style={styles.progressExtension}>
+                <ProgressBar score={analysis.score} />
+              </View>
+            </View>
+          )}
+          
+          <View style={[
+            styles.unifiedButtonContainer,
+            analysis && styles.unifiedButtonWithProgress
+          ]}>
             <TouchableOpacity 
               style={[
                 styles.solveButton, 
                 (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
-                analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
+                analysis ? styles.solveButtonUnified : styles.solveButtonFullWidth
               ]}
               onPress={handleSolveProblem}
               disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
@@ -1063,15 +1077,18 @@ export default function QuestionScreen() {
             </TouchableOpacity>
 
             {analysis && (
-              <TouchableOpacity 
-                style={styles.analysisToggleButton}
-                onPress={() => setShowAnalysis(true)}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/up-arrow.png')}
-                  style={styles.analysisToggleIcon}
-                />
-              </TouchableOpacity>
+              <>
+                <View style={styles.buttonDivider} />
+                <TouchableOpacity 
+                  style={styles.analysisToggleButtonUnified}
+                  onPress={() => setShowAnalysis(true)}
+                >
+                  <Image 
+                    source={require('@/assets/images/icons/up-arrow.png')}
+                    style={styles.analysisToggleIcon}
+                  />
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </ScrollView>
@@ -1288,8 +1305,6 @@ const styles = StyleSheet.create({
   analysisToggleButton: {
     flex: 0.2,
     backgroundColor: '#6564c7',
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1573,4 +1588,67 @@ const styles = StyleSheet.create({
   activeExampleIndicatorNumber: {
     color: '#fff',
   },
-    }); 
+  progressExtensionContainer: {
+    marginBottom: 0,
+  },
+  progressExtension: {
+    backgroundColor: '#f0e6ff', // Same light purple as description boxes
+    borderWidth: 2,
+    borderColor: '#d9b3ff',
+    borderBottomWidth: 0, // No bottom border to connect with button
+    padding: 16,
+    paddingBottom: 8, // Less padding at bottom for seamless connection
+    marginBottom: 0, // No margin, direct connection
+    width: '100%', // Full width to match unified button
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Shadow to match description box style
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  unifiedButtonContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#6564c7',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  unifiedButtonWithProgress: {
+    borderTopLeftRadius: 0, // Remove top radius to connect with extension
+    borderTopRightRadius: 0, // Remove top radius to connect with extension
+    borderTopWidth: 0, // Remove top border to seamlessly connect
+    marginTop: 0, // No margin for seamless connection
+  },
+  solveButtonUnified: {
+    flex: 1,
+    backgroundColor: 'transparent', // Transparent since container has background
+    padding: 16,
+    borderRadius: 0, // No radius since it's part of unified container
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonDivider: {
+    width: 2,
+    height: '70%',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)', // More visible white line
+  },
+  analysisToggleButtonUnified: {
+    backgroundColor: 'transparent', // Same as container background
+    padding: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solveButtonWithProgress: {
+    borderTopLeftRadius: 0, // Remove top left radius to connect with extension
+    borderTopRightRadius: 0, // Remove top right radius to connect with extension
+    borderTopWidth: 0, // Remove top border to seamlessly connect
+    marginTop: 0, // No margin for seamless connection
+  },
+}); 

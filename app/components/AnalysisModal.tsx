@@ -1,12 +1,13 @@
+import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
 import { Dimensions, Image, LayoutChangeEvent, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -214,6 +215,7 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
                         <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
                         <ThemedText style={styles.scoreLabel}>/100</ThemedText>
                       </View>
+                      <ProgressBar score={analysis.score} compact={true} />
                       <View style={styles.starsContainer}>
                         {[...Array(5)].map((_, index) => (
                           <Image
