@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Image, Platform } from 'react-native';
+import { Image, Platform, View } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
@@ -18,26 +18,51 @@ export default function TabLayout() {
         tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
           ios: {
-            paddingTop: 4,
+            height: 88,
+            paddingTop: 10,
+            paddingBottom: 6,
+            paddingHorizontal: 20,
             position: 'absolute',
           },
-          default: {},
+          default: {
+            height: 73,
+            paddingTop: 10,
+            paddingBottom: 4,
+            paddingHorizontal: 20,
+          },
         }),
+        tabBarLabelStyle: {
+          marginTop: 10,
+          fontSize: 12,
+        },
+        tabBarItemStyle: {
+          paddingHorizontal: 0,
+          flex: 1,
+          marginHorizontal: -2,
+        },
       }}>
       <Tabs.Screen
         name="learn"
         options={{
           title: 'Learn',
           tabBarIcon: ({ focused }) => (
-            <Image 
-              source={require('@/assets/images/icons/book-icon.png')}
-              style={{
-                width: 28,
-                height: 28,
-                opacity: focused ? 1 : 0.5,
-                tintColor: '#6564c7',
-              }}
-            />
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/book-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26,
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
           ),
         }}
       />
@@ -46,15 +71,23 @@ export default function TabLayout() {
         options={{
           title: 'Duel',
           tabBarIcon: ({ focused }) => (
-            <Image 
-              source={require('@/assets/images/icons/duel-icon.png')}
-              style={{
-                width: 28,
-                height: 28,
-                opacity: focused ? 1 : 0.5,
-                tintColor: '#6564c7',
-              }}
-            />
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/duel-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26,
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
           ),
         }}
       />
@@ -63,15 +96,23 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ focused }) => (
-            <Image 
-              source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
-              style={{
-                width: 28,
-                height: 28,
-                opacity: focused ? 1 : 0.5,
-                tintColor: '#6564c7',
-              }}
-            />
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26,
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
           ),
         }}
       />
@@ -80,15 +121,23 @@ export default function TabLayout() {
         options={{
           title: 'Questions',
           tabBarIcon: ({ focused }) => (
-            <Image 
-              source={require('@/assets/images/icons/question-icon.png')}
-              style={{
-                width: 28,
-                height: 28, 
-                opacity: focused ? 1 : 0.5,
-                tintColor: '#6564c7',
-              }}
-            />
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/question-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26, 
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
           ),
         }}
       />
@@ -97,15 +146,23 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <Image 
-              source={require('@/assets/images/icons/profile-icon.png')}
-              style={{
-                width: 28,
-                height: 28,
-                opacity: focused ? 1 : 0.5,
-                tintColor: '#6564c7',
-              }}
-            />
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/profile-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26,
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
           ),
         }}
       />
