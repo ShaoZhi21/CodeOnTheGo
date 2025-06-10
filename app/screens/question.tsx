@@ -112,6 +112,7 @@ export default function QuestionScreen() {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
 
   // Function to parse examples from HTML content (improved)
   const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
@@ -911,7 +912,17 @@ export default function QuestionScreen() {
           </View>
           
           <View style={[styles.section, { flex: 1 }]}>
-            <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+            <View style={styles.solutionHeader}>
+              <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+              <TouchableOpacity 
+                style={styles.deleteToggleButton}
+                onPress={() => setDeleteMode(!deleteMode)}
+              >
+                <ThemedText style={styles.deleteToggleButtonText}>
+                  {deleteMode ? 'Done' : 'Delete'}
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
 
             {/* Render all DescriptionBoxes */}
             {descriptionBoxes.map((block, idx) => {
@@ -927,7 +938,7 @@ export default function QuestionScreen() {
                     value={block.value}
                     onChangeText={text => handleDescriptionBoxChange(idx, text)}
                     placeholder="Write your solution here..."
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
                   />
@@ -941,7 +952,7 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
                     onChangeBody={text => handleIfBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
@@ -956,7 +967,7 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
                     onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
@@ -969,7 +980,7 @@ export default function QuestionScreen() {
                     key={idx}
                     body={block.body}
                     onChangeBody={text => handleElseBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
                   />
@@ -983,7 +994,7 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
                     onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
                   />
@@ -997,7 +1008,7 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleForBlockConditionChange(idx, text)}
                     onChangeBody={text => handleForBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     borderStyle={getBlockBorderStyle(idx)}
                     explanation={getBlockExplanation(idx)}
                   />
@@ -1642,6 +1653,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  solutionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  deleteToggleButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#FF375F',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  deleteToggleButtonText: {
+    color: '#FF375F',
+    fontSize: 14,
+    fontWeight: '600',
   },
   solveButtonWithProgress: {
     borderTopLeftRadius: 0, // Remove top left radius to connect with extension
