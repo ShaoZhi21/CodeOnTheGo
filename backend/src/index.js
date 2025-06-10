@@ -154,8 +154,8 @@ Evaluate the submission as follows:
   Include suggestions to include more details in explanation, clarity, performance, or robustness.
   
   Format based on track assessment:
-  - If Right Track: "You are on the right track! Here are some improvements:"
-  - If Wrong Track: "You are on the wrong track and need to reconsider your approach:"
+  - If Right Track: "You are on the right track!"
+  - If Wrong Track: "You are on the wrong track!"
   
   1) Suggestion 1 (reasoning 15 words max STRICTLY)
   2) Suggestion 2 (reasoning 15 words max STRICTLY)

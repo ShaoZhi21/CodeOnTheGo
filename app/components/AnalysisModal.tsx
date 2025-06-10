@@ -1,7 +1,7 @@
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
-import { Dimensions, Image, LayoutChangeEvent, Modal, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, LayoutChangeEvent, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -145,7 +145,12 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
             
             <View style={styles.header}>
               <View style={styles.headerContent}>
-                <ThemedText style={styles.title}>Analysis</ThemedText>
+                <ThemedText style={styles.title}>
+                  {selectedAnalysisSection === 'correctness' && 'Correctness'}
+                  {selectedAnalysisSection === 'efficiency' && 'Efficiency'}
+                  {selectedAnalysisSection === 'edgeCases' && 'Edge Cases'}
+                  {selectedAnalysisSection === 'suggestions' && 'Suggestions'}
+                </ThemedText>
                 <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
                   <Image 
                     source={require('@/assets/images/icons/wrong-icon.png')}
@@ -235,7 +240,6 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
 
                 {selectedAnalysisSection === 'efficiency' && (
                   <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'efficiency')}>
-                    <ThemedText style={styles.analysisSubtitle}>Efficiency</ThemedText>
                     <ThemedText style={styles.analysisText}>Time: {analysis.efficiency.time}</ThemedText>
                     <ThemedText style={styles.analysisText}>Space: {analysis.efficiency.space}</ThemedText>
                     <ThemedText style={styles.analysisText}>More Optimal: {analysis.efficiency.anyMoreOptimal}</ThemedText>
@@ -244,19 +248,21 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
 
                 {selectedAnalysisSection === 'edgeCases' && (
                   <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'edgeCases')}>
-                    <ThemedText style={styles.analysisSubtitle}>Edge Cases</ThemedText>
-                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                      <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
-                    ))}
+                    <ScrollView>
+                      {analysis.edgeCases.map((edgeCase: string, index: number) => (
+                        <ThemedText key={index} style={styles.analysisText}>{edgeCase}</ThemedText>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
 
                 {selectedAnalysisSection === 'suggestions' && (
                   <View style={styles.analysisSection} onLayout={(e) => handleContentLayout(e, 'suggestions')}>
-                    <ThemedText style={styles.analysisSubtitle}>Suggestions</ThemedText>
-                    {analysis.suggestions.map((suggestion: string, index: number) => (
-                      <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
-                    ))}
+                    <ScrollView>
+                      {analysis.suggestions.map((suggestion: string, index: number) => (
+                        <ThemedText key={index} style={styles.analysisText}>{suggestion}</ThemedText>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
               </View>
@@ -358,12 +364,6 @@ const styles = StyleSheet.create({
   },
   analysisSection: {
     flex: 1,
-  },
-  analysisSubtitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2d2d2d',
-    marginBottom: 12,
   },
   analysisText: {
     fontSize: 16,
