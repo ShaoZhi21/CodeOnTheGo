@@ -58,12 +58,31 @@ export default function ProfileScreen() {
 
       if (updatedProfile) {
         setProfile(prev => prev ? { ...prev, skill_level: level } : null);
-        setSelectedLevel(level);
+        Alert.alert('Success', 'Skill level updated successfully!');
       }
     } catch (error) {
       console.error('Error updating skill level:', error);
       Alert.alert('Error', 'Failed to update skill level');
     }
+  };
+
+  const handleSaveSkillLevel = () => {
+    Alert.alert(
+      'Confirm Skill Level Change',
+      `Are you sure you want to change your skill level to ${selectedLevel}? This will affect your gameplay experience.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Save',
+          style: 'default',
+          onPress: () => updateSkillLevel(selectedLevel),
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Professional') => {
@@ -83,7 +102,7 @@ export default function ProfileScreen() {
           selectedLevel === level && styles.levelButtonActive,
           selectedLevel === level && { borderColor: levelColors[level] }
         ]}
-        onPress={() => updateSkillLevel(level)}
+        onPress={() => setSelectedLevel(level)}
     >
       <ThemedText style={[
         styles.levelButtonText,
@@ -215,7 +234,12 @@ export default function ProfileScreen() {
           <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
           
           <View style={styles.settingCard}>
-            <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
+            <View style={styles.settingHeader}>
+              <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveSkillLevel}>
+                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
             
             {/* Warning Note */}
             <ThemedText style={styles.warningText}>
@@ -521,6 +545,23 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  settingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  saveButton: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '600',
   },
 }); 
