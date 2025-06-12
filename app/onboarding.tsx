@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 const questions = [
@@ -94,6 +94,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { email, password, name } = params;
+  const questionScrollRef = useRef<ScrollView>(null);
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState([]);
@@ -104,7 +105,25 @@ export default function OnboardingScreen() {
   const [showLevelSelection, setShowLevelSelection] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleAnswerSelect = (answerIndex) => {
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy': return 'rgba(76, 175, 80, 0.1)';
+      case 'Medium': return 'rgba(255, 152, 0, 0.1)';
+      case 'Hard': return 'rgba(244, 67, 54, 0.1)';
+      default: return 'rgba(101, 100, 199, 0.1)';
+    }
+  };
+
+  const getDifficultyTextColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
+      default: return '#6564c7';
+    }
+  };
+
+  const handleAnswerSelect = (answerIndex: number) => {
     setSelectedAnswer(answerIndex);
   };
 
@@ -121,6 +140,8 @@ export default function OnboardingScreen() {
       setCurrentQuestion(currentQuestion + 1);
       setSelectedAnswer(null);
       setShowExplanation(false);
+      // Reset scroll position to top
+      questionScrollRef.current?.scrollTo({ y: 0, animated: true });
     } else {
       // Calculate suggested skill level based on 6 questions
       const correctAnswers = newAnswers.reduce((count, answer, index) => {
@@ -150,36 +171,87 @@ export default function OnboardingScreen() {
     try {
       setLoading(true);
 
-      // Create user account
-      const { data, error } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-          data: {
-            full_name: name,
-            skill_level: selectedLevel,
-          },
-        },
-      });
+      console.log('Starting account creation process...');
+      console.log('Email:', email);
+      console.log('Name:', name);
+      console.log('Selected Level:', selectedLevel);
+      
+      // Debug environment variables
+      console.log('Environment check:');
+      console.log('EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
+      console.log('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY:', process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ? 'Set (length: ' + process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY.length + ')' : 'Not set');
 
-      if (error) {
-        Alert.alert('Signup Error', error.message);
+      // Check if admin client is available
+      if (!supabaseAdmin) {
+        Alert.alert('Error', 'Unable to create account. Please try again.');
         return;
       }
 
-      if (data.user) {
-        // Navigate to email verification
-        router.replace({
-          pathname: '/email-verification',
-          params: { 
-            email: email,
-            userId: data.user.id,
-            skillLevel: selectedLevel,
-          },
-        });
+      // Create user account using admin API (credentials already validated in signup)
+      const { data: adminData, error: adminError } = await supabaseAdmin.auth.admin.createUser({
+        email: email as string,
+        password: password as string,
+        user_metadata: {
+          full_name: name as string,
+          skill_level: selectedLevel,
+        },
+        email_confirm: true,
+      });
+
+      if (adminError) {
+        console.error('Admin API Error:', adminError);
+        Alert.alert('Account Creation Error', 'Failed to create account. Please try again.');
+        return;
       }
-    } catch (error) {
-      Alert.alert('Error', error.message);
+
+      if (adminData.user) {
+        console.log('User created successfully!');
+        
+        // Create user profile manually since we disabled the trigger
+        try {
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: adminData.user.id,
+              name: name as string,
+              skill_level: selectedLevel,
+              available_hints: 5
+            });
+
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+            // Don't fail the signup for this - user can create profile later
+          } else {
+            console.log('User profile created successfully');
+          }
+        } catch (profileErr) {
+          console.error('Profile creation failed:', profileErr);
+        }
+
+        // Now sign in the user so they have an active session
+        console.log('Signing in user...');
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: email as string,
+          password: password as string,
+        });
+
+        if (signInError) {
+          console.error('Sign in error:', signInError);
+          // Even if sign-in fails, account was created, so navigate to login
+          Alert.alert(
+            'Account Created', 
+            'Your account was created successfully, but automatic sign-in failed. Please log in manually.',
+            [{ text: 'OK', onPress: () => router.replace('/login') }]
+          );
+          return;
+        }
+
+        console.log('Sign in successful, navigating to app...');
+        router.replace('/(tabs)');
+      }
+    } catch (error: any) {
+      console.error('Unexpected Error:', error);
+      Alert.alert('Error', `Unexpected error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -191,9 +263,16 @@ export default function OnboardingScreen() {
     return (
       <View style={styles.questionContainer}>
         <View style={styles.progressContainer}>
-          <ThemedText style={styles.progressText}>
-            Question {currentQuestion + 1} of {questions.length}
-          </ThemedText>
+          <View style={styles.progressHeader}>
+            <ThemedText style={styles.progressText}>
+              Question {currentQuestion + 1} of {questions.length}
+            </ThemedText>
+            <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(question.difficulty) }]}>
+              <ThemedText style={[styles.difficultyText, { color: getDifficultyTextColor(question.difficulty) }]}>
+                {question.difficulty}
+              </ThemedText>
+            </View>
+          </View>
           <View style={styles.progressBar}>
             <View 
               style={[
@@ -204,19 +283,15 @@ export default function OnboardingScreen() {
           </View>
         </View>
 
-        <View style={styles.difficultyBadge}>
-          <ThemedText style={[
-            styles.difficultyText,
-            { color: question.difficulty === 'Easy' ? '#4CAF50' : 
-                     question.difficulty === 'Medium' ? '#FF9800' : '#F44336' }
-          ]}>
-            {question.difficulty}
+        <ScrollView 
+          ref={questionScrollRef}
+          style={styles.questionScrollView} 
+          showsVerticalScrollIndicator={true}
+          indicatorStyle="default"
+        >
+          <ThemedText style={styles.questionText}>
+            {question.question}
           </ThemedText>
-        </View>
-
-        <ScrollView style={styles.questionScrollView} showsVerticalScrollIndicator={false}>
-          <ThemedText style={styles.questionText}>{question.question}</ThemedText>
-
           <View style={styles.optionsContainer}>
             {question.options.map((option, index) => (
               <TouchableOpacity
@@ -240,14 +315,18 @@ export default function OnboardingScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
           {showExplanation && (
             <View style={styles.explanationContainer}>
-              <ThemedText style={styles.explanationTitle}>Explanation:</ThemedText>
-              <ThemedText style={styles.explanationText}>{question.explanation}</ThemedText>
+              <ThemedText style={styles.explanationTitle}>Explanation</ThemedText>
+              <ThemedText style={styles.explanationText}>
+                {question.explanation}
+              </ThemedText>
             </View>
           )}
+          <View style={styles.scrollBottomPadding} />
         </ScrollView>
+
+        <View style={styles.scrollIndicator} />
 
         <View style={styles.buttonContainer}>
           {!showExplanation ? (
@@ -256,7 +335,9 @@ export default function OnboardingScreen() {
               onPress={handleShowExplanation}
               disabled={selectedAnswer === null}
             >
-              <ThemedText style={styles.actionButtonText}>Show Answer</ThemedText>
+              <ThemedText style={styles.actionButtonText}>
+                Show Answer
+              </ThemedText>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -264,7 +345,7 @@ export default function OnboardingScreen() {
               onPress={handleNextQuestion}
             >
               <ThemedText style={styles.actionButtonText}>
-                {currentQuestion < questions.length - 1 ? 'Next Question' : 'See Results'}
+                {currentQuestion === questions.length - 1 ? 'Complete Assessment' : 'Next Question'}
               </ThemedText>
             </TouchableOpacity>
           )}
@@ -407,10 +488,24 @@ const styles = StyleSheet.create({
   progressContainer: {
     marginBottom: 20,
   },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   progressText: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 8,
+    marginRight: 8,
+  },
+  difficultyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  difficultyText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   progressBar: {
     height: 4,
@@ -422,18 +517,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#6564c7',
     borderRadius: 2,
-  },
-  difficultyBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(101, 100, 199, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  difficultyText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   questionScrollView: {
     flex: 1,
@@ -587,7 +670,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 16,
+    marginBottom: 6,
   },
   levelOptions: {
     marginBottom: 0,
@@ -624,5 +707,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 18,
+  },
+  scrollBottomPadding: {
+    height: 20,
+  },
+  scrollIndicator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
 }); 

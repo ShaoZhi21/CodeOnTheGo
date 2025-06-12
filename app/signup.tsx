@@ -8,13 +8,13 @@ import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
-// Password validation rules
+// Password validation rules (matching Supabase requirements)
 const PASSWORD_RULES = {
-  minLength: 6,
+  minLength: 8, // Supabase typically requires 8+ characters
   requireUppercase: true,
   requireLowercase: true,
   requireNumber: true,
-  requireSpecialChar: true,
+  requireSpecialChar: false, // Make special chars optional to avoid conflicts
 };
 
 const validatePassword = (password: string) => {
@@ -58,6 +58,7 @@ export default function SignupScreen() {
   };
 
   const handleSignup = async () => {
+    setLoading(true);
     setFormErrors([]);
     setPasswordErrors([]);
     
@@ -75,18 +76,67 @@ export default function SignupScreen() {
     
     if (errors.length > 0 || pwErrors.length > 0) {
       setFormErrors(errors);
+      setLoading(false);
       return;
     }
 
-    // Navigate to onboarding with user data
-    router.push({
-      pathname: '/onboarding',
-      params: {
-        email,
-        password,
-        name,
-      },
-    });
+    // Test email/password with Supabase before proceeding to onboarding
+    try {
+      const { supabaseAdmin } = await import('@/lib/supabase');
+      
+      if (!supabaseAdmin) {
+        setFormErrors(['Configuration error. Please try again later.']);
+        setLoading(false);
+        return;
+      }
+
+      // Test if we can create a user with these credentials
+      const { data: testData, error: testError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        password: password,
+        user_metadata: {
+          full_name: name,
+          test_user: true, // Mark as test so we can delete it
+        },
+        email_confirm: true,
+      });
+
+      if (testError) {
+        // Handle specific Supabase errors
+        if (testError.message.includes('already been registered')) {
+          setFormErrors(['An account with this email already exists. Please use a different email or try logging in.']);
+        } else if (testError.message.includes('Password')) {
+          setPasswordErrors(['Password does not meet security requirements. Please use a stronger password.']);
+        } else if (testError.message.includes('Email')) {
+          setFormErrors(['Invalid email format. Please check your email address.']);
+        } else {
+          setFormErrors([`Account validation failed: ${testError.message}`]);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // If test user creation succeeded, delete the test user and proceed
+      if (testData.user) {
+        await supabaseAdmin.auth.admin.deleteUser(testData.user.id);
+      }
+
+      // Navigate to onboarding with validated credentials
+      router.push({
+        pathname: '/onboarding',
+        params: {
+          email,
+          password,
+          name,
+        },
+      });
+
+    } catch (error: any) {
+      setFormErrors(['Network error. Please check your connection and try again.']);
+      console.error('Signup validation error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
