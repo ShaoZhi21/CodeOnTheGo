@@ -1,10 +1,10 @@
 import { supabase } from '../supabase';
 import type {
-    ProblemProgressUpdate,
-    ProfileUpdateData,
-    UserProblemProgress,
-    UserProfile,
-    UserProfileStats
+  ProblemProgressUpdate,
+  ProfileUpdateData,
+  UserProblemProgress,
+  UserProfile,
+  UserProfileStats
 } from '../types/profile';
 
 export class ProfileService {
@@ -21,8 +21,9 @@ export class ProfileService {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // No profile found, create one
-          return await this.createUserProfile(userId);
+          // No profile found - this shouldn't happen with the trigger, but handle gracefully
+          console.warn('Profile not found for user:', userId);
+          return null;
         }
         throw error;
       }

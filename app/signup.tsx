@@ -7,7 +7,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { supabase } from '@/lib/supabase';
 
 // Password validation rules
 const PASSWORD_RULES = {
@@ -79,47 +78,15 @@ export default function SignupScreen() {
       return;
     }
 
-    try {
-      setLoading(true);
-      
-      // Create a proper redirect URL with explicit scheme and path
-      const redirectUrl = 'codeonthego://auth-callback';
-      
-      const { data, error } = await supabase.auth.signUp({
+    // Navigate to onboarding with user data
+    router.push({
+      pathname: '/onboarding',
+      params: {
         email,
         password,
-        options: {
-          data: {
-            full_name: name,
-          },
-          emailRedirectTo: redirectUrl,
-        },
-      });
-
-      if (error) {
-        setFormErrors([error.message]);
-        return;
-      }
-
-      if (data.user) {
-        // Check if email confirmation is required
-        if (data.session === null) {
-          router.replace({
-            pathname: '/login',
-            params: {
-              message: 'Please check your email for the verification link. After verifying, you can log in.',
-            },
-          });
-        } else {
-          // If email confirmation is not required, redirect to home
-          router.replace('/(tabs)');
-        }
-      }
-    } catch (error: any) {
-      setFormErrors([error.message]);
-    } finally {
-      setLoading(false);
-    }
+        name,
+      },
+    });
   };
 
   return (
