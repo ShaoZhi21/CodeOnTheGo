@@ -1,9 +1,14 @@
 import { ThemedText } from '@/components/ThemedText';
-import React, { useState } from 'react';
-import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
+import type { UserProfileStats } from '@/lib/types/profile';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
-  const [selectedLevel, setSelectedLevel] = useState('Intermediate');
+  const [profile, setProfile] = useState<UserProfileStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Beginner');
 
   const levelDescriptions = {
     Beginner: 'Little to no programming knowledge, have not done or done little leetcode.',
@@ -17,7 +22,51 @@ export default function ProfileScreen() {
     Professional: '#F44336'
   };
 
-  const getProgressSteps = (level: string) => {
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'Please log in to view your profile');
+        return;
+      }
+
+      const profileData = await ProfileService.getUserProfileStats(user.id);
+      if (profileData) {
+        setProfile(profileData);
+        setSelectedLevel(profileData.skill_level);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSkillLevel = async (level: 'Beginner' | 'Intermediate' | 'Professional') => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const updatedProfile = await ProfileService.updateUserProfile(user.id, {
+        skill_level: level
+      });
+
+      if (updatedProfile) {
+        setProfile(prev => prev ? { ...prev, skill_level: level } : null);
+        setSelectedLevel(level);
+      }
+    } catch (error) {
+      console.error('Error updating skill level:', error);
+      Alert.alert('Error', 'Failed to update skill level');
+    }
+  };
+
+  const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Professional') => {
     switch(level) {
       case 'Beginner': return 1;
       case 'Intermediate': return 2;
@@ -26,15 +75,15 @@ export default function ProfileScreen() {
     }
   };
 
-  const renderLevelButton = (level: string) => (
+  const renderLevelButton = (level: 'Beginner' | 'Intermediate' | 'Professional') => (
     <TouchableOpacity
       key={level}
-      style={[
-        styles.levelButton,
-        selectedLevel === level && styles.levelButtonActive,
-        selectedLevel === level && { borderColor: levelColors[level as keyof typeof levelColors] }
-      ]}
-      onPress={() => setSelectedLevel(level)}
+              style={[
+          styles.levelButton,
+          selectedLevel === level && styles.levelButtonActive,
+          selectedLevel === level && { borderColor: levelColors[level] }
+        ]}
+        onPress={() => updateSkillLevel(level)}
     >
       <ThemedText style={[
         styles.levelButtonText,
@@ -69,6 +118,30 @@ export default function ProfileScreen() {
     );
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6564c7" />
+          <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>Failed to load profile</ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
+            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -80,8 +153,8 @@ export default function ProfileScreen() {
               style={styles.profileImage}
             />
           </View>
-          <ThemedText style={styles.profileName}>John Coder</ThemedText>
-          <ThemedText style={styles.profileLevel}>Level 12 • Intermediate</ThemedText>
+          <ThemedText style={styles.profileName}>{profile.name}</ThemedText>
+          <ThemedText style={styles.profileLevel}>Level {profile.level} • {profile.skill_level}</ThemedText>
         </View>
 
         {/* Stats Container */}
@@ -90,21 +163,21 @@ export default function ProfileScreen() {
           
           {/* Questions Stats Combined */}
           <View style={styles.questionsCard}>
-            <ThemedText style={styles.mainStatNumber}>147</ThemedText>
+            <ThemedText style={styles.mainStatNumber}>{profile.total_questions}</ThemedText>
             <ThemedText style={styles.mainStatLabel}>Questions Solved</ThemedText>
             
             {/* Difficulty Breakdown */}
             <View style={styles.difficultyContainer}>
               <View style={[styles.difficultyItem, { borderLeftColor: '#4CAF50' }]}>
-                <ThemedText style={styles.difficultyNumber}>89</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.easy_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#4CAF50' }]}>Easy</ThemedText>
               </View>
               <View style={[styles.difficultyItem, { borderLeftColor: '#FF9800' }]}>
-                <ThemedText style={styles.difficultyNumber}>45</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.medium_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#FF9800' }]}>Medium</ThemedText>
               </View>
               <View style={[styles.difficultyItem, { borderLeftColor: '#F44336' }]}>
-                <ThemedText style={styles.difficultyNumber}>13</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.hard_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#F44336' }]}>Hard</ThemedText>
               </View>
             </View>
@@ -113,8 +186,8 @@ export default function ProfileScreen() {
           {/* Other Stats Row */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>78%</ThemedText>
-              <ThemedText style={styles.statLabel}>Topics</ThemedText>
+              <ThemedText style={styles.statNumber}>{profile.completion_percentage.toFixed(1)}%</ThemedText>
+              <ThemedText style={styles.statLabel}>Complete</ThemedText>
             </View>
             <View style={styles.statItem}>
               <View style={styles.trophyContainer}>
@@ -122,16 +195,16 @@ export default function ProfileScreen() {
                   source={require('@/assets/images/icons/trophy-icon.png')}
                   style={styles.trophyIcon}
                 />
-                <ThemedText style={styles.statNumber}>23</ThemedText>
+                <ThemedText style={styles.statNumber}>{profile.trophy_count}</ThemedText>
               </View>
               <ThemedText style={styles.statLabel}>Trophies</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>🔥 12</ThemedText>
-              <ThemedText style={styles.statLabel}>Streaks</ThemedText>
+              <ThemedText style={styles.statNumber}>🔥 {profile.current_streak}</ThemedText>
+              <ThemedText style={styles.statLabel}>Streak</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>156</ThemedText>
+              <ThemedText style={styles.statNumber}>{profile.available_hints || 0}</ThemedText>
               <ThemedText style={styles.statLabel}>Hints</ThemedText>
             </View>
           </View>
@@ -150,7 +223,7 @@ export default function ProfileScreen() {
             </ThemedText>
             
             <View style={styles.levelButtons}>
-              {['Beginner', 'Intermediate', 'Professional'].map(renderLevelButton)}
+              {(['Beginner', 'Intermediate', 'Professional'] as const).map(renderLevelButton)}
             </View>
             
             {/* Progress Bar */}
@@ -415,5 +488,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

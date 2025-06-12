@@ -57,6 +57,70 @@ CREATE TRIGGER update_leetcode_problems_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+-- Create User Profiles Table
+CREATE TABLE IF NOT EXISTS user_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  level INTEGER DEFAULT 1 CHECK (level >= 1),
+  total_xp INTEGER DEFAULT 0 CHECK (total_xp >= 0),
+  skill_level TEXT DEFAULT 'Beginner' CHECK (skill_level IN ('Beginner', 'Intermediate', 'Professional')),
+  total_questions INTEGER DEFAULT 0 CHECK (total_questions >= 0),
+  easy_solved INTEGER DEFAULT 0 CHECK (easy_solved >= 0),
+  medium_solved INTEGER DEFAULT 0 CHECK (medium_solved >= 0),
+  hard_solved INTEGER DEFAULT 0 CHECK (hard_solved >= 0),
+  completion_percentage DECIMAL(5,2) DEFAULT 0.00 CHECK (completion_percentage >= 0 AND completion_percentage <= 100),
+  trophy_count INTEGER DEFAULT 0 CHECK (trophy_count >= 0),
+  current_streak INTEGER DEFAULT 0 CHECK (current_streak >= 0),
+  longest_streak INTEGER DEFAULT 0 CHECK (longest_streak >= 0),
+  hints_used INTEGER DEFAULT 0 CHECK (hints_used >= 0),
+  last_activity_date DATE DEFAULT CURRENT_DATE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+-- Create indexes for user profiles
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_level ON user_profiles(level);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_skill_level ON user_profiles(skill_level);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_total_xp ON user_profiles(total_xp);
+
+-- Create trigger to automatically update updated_at for user profiles
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+CREATE TRIGGER update_user_profiles_updated_at
+  BEFORE UPDATE ON user_profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+-- Create User Problem Progress Table
+CREATE TABLE IF NOT EXISTS user_problem_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  problem_id INTEGER REFERENCES leetcode_problems(leetcode_id) ON DELETE CASCADE,
+  is_solved BOOLEAN DEFAULT FALSE,
+  attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
+  hints_used INTEGER DEFAULT 0 CHECK (hints_used >= 0),
+  time_spent_minutes INTEGER DEFAULT 0 CHECK (time_spent_minutes >= 0),
+  first_solved_at TIMESTAMP WITH TIME ZONE,
+  last_attempt_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, problem_id)
+);
+
+-- Create indexes for user problem progress
+CREATE INDEX IF NOT EXISTS idx_user_problem_progress_user_id ON user_problem_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_problem_progress_problem_id ON user_problem_progress(problem_id);
+CREATE INDEX IF NOT EXISTS idx_user_problem_progress_is_solved ON user_problem_progress(is_solved);
+
+-- Create trigger for user problem progress
+DROP TRIGGER IF EXISTS update_user_problem_progress_updated_at ON user_problem_progress;
+CREATE TRIGGER update_user_problem_progress_updated_at
+  BEFORE UPDATE ON user_problem_progress
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
 -- Create a view for easy querying (optional)
 CREATE OR REPLACE VIEW problems_summary AS
 SELECT 
@@ -71,6 +135,18 @@ SELECT
   created_at
 FROM leetcode_problems
 ORDER BY leetcode_id;
+
+-- Create a view for user profile with calculated stats
+CREATE OR REPLACE VIEW user_profile_stats AS
+SELECT 
+  up.*,
+  (up.easy_solved + up.medium_solved + up.hard_solved) as total_solved,
+  CASE 
+    WHEN up.total_xp < 1000 THEN 'Beginner'
+    WHEN up.total_xp < 5000 THEN 'Intermediate'
+    ELSE 'Advanced'
+  END as calculated_skill_level
+FROM user_profiles up;
 `;
 
 /**
