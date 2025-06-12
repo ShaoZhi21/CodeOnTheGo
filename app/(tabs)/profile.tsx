@@ -1,9 +1,16 @@
 import { ThemedText } from '@/components/ThemedText';
-import React, { useState } from 'react';
-import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
+import type { UserProfileStats } from '@/lib/types/profile';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
-  const [selectedLevel, setSelectedLevel] = useState('Intermediate');
+  const [profile, setProfile] = useState<UserProfileStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Beginner');
+  const router = useRouter();
 
   const levelDescriptions = {
     Beginner: 'Little to no programming knowledge, have not done or done little leetcode.',
@@ -17,7 +24,107 @@ export default function ProfileScreen() {
     Professional: '#F44336'
   };
 
-  const getProgressSteps = (level: string) => {
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert('Error', 'Please log in to view your profile');
+        return;
+      }
+
+      const profileData = await ProfileService.getUserProfileStats(user.id);
+      if (profileData) {
+        setProfile(profileData);
+        setSelectedLevel(profileData.skill_level);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateSkillLevel = async (level: 'Beginner' | 'Intermediate' | 'Professional') => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const updatedProfile = await ProfileService.updateUserProfile(user.id, {
+        skill_level: level
+      });
+
+      if (updatedProfile) {
+        setProfile(prev => prev ? { ...prev, skill_level: level } : null);
+        Alert.alert('Success', 'Skill level updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating skill level:', error);
+      Alert.alert('Error', 'Failed to update skill level');
+    }
+  };
+
+  const handleSaveSkillLevel = () => {
+    Alert.alert(
+      'Confirm Skill Level Change',
+      `Are you sure you want to change your skill level to ${selectedLevel}? This will affect your gameplay experience.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Save',
+          style: 'default',
+          onPress: () => updateSkillLevel(selectedLevel),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                console.error('Error logging out:', error);
+                Alert.alert('Error', 'Failed to logout');
+              } else {
+                // Navigate to auth screen
+                router.replace('/login');
+              }
+            } catch (error) {
+              console.error('Error logging out:', error);
+              Alert.alert('Error', 'Failed to logout');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handleDataPrivacy = () => {
+    router.push('/data-privacy');
+  };
+
+  const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Professional') => {
     switch(level) {
       case 'Beginner': return 1;
       case 'Intermediate': return 2;
@@ -26,15 +133,15 @@ export default function ProfileScreen() {
     }
   };
 
-  const renderLevelButton = (level: string) => (
+  const renderLevelButton = (level: 'Beginner' | 'Intermediate' | 'Professional') => (
     <TouchableOpacity
       key={level}
-      style={[
-        styles.levelButton,
-        selectedLevel === level && styles.levelButtonActive,
-        selectedLevel === level && { borderColor: levelColors[level as keyof typeof levelColors] }
-      ]}
-      onPress={() => setSelectedLevel(level)}
+              style={[
+          styles.levelButton,
+          selectedLevel === level && styles.levelButtonActive,
+          selectedLevel === level && { borderColor: levelColors[level] }
+        ]}
+        onPress={() => setSelectedLevel(level)}
     >
       <ThemedText style={[
         styles.levelButtonText,
@@ -69,6 +176,30 @@ export default function ProfileScreen() {
     );
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6564c7" />
+          <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>Failed to load profile</ThemedText>
+          <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
+            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -80,8 +211,8 @@ export default function ProfileScreen() {
               style={styles.profileImage}
             />
           </View>
-          <ThemedText style={styles.profileName}>John Coder</ThemedText>
-          <ThemedText style={styles.profileLevel}>Level 12 • Intermediate</ThemedText>
+          <ThemedText style={styles.profileName}>{profile.name}</ThemedText>
+          <ThemedText style={styles.profileLevel}>Level {profile.level} • {profile.skill_level}</ThemedText>
         </View>
 
         {/* Stats Container */}
@@ -90,21 +221,21 @@ export default function ProfileScreen() {
           
           {/* Questions Stats Combined */}
           <View style={styles.questionsCard}>
-            <ThemedText style={styles.mainStatNumber}>147</ThemedText>
+            <ThemedText style={styles.mainStatNumber}>{profile.total_questions}</ThemedText>
             <ThemedText style={styles.mainStatLabel}>Questions Solved</ThemedText>
             
             {/* Difficulty Breakdown */}
             <View style={styles.difficultyContainer}>
               <View style={[styles.difficultyItem, { borderLeftColor: '#4CAF50' }]}>
-                <ThemedText style={styles.difficultyNumber}>89</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.easy_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#4CAF50' }]}>Easy</ThemedText>
               </View>
               <View style={[styles.difficultyItem, { borderLeftColor: '#FF9800' }]}>
-                <ThemedText style={styles.difficultyNumber}>45</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.medium_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#FF9800' }]}>Medium</ThemedText>
               </View>
               <View style={[styles.difficultyItem, { borderLeftColor: '#F44336' }]}>
-                <ThemedText style={styles.difficultyNumber}>13</ThemedText>
+                <ThemedText style={styles.difficultyNumber}>{profile.hard_solved}</ThemedText>
                 <ThemedText style={[styles.difficultyLabel, { color: '#F44336' }]}>Hard</ThemedText>
               </View>
             </View>
@@ -113,8 +244,8 @@ export default function ProfileScreen() {
           {/* Other Stats Row */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>78%</ThemedText>
-              <ThemedText style={styles.statLabel}>Topics</ThemedText>
+              <ThemedText style={styles.statNumber}>{profile.completion_percentage.toFixed(1)}%</ThemedText>
+              <ThemedText style={styles.statLabel}>Complete</ThemedText>
             </View>
             <View style={styles.statItem}>
               <View style={styles.trophyContainer}>
@@ -122,16 +253,16 @@ export default function ProfileScreen() {
                   source={require('@/assets/images/icons/trophy-icon.png')}
                   style={styles.trophyIcon}
                 />
-                <ThemedText style={styles.statNumber}>23</ThemedText>
+                <ThemedText style={styles.statNumber}>{profile.trophy_count}</ThemedText>
               </View>
               <ThemedText style={styles.statLabel}>Trophies</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>🔥 12</ThemedText>
-              <ThemedText style={styles.statLabel}>Streaks</ThemedText>
+              <ThemedText style={styles.statNumber}>🔥 {profile.current_streak}</ThemedText>
+              <ThemedText style={styles.statLabel}>Streak</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>156</ThemedText>
+              <ThemedText style={styles.statNumber}>{profile.available_hints || 0}</ThemedText>
               <ThemedText style={styles.statLabel}>Hints</ThemedText>
             </View>
           </View>
@@ -141,8 +272,17 @@ export default function ProfileScreen() {
         <View style={styles.settingsContainer}>
           <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
           
+          {/* Skill Level Setting */}
           <View style={styles.settingCard}>
-            <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
+            <View style={styles.settingHeader}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
+                <ThemedText style={styles.settingDescription}>Choose your coding experience level</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.saveButton} onPress={handleSaveSkillLevel}>
+                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
+              </TouchableOpacity>
+            </View>
             
             {/* Warning Note */}
             <ThemedText style={styles.warningText}>
@@ -150,7 +290,7 @@ export default function ProfileScreen() {
             </ThemedText>
             
             <View style={styles.levelButtons}>
-              {['Beginner', 'Intermediate', 'Professional'].map(renderLevelButton)}
+              {(['Beginner', 'Intermediate', 'Professional'] as const).map(renderLevelButton)}
             </View>
             
             {/* Progress Bar */}
@@ -164,6 +304,111 @@ export default function ProfileScreen() {
               </View>
             )}
           </View>
+
+          {/* Notifications Setting */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Push Notifications</ThemedText>
+                <ThemedText style={styles.settingDescription}>Get reminders to practice coding</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.toggleButton}>
+                <ThemedText style={styles.toggleText}>ON</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Daily Goal Setting */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Daily Goal</ThemedText>
+                <ThemedText style={styles.settingDescription}>Problems to solve per day</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.goalSelector}>
+                <ThemedText style={styles.goalText}>3</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Auto-Save Solutions */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Auto-Save Solutions</ThemedText>
+                <ThemedText style={styles.settingDescription}>Automatically save your code solutions</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.toggleButton}>
+                <ThemedText style={styles.toggleText}>ON</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Dark Mode */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Dark Mode</ThemedText>
+                <ThemedText style={styles.settingDescription}>Switch to dark theme</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.toggleButton}>
+                <ThemedText style={styles.toggleText}>OFF</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Code Font Size */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Code Font Size</ThemedText>
+                <ThemedText style={styles.settingDescription}>Adjust code editor font size</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.fontSizeSelector}>
+                <ThemedText style={styles.fontSizeText}>14px</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Hint Preferences */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Smart Hints</ThemedText>
+                <ThemedText style={styles.settingDescription}>Get contextual hints based on your progress</ThemedText>
+              </View>
+              <TouchableOpacity style={styles.toggleButton}>
+                <ThemedText style={styles.toggleText}>ON</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Data & Privacy */}
+          <View style={styles.settingCard}>
+            <TouchableOpacity style={styles.settingRowClickable} onPress={handleDataPrivacy}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>Data & Privacy</ThemedText>
+                <ThemedText style={styles.settingDescription}>Manage your data and privacy settings</ThemedText>
+              </View>
+              <ThemedText style={styles.chevron}>›</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {/* About */}
+          <View style={styles.settingCard}>
+            <TouchableOpacity style={styles.settingRowClickable}>
+              <View style={styles.settingInfo}>
+                <ThemedText style={styles.settingLabel}>About</ThemedText>
+                <ThemedText style={styles.settingDescription}>App version and information</ThemedText>
+              </View>
+              <ThemedText style={styles.chevron}>›</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {/* Logout Button */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <ThemedText style={styles.logoutButtonText}>Logout</ThemedText>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -317,8 +562,9 @@ const styles = StyleSheet.create({
   },
   settingCard: {
     backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
     shadowColor: '#6564c7',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -326,11 +572,11 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   settingLabel: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#6564c7',
-    marginBottom: 8,
-    lineHeight: 24,
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 22,
   },
   warningText: {
     fontSize: 12,
@@ -415,5 +661,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 100,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  settingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  saveButton: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  settingRowClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  settingInfo: {
+    flex: 1,
+  },
+  settingDescription: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  toggleButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 50,
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  goalSelector: {
+    backgroundColor: '#E3F2FD',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 45,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#BBDEFB',
+  },
+  goalText: {
+    color: '#1976D2',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  fontSizeSelector: {
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 55,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  fontSizeText: {
+    color: '#333',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chevron: {
+    fontSize: 18,
+    color: '#999',
+    fontWeight: '300',
+  },
+  logoutButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 32,
+    marginBottom: 20,
+    width: '100%',
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

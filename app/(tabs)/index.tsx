@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
-import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import CircularProgress from '@/components/CircularProgress';
 import { ThemedText } from '@/components/ThemedText';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
+import type { UserProfileStats } from '@/lib/types/profile';
 import { router } from 'expo-router';
 
 export default function HomeScreen() {
-  const [profile, setProfile] = useState('Chong Rui');
-  const [streak, setStreak] = useState(20);
-  const [trophy, setTrophy] = useState(2040);
-  const [hint, setHint] = useState(5);
+  const [profile, setProfile] = useState<UserProfileStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [roadmapTopics] = useState([
     'Array',
@@ -32,25 +33,107 @@ export default function HomeScreen() {
     { name: 'Recursion', percentage: 35 },
   ]);
 
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        // User not logged in, use default values
+        setProfile({
+          id: '',
+          user_id: '',
+          name: 'Guest User',
+          level: 1,
+          total_xp: 0,
+          skill_level: 'Beginner',
+          total_questions: 0,
+          easy_solved: 0,
+          medium_solved: 0,
+          hard_solved: 0,
+          completion_percentage: 0,
+          trophy_count: 0,
+          current_streak: 0,
+          longest_streak: 0,
+          hints_used: 0,
+          available_hints: 5,
+          last_activity_date: new Date().toISOString().split('T')[0],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          total_solved: 0,
+          calculated_skill_level: 'Beginner'
+        } as UserProfileStats & { available_hints: number });
+        setLoading(false);
+        return;
+      }
+
+      const profileData = await ProfileService.getUserProfileStats(user.id);
+      if (profileData) {
+        setProfile(profileData as UserProfileStats & { available_hints: number });
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      // Set default values on error
+      setProfile({
+        id: '',
+        user_id: '',
+        name: 'User',
+        level: 1,
+        total_xp: 0,
+        skill_level: 'Beginner',
+        total_questions: 0,
+        easy_solved: 0,
+        medium_solved: 0,
+        hard_solved: 0,
+        completion_percentage: 0,
+        trophy_count: 0,
+        current_streak: 0,
+        longest_streak: 0,
+        hints_used: 0,
+        available_hints: 5,
+        last_activity_date: new Date().toISOString().split('T')[0],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        total_solved: 0,
+        calculated_skill_level: 'Beginner'
+      } as UserProfileStats & { available_hints: number });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6564c7" />
+          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.profileContainer}>
-        <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/screens/profile')}>
+        <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/(tabs)/profile')}>
           <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
-          <ThemedText style={styles.profileName}>{profile}</ThemedText>
+          <ThemedText style={styles.profileName} numberOfLines={1} ellipsizeMode="tail">{profile?.name || 'User'}</ThemedText>
         </TouchableOpacity>
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>{streak}</ThemedText>
+            <ThemedText style={styles.statText}>{profile?.current_streak || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>{trophy}</ThemedText>
+            <ThemedText style={styles.statText}>{profile?.trophy_count || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
             <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statText}>{hint}</ThemedText>
+            <ThemedText style={styles.statText}>{profile?.available_hints || 5}</ThemedText>
           </View>
         </View>
       </View>
@@ -139,7 +222,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#6564c7',
     width: '100%',
     paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
     borderBottomWidth: 2,
     borderBottomColor: '#E0E0E0',
     overflow: 'hidden',
@@ -152,11 +235,13 @@ const styles = StyleSheet.create({
     borderColor: '#E0D7FF',
     borderRadius: 18,
     paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 4,
     elevation: 2,
+    flex: 1,
+    marginRight: 16,
   },
   avatar: {
     width: 28,
@@ -167,11 +252,13 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    flex: 1,
   },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   statChip: {
     flexDirection: 'row',
@@ -180,7 +267,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 4,
     paddingHorizontal: 10,
-    marginLeft: 6,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 2,
@@ -317,5 +403,15 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
     marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
