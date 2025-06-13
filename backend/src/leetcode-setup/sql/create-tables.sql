@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   current_streak INTEGER DEFAULT 0 CHECK (current_streak >= 0),
   longest_streak INTEGER DEFAULT 0 CHECK (longest_streak >= 0),
   hints_used INTEGER DEFAULT 0 CHECK (hints_used >= 0),
+  available_hints INTEGER DEFAULT 5 CHECK (available_hints >= 0),
   last_activity_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -213,10 +214,12 @@ FROM user_profiles up;
 CREATE OR REPLACE FUNCTION create_user_profile()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_profiles (user_id, name)
+  INSERT INTO user_profiles (user_id, name, skill_level, available_hints)
   VALUES (
     NEW.id, 
-    COALESCE(NEW.raw_user_meta_data->>'full_name', 'User')
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
+    COALESCE(NEW.raw_user_meta_data->>'skill_level', 'Beginner'),
+    5
   );
   RETURN NEW;
 END;
