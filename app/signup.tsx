@@ -7,15 +7,14 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { supabase } from '@/lib/supabase';
 
-// Password validation rules
+// Password validation rules (matching Supabase requirements)
 const PASSWORD_RULES = {
-  minLength: 6,
+  minLength: 8, // Supabase typically requires 8+ characters
   requireUppercase: true,
   requireLowercase: true,
   requireNumber: true,
-  requireSpecialChar: true,
+  requireSpecialChar: false, // Make special chars optional to avoid conflicts
 };
 
 const validatePassword = (password: string) => {
@@ -59,6 +58,7 @@ export default function SignupScreen() {
   };
 
   const handleSignup = async () => {
+    setLoading(true);
     setFormErrors([]);
     setPasswordErrors([]);
     
@@ -76,47 +76,64 @@ export default function SignupScreen() {
     
     if (errors.length > 0 || pwErrors.length > 0) {
       setFormErrors(errors);
+      setLoading(false);
       return;
     }
 
+    // Test email/password with Supabase before proceeding to onboarding
     try {
-      setLoading(true);
+      const { supabaseAdmin } = await import('@/lib/supabase');
       
-      // Create a proper redirect URL with explicit scheme and path
-      const redirectUrl = 'codeonthego://auth-callback';
-      
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: name,
-          },
-          emailRedirectTo: redirectUrl,
-        },
-      });
-
-      if (error) {
-        setFormErrors([error.message]);
+      if (!supabaseAdmin) {
+        setFormErrors(['Configuration error. Please try again later.']);
+        setLoading(false);
         return;
       }
 
-      if (data.user) {
-        // Check if email confirmation is required
-        if (data.session === null) {
-          router.replace({
-            pathname: '/login',
-            params: {
-              message: 'Please check your email for the verification link. After verifying, you can log in.',
-            },
-          });
+      // Test if we can create a user with these credentials
+      const { data: testData, error: testError } = await supabaseAdmin.auth.admin.createUser({
+        email: email,
+        password: password,
+        user_metadata: {
+          full_name: name,
+          test_user: true, // Mark as test so we can delete it
+        },
+        email_confirm: true,
+      });
+
+      if (testError) {
+        // Handle specific Supabase errors
+        if (testError.message.includes('already been registered')) {
+          setFormErrors(['An account with this email already exists. Please use a different email or try logging in.']);
+        } else if (testError.message.includes('Password')) {
+          setPasswordErrors(['Password does not meet security requirements. Please use a stronger password.']);
+        } else if (testError.message.includes('Email')) {
+          setFormErrors(['Invalid email format. Please check your email address.']);
         } else {
-          // If email confirmation is not required, redirect to home
-          router.replace('/(tabs)');
+          setFormErrors([`Account validation failed: ${testError.message}`]);
         }
+        setLoading(false);
+        return;
       }
+
+      // If test user creation succeeded, delete the test user and proceed
+      if (testData.user) {
+        await supabaseAdmin.auth.admin.deleteUser(testData.user.id);
+      }
+
+      // Navigate to onboarding with validated credentials
+      router.push({
+        pathname: '/onboarding',
+        params: {
+          email,
+          password,
+          name,
+        },
+      });
+
     } catch (error: any) {
-      setFormErrors([error.message]);
+      setFormErrors(['Network error. Please check your connection and try again.']);
+      console.error('Signup validation error:', error);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { ForBlock } from '@/components/codeblocks/ForBlock';
 import { IfBlock } from '@/components/codeblocks/IfBlock';
 import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
+import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
@@ -20,6 +21,11 @@ const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface Analysis {
+  lineByLineAnalysis: {
+    lineNumber: number;
+    status: string;
+    explanation?: string;
+  }[];
   correctness: string;
   efficiency: {
     time: string;
@@ -27,6 +33,7 @@ interface Analysis {
     anyMoreOptimal: string;
   };
   edgeCases: string[];
+  trackAssessment: string;
   suggestions: string[];
   score: number;
   stars: number;
@@ -105,6 +112,7 @@ export default function QuestionScreen() {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [deleteMode, setDeleteMode] = useState(false);
 
   // Function to parse examples from HTML content (improved)
   const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
@@ -377,15 +385,172 @@ export default function QuestionScreen() {
 
   const getDifficultyAccentColor = (diff: string) => {
     switch (diff) {
-      case 'Easy':
-        return '#22C55E'; // Green accent
-      case 'Medium':
-        return '#F97316'; // Orange accent  
-      case 'Hard':
-        return '#EF4444'; // Red accent
-      default:
-        return '#8B5CF6';
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
+      default: return '#6564c7';
     }
+  };
+
+  const getLineAnalysisBorderStyle = (lineNumber: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      console.log(`No analysis data for line ${lineNumber}`);
+      return {};
+    }
+    
+    console.log(`Checking line ${lineNumber}, available analysis:`, analysis.lineByLineAnalysis);
+    
+    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
+    if (!lineAnalysis) {
+      console.log(`No analysis found for line ${lineNumber}`);
+      return {};
+    }
+
+    console.log(`Found analysis for line ${lineNumber}:`, lineAnalysis);
+
+    switch (lineAnalysis.status) {
+      case 'fully_correct':
+        console.log(`Applying green border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#4CAF50', // Green
+        };
+      case 'can_be_improved':
+        console.log(`Applying orange border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#FF9800', // Orange
+        };
+      case 'wrong':
+        console.log(`Applying red border for line ${lineNumber}`);
+        return {
+          borderWidth: 3,
+          borderColor: '#F44336', // Red
+        };
+      default:
+        console.log(`Unknown status for line ${lineNumber}: ${lineAnalysis.status}`);
+        return {};
+    }
+  };
+
+  const getLineAnalysisExplanation = (lineNumber: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return undefined;
+    }
+    
+    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
+    if (!lineAnalysis) {
+      return undefined;
+    }
+
+    // Only show explanations for lines that can be improved or are wrong
+    if (lineAnalysis.status === 'can_be_improved' || lineAnalysis.status === 'wrong') {
+      return lineAnalysis.explanation || undefined;
+    }
+    
+    return undefined;
+  };
+
+  // Calculate which line numbers each block spans
+  const getBlockLineRanges = () => {
+    let currentLineNumber = 1;
+    const blockRanges: {blockIndex: number, startLine: number, endLine: number}[] = [];
+    
+    descriptionBoxes.forEach((block, idx) => {
+      const startLine = currentLineNumber;
+      let lineCount = 1; // Default to 1 line
+      
+      // Calculate how many lines this block generates
+      if (block.type === 'text') {
+        // Text blocks are single line (filtered content)
+        const lines = block.value.split('\n').filter(line => line.trim() !== '');
+        lineCount = Math.max(1, lines.length);
+      } else if (block.type === 'if' || block.type === 'elseif' || block.type === 'while' || block.type === 'for') {
+        // These blocks generate 2 lines: condition + body
+        lineCount = 2;
+      } else if (block.type === 'else') {
+        // Else blocks generate 2 lines: else + body
+        lineCount = 2;
+      }
+      
+      const endLine = startLine + lineCount - 1;
+      blockRanges.push({
+        blockIndex: idx,
+        startLine,
+        endLine
+      });
+      
+      currentLineNumber = endLine + 1;
+    });
+    
+    return blockRanges;
+  };
+
+  const getBlockBorderStyle = (blockIndex: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return {};
+    }
+    
+    const blockRanges = getBlockLineRanges();
+    const blockRange = blockRanges.find(range => range.blockIndex === blockIndex);
+    if (!blockRange) return {};
+    
+    console.log(`Block ${blockIndex} spans lines ${blockRange.startLine}-${blockRange.endLine}`);
+    
+    // Get analysis for all lines in this block's range
+    const blockAnalyses = analysis.lineByLineAnalysis.filter(line => 
+      line.lineNumber >= blockRange.startLine && line.lineNumber <= blockRange.endLine
+    );
+    
+    console.log(`Block ${blockIndex} analysis:`, blockAnalyses);
+    
+    if (blockAnalyses.length === 0) return {};
+    
+    // Determine the "worst" status for border color
+    const hasWrong = blockAnalyses.some(a => a.status === 'wrong');
+    const hasImproved = blockAnalyses.some(a => a.status === 'can_be_improved');
+    
+    if (hasWrong) {
+      console.log(`Applying red border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#F44336', // Red
+      };
+    } else if (hasImproved) {
+      console.log(`Applying orange border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#FF9800', // Orange
+      };
+    } else {
+      console.log(`Applying green border for block ${blockIndex}`);
+      return {
+        borderWidth: 3,
+        borderColor: '#4CAF50', // Green
+      };
+    }
+  };
+
+  const getBlockExplanation = (blockIndex: number) => {
+    if (!analysis || !analysis.lineByLineAnalysis) {
+      return undefined;
+    }
+    
+    const blockRanges = getBlockLineRanges();
+    const blockRange = blockRanges.find(range => range.blockIndex === blockIndex);
+    if (!blockRange) return undefined;
+    
+    // Get analysis for all lines in this block's range
+    const blockAnalyses = analysis.lineByLineAnalysis.filter(line => 
+      line.lineNumber >= blockRange.startLine && line.lineNumber <= blockRange.endLine
+    );
+    
+    // Find the first explanation that needs improvement or is wrong
+    const explanationAnalysis = blockAnalyses.find(a => 
+      (a.status === 'can_be_improved' || a.status === 'wrong') && a.explanation
+    );
+    
+    return explanationAnalysis?.explanation || undefined;
   };
   
   async function handleSolveProblem() {
@@ -400,13 +565,22 @@ export default function QuestionScreen() {
       if (block.type === 'for') return `for (${block.condition}):\n   ${block.body}`;
       return '';
     }).join('\n');
+    
     if (!combinedSolution.trim()) {
       return;
     }
-    setSolution(combinedSolution);
+    
+    // Add line numbers to the solution
+    const numberedSolution = combinedSolution
+      .split('\n')
+      .filter(line => line.trim() !== '') // Remove empty lines
+      .map((line, index) => `${index + 1}) ${line.trim()}`)
+      .join('\n');
+    
+    setSolution(numberedSolution);
     setIsAnalyzing(true);
     setAnalysisError(null);
-    console.log('\n' + combinedSolution);
+    console.log('\n' + numberedSolution);
     try {
       const response = await apiCall('/api/analyze', {
         method: 'POST',
@@ -414,14 +588,48 @@ export default function QuestionScreen() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: combinedSolution,
+          code: numberedSolution,
           question: problem.description
         }),
       });
 
-      const data = await response.json();
-      setAnalysis(data.analysis);
-      setShowAnalysis(true);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Received analysis data:', data);
+        console.log('Line-by-line analysis:', data.analysis?.lineByLineAnalysis);
+        console.log('\n=== SCORE AND STARS DEBUG ===');
+        console.log('Score from backend:', data.analysis?.score);
+        console.log('Stars from backend:', data.analysis?.stars);
+        console.log('Score type:', typeof data.analysis?.score);
+        console.log('Stars type:', typeof data.analysis?.stars);
+        console.log('Correctness:', data.analysis?.correctness);
+        console.log('Edge cases:', data.analysis?.edgeCases);
+        console.log('Suggestions:', data.analysis?.suggestions);
+        console.log('============================\n');
+        console.log('\n=== RAW AI RESPONSE ===');
+        console.log(data.rawResponse);
+        console.log('=====================\n');
+        setAnalysis(data.analysis);
+        
+        // Verify analysis was set correctly
+        setTimeout(() => {
+          console.log('\n=== FRONTEND STATE VERIFICATION ===');
+          console.log('Analysis state score:', data.analysis?.score);
+          console.log('Analysis state stars:', data.analysis?.stars);
+          console.log('=====================================\n');
+        }, 100);
+        
+        // Debug: Show block to line mappings
+        if (data.analysis?.lineByLineAnalysis) {
+          const blockRanges = getBlockLineRanges();
+          console.log('Block to line mappings:', blockRanges);
+        }
+        
+        setShowAnalysis(true);
+      } else {
+        console.error('Analysis failed:', response.status);
+        setAnalysisError('Analysis failed. Please try again.');
+      }
     } catch (error) {
       // Show simple error message if both APIs failed
       setAnalysisError('Both live and local servers failed, try again');
@@ -459,7 +667,39 @@ export default function QuestionScreen() {
   }
 
   function handleDeleteBox(index: number) {
+    // Calculate the line range of the block being deleted BEFORE removing it
+    const blockRanges = getBlockLineRanges();
+    const deletedBlockRange = blockRanges.find(range => range.blockIndex === index);
+    
+    // Remove the block
     setDescriptionBoxes(prev => prev.filter((_, i) => i !== index));
+    
+    // Update analysis if it exists
+    if (analysis && analysis.lineByLineAnalysis && deletedBlockRange) {
+      const deletedStartLine = deletedBlockRange.startLine;
+      const deletedEndLine = deletedBlockRange.endLine;
+      const deletedLineCount = deletedEndLine - deletedStartLine + 1;
+      
+      // Filter out analysis entries for the deleted block and adjust line numbers for subsequent blocks
+      const updatedLineByLineAnalysis = analysis.lineByLineAnalysis
+        .filter(lineAnalysis => 
+          // Remove analysis for deleted block lines
+          lineAnalysis.lineNumber < deletedStartLine || lineAnalysis.lineNumber > deletedEndLine
+        )
+        .map(lineAnalysis => ({
+          ...lineAnalysis,
+          // Adjust line numbers for blocks that come after the deleted block
+          lineNumber: lineAnalysis.lineNumber > deletedEndLine 
+            ? lineAnalysis.lineNumber - deletedLineCount 
+            : lineAnalysis.lineNumber
+        }));
+      
+      // Update the analysis with the filtered and adjusted line numbers
+      setAnalysis({
+        ...analysis,
+        lineByLineAnalysis: updatedLineByLineAnalysis
+      });
+    }
   }
 
   function handleAddIfBlock() {
@@ -567,7 +807,7 @@ export default function QuestionScreen() {
           ]}>
             <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(problem?.difficulty || 'Easy') }]} />
             <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-              {problem?.title}
+              {name || problem?.title}
             </ThemedText>
           </View>
         </View>
@@ -721,7 +961,24 @@ export default function QuestionScreen() {
           </View>
           
           <View style={[styles.section, { flex: 1 }]}>
-            <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+            <View style={styles.solutionHeader}>
+              <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+              <TouchableOpacity 
+                style={styles.deleteToggleButton}
+                onPress={() => setDeleteMode(!deleteMode)}
+              >
+                {deleteMode ? (
+                  <ThemedText style={styles.deleteToggleButtonText}>
+                    Done
+                  </ThemedText>
+                ) : (
+                  <Image 
+                    source={require('@/assets/images/icons/trash-delete-icon.png')}
+                    style={styles.deleteToggleIcon}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
 
             {/* Render all DescriptionBoxes */}
             {descriptionBoxes.map((block, idx) => {
@@ -737,7 +994,9 @@ export default function QuestionScreen() {
                     value={block.value}
                     onChangeText={text => handleDescriptionBoxChange(idx, text)}
                     placeholder="Write your solution here..."
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -749,8 +1008,10 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
                     onChangeBody={text => handleIfBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -762,8 +1023,10 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
                     onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
                     isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -773,7 +1036,9 @@ export default function QuestionScreen() {
                     key={idx}
                     body={block.body}
                     onChangeBody={text => handleElseBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -785,7 +1050,9 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
                     onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -797,7 +1064,9 @@ export default function QuestionScreen() {
                     body={block.body}
                     onChangeCondition={text => handleForBlockConditionChange(idx, text)}
                     onChangeBody={text => handleForBlockBodyChange(idx, text)}
-                    onDelete={descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
                   />
                 );
               }
@@ -844,12 +1113,25 @@ export default function QuestionScreen() {
               <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
             </View>
           )}
-          <View style={styles.buttonContainer}>
+          
+                    {/* Progress Bar Extension - pops up from top and slides underneath */}
+          {analysis && (
+            <View style={styles.progressExtensionContainer}>
+              <View style={styles.progressExtension}>
+                <ProgressBar score={analysis.score} />
+              </View>
+            </View>
+          )}
+
+          <View style={[
+            styles.unifiedButtonContainer,
+            analysis && styles.unifiedButtonWithProgress
+          ]}>
             <TouchableOpacity 
               style={[
                 styles.solveButton, 
                 (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
-                analysis ? styles.solveButtonWithAnalysis : styles.solveButtonFullWidth
+                analysis ? styles.solveButtonUnified : styles.solveButtonFullWidth
               ]}
               onPress={handleSolveProblem}
               disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
@@ -862,15 +1144,18 @@ export default function QuestionScreen() {
             </TouchableOpacity>
 
             {analysis && (
-              <TouchableOpacity 
-                style={styles.analysisToggleButton}
-                onPress={() => setShowAnalysis(true)}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/up-arrow.png')}
-                  style={styles.analysisToggleIcon}
-                />
-              </TouchableOpacity>
+              <>
+                <View style={styles.buttonDivider} />
+                <TouchableOpacity 
+                  style={styles.analysisToggleButtonUnified}
+                  onPress={() => setShowAnalysis(true)}
+                >
+                  <Image 
+                    source={require('@/assets/images/icons/up-arrow.png')}
+                    style={styles.analysisToggleIcon}
+                  />
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </ScrollView>
@@ -956,8 +1241,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginLeft: '1%',
     fontWeight: '600',
-    marginBottom: 8,
+    marginBottom: 0,
     color: '#2d2d2d',
+    lineHeight: 30,
+    textAlignVertical: 'center',
   },
   solveButton: {
     backgroundColor: '#6564c7',
@@ -1087,8 +1374,6 @@ const styles = StyleSheet.create({
   analysisToggleButton: {
     flex: 0.2,
     backgroundColor: '#6564c7',
-    padding: 16,
-    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1372,4 +1657,97 @@ const styles = StyleSheet.create({
   activeExampleIndicatorNumber: {
     color: '#fff',
   },
-    }); 
+  progressExtensionContainer: {
+    marginBottom: 0,
+  },
+  progressExtension: {
+    backgroundColor: '#f0e6ff', // Same light purple as description boxes
+    borderWidth: 2,
+    borderColor: '#d9b3ff',
+    borderBottomWidth: 0, // No bottom border to slide under button
+    padding: 12, // Reduced padding to take up less space
+    paddingBottom: 20, // Extra bottom padding to account for sliding under
+    marginBottom: -24, // More negative margin to slide further underneath
+    width: '100%', // Full width to match unified button
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Shadow to match description box style
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  unifiedButtonContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#6564c7',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  unifiedButtonWithProgress: {
+    // Keep top radius and border for visual separation
+    marginTop: 0, // No margin for tight spacing
+  },
+  solveButtonUnified: {
+    flex: 1,
+    backgroundColor: 'transparent', // Transparent since container has background
+    padding: 16,
+    borderRadius: 0, // No radius since it's part of unified container
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonDivider: {
+    width: 2,
+    height: '70%',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)', // More visible white line
+  },
+  analysisToggleButtonUnified: {
+    backgroundColor: 'transparent', // Same as container background
+    padding: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solutionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    minHeight: 30,
+  },
+  deleteToggleButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#FF375F',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minWidth: 60,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteToggleButtonText: {
+    color: '#FF375F',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 14,
+  },
+  deleteToggleIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#FF375F',
+  },
+  solveButtonWithProgress: {
+    borderTopLeftRadius: 0, // Remove top left radius to connect with extension
+    borderTopRightRadius: 0, // Remove top right radius to connect with extension
+    borderTopWidth: 0, // Remove top border to seamlessly connect
+    marginTop: 0, // No margin for seamless connection
+  },
+}); 

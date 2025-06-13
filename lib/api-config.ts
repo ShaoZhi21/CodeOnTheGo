@@ -4,24 +4,17 @@ import { Platform } from 'react-native';
 const LOCAL_API_URL = 'http://localhost:3000';
 const PRODUCTION_API_URL = 'https://codeonthego-backend.onrender.com';
 
-// Check if we're in development mode
-const isDevelopment = __DEV__;
-
-// For mobile, localhost doesn't work, so we use the production URL
-// For web/development, we prefer localhost if available
+// Always use localhost as primary, render.com as fallback
 const getApiBaseUrl = () => {
-  if (Platform.OS === 'web' && isDevelopment) {
-    return LOCAL_API_URL;
-  }
-  return PRODUCTION_API_URL;
+  return LOCAL_API_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
 
 // Function to make API calls with automatic fallback
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
-  const primaryUrl = API_BASE_URL;
-  const fallbackUrl = primaryUrl === LOCAL_API_URL ? PRODUCTION_API_URL : LOCAL_API_URL;
+  const primaryUrl = LOCAL_API_URL; // Always try localhost first
+  const fallbackUrl = PRODUCTION_API_URL; // Always use render.com as fallback
   
   console.log(`🔗 Trying primary API: ${primaryUrl}${endpoint}`);
   
@@ -76,6 +69,6 @@ export function getApiUrl(endpoint: string = '') {
 
 console.log(`🌐 API Configuration:
   Platform: ${Platform.OS}
-  Development: ${isDevelopment}
-  Primary URL: ${API_BASE_URL}
+  Primary URL: ${LOCAL_API_URL} (localhost)
+  Fallback URL: ${PRODUCTION_API_URL} (render.com)
 `);
