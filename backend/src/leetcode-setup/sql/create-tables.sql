@@ -76,6 +76,20 @@ ORDER BY
     WHEN 'Hard' THEN 3 
   END;
 
+-- User Problem Progress Table
+CREATE TABLE IF NOT EXISTS user_problem_progress (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  problem_id INTEGER NOT NULL REFERENCES leetcode_problems(id),
+  topic TEXT NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  stars INTEGER DEFAULT 0,
+  last_answer TEXT,
+  attempts JSONB DEFAULT '[]'::jsonb, -- Array of { code, timestamp, result }
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, problem_id)
+);
+
 -- Sample queries to test the setup:
 
 -- Get all problems with basic info

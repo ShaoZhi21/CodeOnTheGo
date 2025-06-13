@@ -3,12 +3,18 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// --- USER PROGRESS ENDPOINTS ---
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Middleware
 app.use(cors({
@@ -199,6 +205,61 @@ Stars: 0-5
     console.error('Error:', error);
     res.status(500).json({ error: 'Failed to analyze code' });
   }
+});
+
+// Get all progress for a user and topic
+app.get('/api/user-progress/:userId/:topic', async (req, res) => {
+  const { userId, topic } = req.params;
+  const { data, error } = await supabase
+    .from('user_problem_progress')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('topic', topic);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ progress: data });
+});
+
+// Save/update answer and attempts for a question
+app.post('/api/user-progress/:userId/:topic/:problemId/answer', async (req, res) => {
+  const { userId, topic, problemId } = req.params;
+  const { code, result, completed, stars } = req.body;
+  const now = new Date().toISOString();
+
+  // Fetch existing progress
+  let { data: progress, error } = await supabase
+    .from('user_problem_progress')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('problem_id', problemId)
+    .single();
+
+  let attempts = [];
+  if (progress && progress.attempts) {
+    attempts = progress.attempts;
+  }
+  attempts.push({ code, timestamp: now, result });
+
+  const updateFields = {
+    last_answer: code,
+    attempts,
+    updated_at: now,
+  };
+  if (typeof completed === 'boolean') updateFields.completed = completed;
+  if (typeof stars === 'number') updateFields.stars = stars;
+
+  let upsertData = {
+    user_id: userId,
+    problem_id: parseInt(problemId),
+    topic,
+    ...updateFields,
+  };
+
+  const { error: upsertError } = await supabase
+    .from('user_problem_progress')
+    .upsert(upsertData, { onConflict: ['user_id', 'problem_id'] });
+
+  if (upsertError) return res.status(500).json({ error: upsertError.message });
+  res.json({ success: true });
 });
 
 // Start server
