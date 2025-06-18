@@ -212,8 +212,13 @@ Stars: [number]
       if (scoreMatch) {
         console.log('Found score match in line:', trimmedLine, '-> Matched:', scoreMatch[1]);
         if (analysis.score === 0) { // Only set if not already set
-          analysis.score = parseInt(scoreMatch[1]);
-          console.log('Set score to:', analysis.score);
+          const parsedScore = parseInt(scoreMatch[1]);
+          // Ensure score is within valid range (0-100)
+          analysis.score = Math.max(0, Math.min(100, parsedScore));
+          console.log('Set score to:', analysis.score, '(original:', parsedScore, ')');
+          if (parsedScore !== analysis.score) {
+            console.warn('Score value was adjusted from', parsedScore, 'to', analysis.score);
+          }
         } else {
           console.log('Score already set, ignoring this match');
         }

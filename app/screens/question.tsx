@@ -790,18 +790,68 @@ export default function QuestionScreen() {
     setShowAnalysis(false);
   };
 
-  const handleMarkComplete = () => {
-    // For now, just navigate back or show a success message
-    // This could be extended to save completion status to database
-    console.log('Problem marked as complete!');
-    // Could navigate back to questions list or show completion animation
-    router.back();
+  const handleMarkComplete = async () => {
+    if (!problem || !analysis) {
+      console.error('Missing problem or analysis data');
+      return;
+    }
+
+    try {
+      // Import the service function
+      const { markQuestionComplete } = await import('@/lib/services/userProgress');
+      
+      const result = await markQuestionComplete({
+        problemId: problem.leetcode_id,
+        score: analysis.score,
+        stars: analysis.stars
+      });
+
+      if (result.success) {
+        console.log('Problem marked as complete!');
+        // Show success message or animation here if desired
+        router.back();
+      } else {
+        console.error('Failed to mark question complete:', result.error);
+        // Show error message to user
+      }
+    } catch (error) {
+      console.error('Error marking question complete:', error);
+    }
   };
 
   const handleWritePseudocode = () => {
-    // Navigate to pseudocode page
+    // Get the current pseudocode solution
+    const pseudocodeSolution = descriptionBoxes.map((block, index) => {
+      if (block.type === 'text') {
+        return `${index + 1}. ${block.value}`;
+      } else if (block.type === 'if') {
+        return `${index + 1}. If ${block.condition}: ${block.body}`;
+      } else if (block.type === 'elseif') {
+        return `${index + 1}. Else if ${block.condition}: ${block.body}`;
+      } else if (block.type === 'else') {
+        return `${index + 1}. Else: ${block.body}`;
+      } else if (block.type === 'while') {
+        return `${index + 1}. While ${block.condition}: ${block.body}`;
+      } else if (block.type === 'for') {
+        return `${index + 1}. For ${block.condition}: ${block.body}`;
+      }
+      return '';
+    }).join('\n');
+
+    // Navigate to pseudocode page with problem data and pseudocode
     console.log('Navigating to pseudocode mode...');
-    router.push('/screens/pseudoToCode');
+    router.push({
+      pathname: '/screens/pseudoToCode',
+      params: {
+        problemId: problem?.leetcode_id?.toString(),
+        title: problem?.title,
+        difficulty: problem?.difficulty,
+        description: problem?.description,
+        examples: JSON.stringify(problem?.examples || []),
+        constraints: JSON.stringify(problem?.constraints || []),
+        pseudocode: pseudocodeSolution
+      }
+    });
     setShowAnalysis(false);
   };
 

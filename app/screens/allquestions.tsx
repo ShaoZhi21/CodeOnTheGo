@@ -19,6 +19,12 @@ interface Problem {
   is_premium: boolean;
 }
 
+interface ProblemWithStatus extends Problem {
+  status: 'Completed' | 'Unsolved';
+  score?: number;
+  stars?: number;
+}
+
 const PROBLEMS_PER_PAGE = 8;
 
 const getDifficultyColor = (difficulty: Problem['difficulty']) => {
@@ -36,10 +42,8 @@ const getDifficultyColor = (difficulty: Problem['difficulty']) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'Solved':
+    case 'Completed':
       return '#00B8A3';
-    case 'Attempted':
-      return '#FFA116';
     case 'Unsolved':
       return '#b4aaf4';
     default:
@@ -48,7 +52,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function AllQuestionsScreen() {
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<ProblemWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalProblems, setTotalProblems] = useState(0);
@@ -99,7 +103,22 @@ export default function AllQuestionsScreen() {
         throw error;
       }
 
-      setProblems(data || []);
+      const problemsData = data || [];
+
+      // Get user progress for these problems
+      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const problemIds = problemsData.map(p => p.leetcode_id);
+      const progressMap = await getUserProgressForProblems(problemIds);
+
+      // Combine problems with their status
+      const problemsWithStatus: ProblemWithStatus[] = problemsData.map(problem => ({
+        ...problem,
+        status: progressMap[problem.leetcode_id]?.is_solved ? 'Completed' : 'Unsolved',
+        score: progressMap[problem.leetcode_id]?.score,
+        stars: progressMap[problem.leetcode_id]?.stars
+      }));
+
+      setProblems(problemsWithStatus);
     } catch (err) {
       console.error('Error fetching problems:', err);
       setError('Failed to load problems. Please try again.');
@@ -177,7 +196,7 @@ export default function AllQuestionsScreen() {
     handleProblemPress(problem);
   };
 
-  const sortProblems = (problems: Problem[], column: string, direction: 'asc' | 'desc'): Problem[] => {
+  const sortProblems = (problems: ProblemWithStatus[], column: string, direction: 'asc' | 'desc'): ProblemWithStatus[] => {
     return [...problems].sort((a, b) => {
       let aValue: any;
       let bValue: any;
@@ -197,9 +216,9 @@ export default function AllQuestionsScreen() {
           bValue = difficultyOrder[b.difficulty];
           break;
         case 'status':
-          const statusOrder = { 'Unsolved': 1, 'Progress': 2, 'Completed': 3 };
-          aValue = statusOrder['Unsolved' as keyof typeof statusOrder];
-          bValue = statusOrder['Unsolved' as keyof typeof statusOrder];
+          const statusOrder = { 'Unsolved': 1, 'Completed': 2 };
+          aValue = statusOrder[a.status as keyof typeof statusOrder];
+          bValue = statusOrder[b.status as keyof typeof statusOrder];
           break;
         default:
           return 0;
@@ -411,8 +430,8 @@ export default function AllQuestionsScreen() {
               </ThemedText>
             </View>
             <View style={[styles.statusCell, { flex: 2.5 }]}>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor('Unsolved') }]}>
-                <ThemedText style={styles.statusText}>Unsolved</ThemedText>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(problem.status) }]}>
+                <ThemedText style={styles.statusText}>{problem.status}</ThemedText>
               </View>
             </View>
           </TouchableOpacity>
