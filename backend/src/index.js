@@ -172,8 +172,9 @@ Rate the solution out of 100 using the following scale:
 - 25–50 – Incorrect solution due to minor logical flaws present that could cause significant test case failures (1 star)
 - 0–25 – Completely incorrect solution due to major logical flaws or complete misunderstanding of the problem (0 stars)
 
-Score: __/100  
-Stars: 0-5
+IMPORTANT: You MUST format the final output exactly as follows:
+Score: [number]/100  
+Stars: [number]
 `;
 
     const result = await model.generateContent(prompt);
@@ -206,6 +207,25 @@ Stars: 0-5
     for (const line of lines) {
       const trimmedLine = line.trim();
       
+      // Check for score pattern anywhere in the line (case-insensitive, flexible format)
+      const scoreMatch = trimmedLine.match(/(?:score|scoring)[:\s]*(\d+)(?:\/100|out of 100|\s*\/\s*100)/i);
+      if (scoreMatch) {
+        console.log('Found score match in line:', trimmedLine, '-> Matched:', scoreMatch[1]);
+        if (analysis.score === 0) { // Only set if not already set
+          analysis.score = parseInt(scoreMatch[1]);
+          console.log('Set score to:', analysis.score);
+        } else {
+          console.log('Score already set, ignoring this match');
+        }
+      }
+      
+      // Check for stars pattern anywhere in the line (case-insensitive)
+      const starsMatch = trimmedLine.match(/(?:stars?)[:\s]*(\d+)/i);
+      if (starsMatch && analysis.stars === 0) { // Only set if not already set
+        analysis.stars = parseInt(starsMatch[1]);
+        console.log('Parsed stars from line:', trimmedLine, '-> Stars:', analysis.stars);
+      }
+      
       if (trimmedLine.startsWith('Line-by-Line Analysis:')) {
         currentSection = 'lineByLine';
       } else if (trimmedLine.includes('Line-by-Line') || trimmedLine.includes('Line by Line')) {
@@ -226,18 +246,6 @@ Stars: 0-5
         currentSection = '';
       } else if (trimmedLine.startsWith('Suggestions:') || trimmedLine.startsWith('**Suggestions:**')) {
         currentSection = 'suggestions';
-      } else if (trimmedLine.startsWith('Score:') || trimmedLine.startsWith('**Score:') || trimmedLine.match(/Score:\s*\d+\/100/)) {
-        const scoreMatch = trimmedLine.match(/(\d+)\/100/);
-        if (scoreMatch) {
-          analysis.score = parseInt(scoreMatch[1]);
-          console.log('Parsed score:', analysis.score);
-        }
-      } else if (trimmedLine.startsWith('Stars:') || trimmedLine.startsWith('**Stars:') || trimmedLine.match(/Stars:\s*\d+/)) {
-        const starsMatch = trimmedLine.match(/(\d+)/);
-        if (starsMatch) {
-          analysis.stars = parseInt(starsMatch[1]);
-          console.log('Parsed stars:', analysis.stars);
-        }
       } else if (trimmedLine && currentSection === 'lineByLine') {
         // Check if this is a line number header like "Line 3:"
         const lineHeaderMatch = trimmedLine.match(/^Line\s+(\d+):?$/i);
@@ -295,10 +303,15 @@ Stars: 0-5
       } else if (trimmedLine && currentSection === 'edgeCases') {
         analysis.edgeCases.push(trimmedLine);
       } else if (trimmedLine && currentSection === 'suggestions') {
-        // Don't add Score: or Stars: lines to suggestions
-        if (!trimmedLine.startsWith('Score:') && !trimmedLine.startsWith('Stars:') && 
-            !trimmedLine.match(/Score:\s*\d+\/100/) && !trimmedLine.match(/Stars:\s*\d+/)) {
+        // Don't add Score, Scoring, or Stars lines to suggestions
+        const isScoreOrStarsLine = trimmedLine.match(/(?:score|scoring|stars?)[:\s]*\d+/i);
+        console.log('Suggestions section - checking line:', trimmedLine);
+        console.log('Is score/stars line?', !!isScoreOrStarsLine);
+        if (!isScoreOrStarsLine) {
           analysis.suggestions.push(trimmedLine);
+          console.log('Added to suggestions:', trimmedLine);
+        } else {
+          console.log('Filtered out score/stars line from suggestions:', trimmedLine);
         }
       }
     }

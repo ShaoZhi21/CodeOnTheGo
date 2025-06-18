@@ -1,7 +1,7 @@
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import React from 'react';
-import { Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -36,12 +36,18 @@ interface AnalysisModalProps {
   visible: boolean;
   onClose: () => void;
   analysis: Analysis | null;
+  onTryForHigherScore?: () => void;
+  onMarkComplete?: () => void;
+  onWritePseudocode?: () => void;
+  onRemark?: () => Promise<Analysis | null>;
 }
 
-export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps) {
+export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore, onMarkComplete, onWritePseudocode, onRemark }: AnalysisModalProps) {
   const translateY = useSharedValue(MAX_MODAL_HEIGHT);
   const opacity = useSharedValue(0);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = React.useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
+  const [isRemarking, setIsRemarking] = React.useState(false);
+  const [remarkError, setRemarkError] = React.useState(false);
 
   const handleClose = () => {
     translateY.value = withSpring(MAX_MODAL_HEIGHT, {
@@ -54,6 +60,27 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
     }, () => {
       runOnJS(onClose)();
     });
+  };
+
+  const handleRemark = async () => {
+    if (!onRemark || isRemarking) return;
+    
+    setIsRemarking(true);
+    setRemarkError(false);
+    
+    try {
+      const newAnalysis = await onRemark();
+      if (newAnalysis) {
+        // Analysis will be updated by parent component
+        setIsRemarking(false);
+      } else {
+        setRemarkError(true);
+        setIsRemarking(false);
+      }
+    } catch (error) {
+      setRemarkError(true);
+      setIsRemarking(false);
+    }
   };
 
   React.useEffect(() => {
@@ -129,11 +156,19 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
                   {selectedAnalysisSection === 'edgeCases' && 'Edge Cases'}
                   {selectedAnalysisSection === 'suggestions' && 'Suggestions'}
                 </ThemedText>
-                <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                  <Image 
-                    source={require('@/assets/images/icons/wrong-icon.png')}
-                    style={styles.closeIcon}
-                  />
+                <TouchableOpacity onPress={handleRemark} style={styles.remarkButton}>
+                  <ThemedText style={styles.remarkText}>
+                    {isRemarking ? 'Remarking...' : remarkError ? 'Error occurred, remark again' : 'Remark'}
+                  </ThemedText>
+                  {!isRemarking && (
+                    <Image 
+                      source={require('@/assets/images/icons/question-icon.png')}
+                      style={styles.remarkIcon}
+                    />
+                  )}
+                  {isRemarking && (
+                    <ActivityIndicator size="small" color="#6564c7" />
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -191,74 +226,148 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
 
             <ScrollView style={styles.contentScrollView} showsVerticalScrollIndicator={false}>
               {selectedAnalysisSection === 'correctness' && (
-                <View style={styles.analysisContainer}>
-                  <View style={styles.analysisContent}>
-                    <View style={styles.analysisSection}>
-                      <View style={styles.correctnessContainer}>
-                        <View style={styles.scoreContainer}>
-                          <ThemedText style={styles.scoreLabel}>Score: </ThemedText>
-                          <ThemedText style={styles.scoreText}>{analysis.score}</ThemedText>
-                          <ThemedText style={styles.scoreLabel}>/100</ThemedText>
-                        </View>
-                        <ProgressBar score={analysis.score} compact={true} />
-                        <View style={styles.starsContainer}>
-                          {[...Array(5)].map((_, index) => (
-                            <Image
-                              key={index}
-                              source={
-                                index < analysis.stars
-                                  ? require('@/assets/images/icons/star-icon.png')
-                                  : require('@/assets/images/icons/empty-star.png')
-                              }
-                              style={styles.largeStarIcon}
-                            />
-                          ))}
-                        </View>
+                <>
+                  <View style={[styles.analysisContainer, isRemarking && styles.loadingAnalysisContainer]}>
+                    <View style={styles.analysisContent}>
+                      <View style={styles.analysisSection}>
+                        {isRemarking ? (
+                          <View style={styles.correctnessLoadingContainer}>
+                            <ActivityIndicator size="large" color="#6564c7" />
+                            <ThemedText style={styles.loadingText}>Remarking...</ThemedText>
+                          </View>
+                        ) : (
+                          <View style={styles.correctnessContainer}>
+                            <View style={styles.scoreContainer}>
+                              <ThemedText style={styles.scoreLabel}>Score: </ThemedText>
+                              <ThemedText style={styles.scoreText}>{analysis.score || 0}</ThemedText>
+                              <ThemedText style={styles.scoreLabel}>/100</ThemedText>
+                            </View>
+                            <ProgressBar score={analysis.score} compact={true} />
+                            <View style={styles.starsContainer}>
+                              {[...Array(5)].map((_, index) => (
+                                <Image
+                                  key={index}
+                                  source={
+                                    index < analysis.stars
+                                      ? require('@/assets/images/icons/star-icon.png')
+                                      : require('@/assets/images/icons/empty-star.png')
+                                  }
+                                  style={styles.largeStarIcon}
+                                />
+                              ))}
+                            </View>
+                          </View>
+                        )}
                       </View>
                     </View>
                   </View>
-                </View>
+                  {!isRemarking && analysis.stars <= 2 && (
+                    <View style={styles.navigationButtonRow}>
+                      <TouchableOpacity style={styles.tryAgainButton} onPress={handleClose}>
+                        <ThemedText style={styles.tryAgainButtonText}>Try Again</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {!isRemarking && analysis.stars >= 3 && (
+                    <View style={styles.navigationButtonRow}>
+                      <TouchableOpacity 
+                        style={styles.codeButton} 
+                        onPress={() => {
+                          if (onWritePseudocode) {
+                            onWritePseudocode();
+                          }
+                          handleClose();
+                        }}
+                      >
+                        <ThemedText style={styles.codeButtonText}>CODE</ThemedText>
+                        <Image 
+                          source={require('@/assets/images/icons/code-icon.png')}
+                          style={styles.codeButtonIcon}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.completeButton} 
+                        onPress={() => {
+                          if (onMarkComplete) {
+                            onMarkComplete();
+                          }
+                          handleClose();
+                        }}
+                      >
+                        <Image 
+                          source={require('@/assets/images/icons/complete-icon.png')}
+                          style={styles.iconOnlyButton}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={styles.retryButton} 
+                        onPress={handleClose}
+                      >
+                        <Image 
+                          source={require('@/assets/images/icons/retry-icon.png')}
+                          style={[styles.iconOnlyButton, { tintColor: '#FF375F' }]}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
               )}
 
               {selectedAnalysisSection === 'efficiency' && (
                 <View style={styles.analysisSection}>
                   <View style={styles.efficiencyContainer}>
-                    <View style={styles.efficiencyCard}>
-                      <View style={styles.cardIcon}>
-                        <ThemedText style={styles.iconEmoji}>⏱️</ThemedText>
+                    {isRemarking ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#6564c7" />
+                        <ThemedText style={styles.loadingText}>Remarking...</ThemedText>
                       </View>
-                      <View style={styles.cardContent}>
-                        <ThemedText style={styles.cardLabel}>Time Complexity</ThemedText>
-                        <ThemedText style={styles.cardValue}>{analysis.efficiency.time}</ThemedText>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.efficiencyCard}>
-                      <View style={styles.cardIcon}>
-                        <ThemedText style={styles.iconEmoji}>💾</ThemedText>
-                      </View>
-                      <View style={styles.cardContent}>
-                        <ThemedText style={styles.cardLabel}>Space Complexity</ThemedText>
-                        <ThemedText style={styles.cardValue}>{analysis.efficiency.space}</ThemedText>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.efficiencyCard}>
-                      <View style={styles.cardIcon}>
-                        <ThemedText style={styles.iconEmoji}>🚀</ThemedText>
-                      </View>
-                      <View style={styles.cardContent}>
-                        <ThemedText style={styles.cardLabel}>Can be optimized?</ThemedText>
-                        <ThemedText style={[
-                          styles.cardValue, 
-                          analysis.efficiency.anyMoreOptimal.toLowerCase().includes('yes') || analysis.efficiency.anyMoreOptimal.toLowerCase().includes('can') 
-                            ? styles.optimizableText 
-                            : styles.optimalText
-                        ]}>
-                          {analysis.efficiency.anyMoreOptimal}
-                        </ThemedText>
-                      </View>
-                    </View>
+                    ) : (
+                      analysis.efficiency && (analysis.efficiency.time || analysis.efficiency.space || analysis.efficiency.anyMoreOptimal) ? (
+                        <>
+                          <View style={styles.efficiencyCard}>
+                            <View style={styles.cardIcon}>
+                              <ThemedText style={styles.iconEmoji}>⏱️</ThemedText>
+                            </View>
+                            <View style={styles.cardContent}>
+                              <ThemedText style={styles.cardLabel}>Time Complexity</ThemedText>
+                              <ThemedText style={styles.cardValue}>{analysis.efficiency.time}</ThemedText>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.efficiencyCard}>
+                            <View style={styles.cardIcon}>
+                              <ThemedText style={styles.iconEmoji}>💾</ThemedText>
+                            </View>
+                            <View style={styles.cardContent}>
+                              <ThemedText style={styles.cardLabel}>Space Complexity</ThemedText>
+                              <ThemedText style={styles.cardValue}>{analysis.efficiency.space}</ThemedText>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.efficiencyCard}>
+                            <View style={styles.cardIcon}>
+                              <ThemedText style={styles.iconEmoji}>🚀</ThemedText>
+                            </View>
+                            <View style={styles.cardContent}>
+                              <ThemedText style={styles.cardLabel}>Can be optimized?</ThemedText>
+                              <ThemedText style={[
+                                styles.cardValue, 
+                                analysis.efficiency.anyMoreOptimal.toLowerCase().includes('yes') || analysis.efficiency.anyMoreOptimal.toLowerCase().includes('can') 
+                                  ? styles.optimizableText 
+                                  : styles.optimalText
+                              ]}>
+                                {analysis.efficiency.anyMoreOptimal}
+                              </ThemedText>
+                            </View>
+                          </View>
+                        </>
+                      ) : (
+                        <View style={styles.noDataCard}>
+                          <ThemedText style={styles.noDataText}>No Efficiency</ThemedText>
+                          <ThemedText style={styles.noDataSubtext}>Efficiency analysis not available</ThemedText>
+                        </View>
+                      )
+                    )}
                   </View>
                 </View>
               )}
@@ -266,17 +375,31 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
               {selectedAnalysisSection === 'edgeCases' && (
                 <View style={styles.analysisSection}>
                   <View style={styles.edgeCasesContainer}>
-                    {analysis.edgeCases.map((edgeCase: string, index: number) => (
-                      <View key={index} style={styles.edgeCaseCard}>
-                        <View style={styles.edgeCaseIcon}>
-                          <ThemedText style={styles.edgeCaseNumber}>{index + 1}</ThemedText>
-                        </View>
-                        <View style={styles.edgeCaseContent}>
-                          <ThemedText style={styles.edgeCaseLabel}>Test Case {index + 1}</ThemedText>
-                          <ThemedText style={styles.edgeCaseText}>{edgeCase}</ThemedText>
-                        </View>
+                    {isRemarking ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#6564c7" />
+                        <ThemedText style={styles.loadingText}>Remarking...</ThemedText>
                       </View>
-                    ))}
+                    ) : (
+                      analysis.edgeCases && analysis.edgeCases.length > 0 ? (
+                        analysis.edgeCases.map((edgeCase: string, index: number) => (
+                          <View key={index} style={styles.edgeCaseCard}>
+                            <View style={styles.edgeCaseIcon}>
+                              <ThemedText style={styles.edgeCaseNumber}>{index + 1}</ThemedText>
+                            </View>
+                            <View style={styles.edgeCaseContent}>
+                              <ThemedText style={styles.edgeCaseLabel}>Test Case {index + 1}</ThemedText>
+                              <ThemedText style={styles.edgeCaseText}>{edgeCase}</ThemedText>
+                            </View>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.noDataCard}>
+                          <ThemedText style={styles.noDataText}>No Edge Cases</ThemedText>
+                          <ThemedText style={styles.noDataSubtext}>Edge cases analysis not available</ThemedText>
+                        </View>
+                      )
+                    )}
                   </View>
                 </View>
               )}
@@ -284,17 +407,31 @@ export function AnalysisModal({ visible, onClose, analysis }: AnalysisModalProps
               {selectedAnalysisSection === 'suggestions' && (
                 <View style={styles.analysisSection}>
                   <View style={styles.suggestionsContainer}>
-                    {analysis.suggestions.map((suggestion: string, index: number) => (
-                      <View key={index} style={styles.suggestionCard}>
-                        <View style={styles.suggestionIcon}>
-                          <ThemedText style={styles.suggestionEmoji}>💡</ThemedText>
-                        </View>
-                        <View style={styles.suggestionContent}>
-                          <ThemedText style={styles.suggestionLabel}>Tip {index + 1}</ThemedText>
-                          <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
-                        </View>
+                    {isRemarking ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#6564c7" />
+                        <ThemedText style={styles.loadingText}>Remarking...</ThemedText>
                       </View>
-                    ))}
+                    ) : (
+                      analysis.suggestions && analysis.suggestions.length > 0 ? (
+                        analysis.suggestions.map((suggestion: string, index: number) => (
+                          <View key={index} style={styles.suggestionCard}>
+                            <View style={styles.suggestionIcon}>
+                              <ThemedText style={styles.suggestionEmoji}>💡</ThemedText>
+                            </View>
+                            <View style={styles.suggestionContent}>
+                              <ThemedText style={styles.suggestionLabel}>Tip {index + 1}</ThemedText>
+                              <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
+                            </View>
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.noDataCard}>
+                          <ThemedText style={styles.noDataText}>No Suggestions</ThemedText>
+                          <ThemedText style={styles.noDataSubtext}>Suggestions not available</ThemedText>
+                        </View>
+                      )
+                    )}
                   </View>
                 </View>
               )}
@@ -316,7 +453,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4EEFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    padding: 16,
+    paddingBottom: 16,
+    paddingLeft: 16,
+    paddingRight: 16,
+    paddingTop: 6,
     opacity: 1,
   },
   dragHandle: {
@@ -325,38 +465,53 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginTop: 2,
+    marginBottom: 10,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 4,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2d2d2d',
   },
-  closeButton: {
-    padding: 4,
+  remarkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 2,
+    borderColor: '#6564c7',
+    borderRadius: 8,
+    backgroundColor: 'rgba(101, 100, 199, 0.1)',
   },
-  closeIcon: {
-    width: 20,
-    height: 20,
-    tintColor: '#666',
+  remarkText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6564c7',
+  },
+  remarkIcon: {
+    width: 14,
+    height: 14,
+    resizeMode: 'contain',
   },
   analysisButtonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 6,
   },
   analysisButton: {
     flex: 1,
-    padding: 12,
+    padding: 10,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
@@ -385,12 +540,16 @@ const styles = StyleSheet.create({
   },
   analysisContainer: {
     flex: 1,
-    minHeight: SCREEN_HEIGHT * 0.275,
+    minHeight: SCREEN_HEIGHT * 0.21,
     backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e0e0e0',
     padding: 12,
+    paddingBottom: 5,
+  },
+  loadingAnalysisContainer: {
+    height: SCREEN_HEIGHT * 0.28,
   },
   analysisContent: {
     flex: 1,
@@ -619,5 +778,118 @@ const styles = StyleSheet.create({
   },
   contentScrollView: {
     flex: 1,
+  },
+  tryAgainButton: {
+    backgroundColor: '#6564c7',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  tryAgainButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  navigationButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 16,
+    maxWidth: '100%',
+  },
+  codeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#6564c7',
+    width: '50%',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  codeButtonIcon: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
+  },
+  codeButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  retryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#c7c1e9',
+    borderWidth: 3,
+    borderColor: '#FF375F',
+    width: '15%',
+  },
+  completeButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#b8b5e8',
+    borderWidth: 3,
+    borderColor: '#4CAF50',
+    width: '35%',
+  },
+  iconOnlyButton: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
+  },
+  noDataCard: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  noDataText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2d2d2d',
+    marginBottom: 8,
+  },
+  noDataSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 65,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6564c7',
+    marginTop: 16,
+  },
+  correctnessLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
 }); 
