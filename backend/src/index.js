@@ -353,6 +353,91 @@ Stars: [number]
   }
 });
 
+// Question simplification endpoint
+app.post('/api/simplify-question', async (req, res) => {
+  try {
+    const { description, title } = req.body;
+    
+    if (!description) {
+      return res.status(400).json({ error: 'Question description is required' });
+    }
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are a helpful assistant that simplifies technical questions for beginners. Make complex concepts easy to understand using simple language and everyday analogies.",
+    });
+    
+    const prompt = `Please simplify this coding question for a beginner programmer with both a serious and fun version.
+
+Title: ${title || 'Coding Problem'}
+
+Original Description: ${description}
+
+Requirements:
+1. First line: Serious, clear simplified description (max 15 words)
+2. Second line: Fun analogy starting with "It's just like..." (max 15 words)
+3. Use simple, everyday language
+4. Avoid technical jargon
+5. Make the analogy relatable but KEEP IT CONTEXTUALLY RELEVANT to the problem
+6. The analogy should maintain the core meaning and logic of the original problem
+
+Format your response EXACTLY like this:
+[Serious simplified description]
+
+It's just like [fun analogy that maintains the problem's core logic]
+
+Examples:
+Find two numbers in a list that add up to target
+
+It's just like finding two coins that add up to the price you want to pay!
+
+---
+
+Check if brackets are properly opened and closed in order
+
+It's just like checking if every opening door has its matching closing door!
+
+---
+
+Combine two ordered lists into one bigger ordered list
+
+It's just like merging two organized lines of people while keeping everyone in order!
+
+---
+
+Search for a value in a sorted array by eliminating half each time
+
+It's just like finding a word in a dictionary by opening to the middle page!
+
+Return only the two-line response as shown above, nothing else.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let simplifiedDescription = response.text().trim();
+
+    // Parse and format the response to ensure proper line breaks
+    // Find the first period and add a line break after it
+    const firstPeriodIndex = simplifiedDescription.indexOf('.');
+    if (firstPeriodIndex !== -1 && firstPeriodIndex < simplifiedDescription.length - 1) {
+      // Split at first period, add line break
+      const firstSentence = simplifiedDescription.substring(0, firstPeriodIndex + 1);
+      const restOfText = simplifiedDescription.substring(firstPeriodIndex + 1).trim();
+      simplifiedDescription = firstSentence + '<br><br>' + restOfText;
+    }
+
+    console.log('Question simplification request:');
+    console.log('Original:', description);
+    console.log('Simplified:', simplifiedDescription);
+
+    res.json({ 
+      simplifiedDescription: simplifiedDescription
+    });
+  } catch (error) {
+    console.error('Error simplifying question:', error);
+    res.status(500).json({ error: 'Failed to simplify question' });
+  }
+});
+
 // Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);

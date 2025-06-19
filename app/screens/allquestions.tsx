@@ -20,7 +20,7 @@ interface Problem {
 }
 
 interface ProblemWithStatus extends Problem {
-  status: 'Completed' | 'Unsolved';
+  status: 'Solved' | 'Unsolved';
   score?: number;
   stars?: number;
 }
@@ -42,7 +42,7 @@ const getDifficultyColor = (difficulty: Problem['difficulty']) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'Completed':
+    case 'Solved':
       return '#00B8A3';
     case 'Unsolved':
       return '#b4aaf4';
@@ -131,7 +131,7 @@ export default function AllQuestionsScreen() {
 
         return {
           ...problem,
-          status: progress?.is_solved ? 'Completed' : 'Unsolved',
+          status: progress?.is_solved ? 'Solved' : 'Unsolved',
           score: progress?.score,
           stars: progress?.stars
         };
@@ -198,7 +198,7 @@ export default function AllQuestionsScreen() {
 
         return {
           ...problem,
-          status: progress?.is_solved ? 'Completed' : 'Unsolved',
+          status: progress?.is_solved ? 'Solved' : 'Unsolved',
           score: progress?.score,
           stars: progress?.stars
         };
@@ -306,7 +306,7 @@ export default function AllQuestionsScreen() {
           bValue = difficultyOrder[b.difficulty];
           break;
         case 'status':
-          const statusOrder = { 'Unsolved': 1, 'Completed': 2 };
+          const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
           aValue = statusOrder[a.status as keyof typeof statusOrder];
           bValue = statusOrder[b.status as keyof typeof statusOrder];
           break;

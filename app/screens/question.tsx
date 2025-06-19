@@ -7,11 +7,11 @@ import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
-import { apiCall } from '@/lib/api-config';
+import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
 
@@ -113,6 +113,9 @@ export default function QuestionScreen() {
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
+  const [isSimplifying, setIsSimplifying] = useState(false);
+  const [simplifiedDescription, setSimplifiedDescription] = useState<string | null>(null);
+  const [showingSimplified, setShowingSimplified] = useState(false);
 
   // Function to parse examples from HTML content (improved)
   const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
@@ -865,45 +868,81 @@ export default function QuestionScreen() {
 
   const handleRemark = async (): Promise<Analysis | null> => {
     try {
-      // Get the current solution for remarking
-      const numberedSolution = descriptionBoxes.map((block, index) => {
-        if (block.type === 'text') {
-          return `${index + 1}. ${block.value}`;
-        } else if (block.type === 'if') {
-          return `${index + 1}. If ${block.condition}: ${block.body}`;
-        } else if (block.type === 'elseif') {
-          return `${index + 1}. Else if ${block.condition}: ${block.body}`;
-        } else if (block.type === 'else') {
-          return `${index + 1}. Else: ${block.body}`;
-        } else if (block.type === 'while') {
-          return `${index + 1}. While ${block.condition}: ${block.body}`;
-        } else if (block.type === 'for') {
-          return `${index + 1}. For ${block.condition}: ${block.body}`;
-        }
-        return '';
-      }).join('\n');
-
-      const response = await apiCall('/api/analyze', {
+      const response = await fetch(`${API_BASE_URL}/analyze-solution`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          code: numberedSolution,
-          question: problem?.description
+          problemId: id,
+          solution: descriptionBoxes.map(box => {
+            if (box.type === 'text') return box.value;
+            if (box.type === 'if') return `If ${box.condition}: ${box.body}`;
+            if (box.type === 'else') return `Else: ${box.body}`;
+            if (box.type === 'elseif') return `Else if ${box.condition}: ${box.body}`;
+            if (box.type === 'while') return `While ${box.condition}: ${box.body}`;
+            if (box.type === 'for') return `For ${box.condition}: ${box.body}`;
+            return '';
+          }).join('\n'),
         }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAnalysis(data.analysis);
-        return data.analysis;
-      } else {
-        return null;
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error analyzing solution:', error);
+      return null;
+    }
+  };
+
+  const handleSimplifyQuestion = async () => {
+    if (isSimplifying) return;
+    
+    // If we're currently showing simplified, toggle back to original
+    if (showingSimplified) {
+      setShowingSimplified(false);
+      return;
+    }
+    
+    // If we already have a simplified version, show it
+    if (simplifiedDescription) {
+      setShowingSimplified(true);
+      return;
+    }
+    
+    // Otherwise, fetch a new simplified version
+    setIsSimplifying(true);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/simplify-question`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: cleanedDescription || problem?.description || '',
+          title: name || problem?.title || ''
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.simplifiedDescription) {
+        setSimplifiedDescription(data.simplifiedDescription);
+        setShowingSimplified(true);
       }
     } catch (error) {
-      console.error('Remark error:', error);
-      return null;
+      console.error('Error simplifying question:', error);
+      Alert.alert('Error', 'Failed to simplify the question. Please try again.');
+    } finally {
+      setIsSimplifying(false);
     }
   };
 
@@ -982,10 +1021,39 @@ export default function QuestionScreen() {
         <View style={styles.section}>
             <View style={styles.descriptionContainer}>
               {showProblem ? (
-                <HtmlRenderer 
-                  htmlContent={cleanedDescription || problem.description || 'No description available'} 
-                  style={styles.webviewContainer}
-                />
+                <View style={styles.problemContainer}>
+                  {showingSimplified && simplifiedDescription && (
+                    <TouchableOpacity 
+                      style={styles.simplifiedIndicator}
+                      onPress={handleSimplifyQuestion}
+                      disabled={isSimplifying}
+                      activeOpacity={0.7}
+                    >
+                      <ThemedText style={styles.simplifiedIndicatorText}>
+                        ✨ Simplified • Tap for original
+                      </ThemedText>
+                    </TouchableOpacity>
+                  )}
+                  {!showingSimplified && (
+                    <View style={styles.problemHeader}>
+                      <TouchableOpacity 
+                        style={styles.magicWandButton}
+                        onPress={handleSimplifyQuestion}
+                        disabled={isSimplifying}
+                      >
+                        {isSimplifying ? (
+                          <ActivityIndicator size="small" color="#6564c7" />
+                        ) : (
+                          <ThemedText style={styles.magicWandEmoji}>🪄</ThemedText>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <HtmlRenderer 
+                    htmlContent={showingSimplified && simplifiedDescription ? simplifiedDescription : cleanedDescription || problem.description || 'No description available'} 
+                    style={styles.webviewContainer}
+                  />
+                </View>
               ) : (
                 <>
                   <ScrollView 
@@ -1893,5 +1961,64 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 0, // Remove top right radius to connect with extension
     borderTopWidth: 0, // Remove top border to seamlessly connect
     marginTop: 0, // No margin for seamless connection
+  },
+  problemContainer: {
+    flex: 1,
+  },
+  problemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    zIndex: 10,
+  },
+  magicWandButton: {
+    backgroundColor: 'rgba(101, 100, 199, 0.2)',
+    borderWidth: 1.5,
+    borderColor: '#6564c7',
+    borderRadius: 16,
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  magicWandButtonActive: {
+    backgroundColor: 'rgba(101, 100, 199, 0.5)',
+  },
+  magicWandEmoji: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6564c7',
+  },
+  magicWandEmojiActive: {
+    color: '#fff',
+  },
+  simplifiedIndicator: {
+    backgroundColor: 'rgba(101, 100, 199, 0.1)',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(101, 100, 199, 0.3)',
+  },
+  simplifiedIndicatorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6564c7',
+    textAlign: 'center',
   },
 }); 
