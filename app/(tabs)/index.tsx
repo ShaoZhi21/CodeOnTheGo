@@ -4,103 +4,128 @@ import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, Touchab
 import CircularProgress from '@/components/CircularProgress';
 import { ThemedText } from '@/components/ThemedText';
 import { ProfileService } from '@/lib/services/profileService';
+import { TopicService } from '@/lib/services/topicService';
 import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
 import { router } from 'expo-router';
 
+interface TopicProgress {
+  name: string;
+  percentage: number;
+  lastEdited: string;
+}
+
 export default function HomeScreen() {
+  console.log('HomeScreen component loaded');
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const [roadmapTopics] = useState([
-    'Array',
-    'Binary',
-    'Recursion',
-    'Linked List',
-    'AVL Tree',
-    'Hash table',
-    '2 pointer',
-    'Sliding Window',
-    'String',
-    'DP',
-    'Greedy',
-    'Deque',
-  ]);
-
-  const [topicsInProgress] = useState([
-    { name: 'Array', percentage: 85 },
-    { name: 'Deque', percentage: 70 },
-    { name: 'Recursion', percentage: 35 },
-  ]);
+  const [topicsInProgress, setTopicsInProgress] = useState<TopicProgress[]>([]);
+  const [roadmapTopics, setRoadmapTopics] = useState<{ name: string; color: string }[]>([]);
 
   useEffect(() => {
     loadProfile();
+    loadTopicsProgress();
+    loadAllTopics();
   }, []);
+
+  const loadAllTopics = async () => {
+    try {
+      const topics = await TopicService.getAllTopics();
+      setRoadmapTopics(topics.map(topic => ({
+        name: topic.name,
+        color: '#6564c7'
+      })));
+    } catch (error) {
+      console.error('Error loading topics:', error);
+    }
+  };
 
   const loadProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        // User not logged in, use default values
-        setProfile({
-          id: '',
-          user_id: '',
-          name: 'Guest User',
-          level: 1,
-          total_xp: 0,
-          skill_level: 'Beginner',
-          total_questions: 0,
-          easy_solved: 0,
-          medium_solved: 0,
-          hard_solved: 0,
-          completion_percentage: 0,
-          trophy_count: 0,
-          current_streak: 0,
-          longest_streak: 0,
-          hints_used: 0,
-          available_hints: 5,
-          last_activity_date: new Date().toISOString().split('T')[0],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          total_solved: 0,
-          calculated_skill_level: 'Beginner'
-        } as UserProfileStats & { available_hints: number });
-        setLoading(false);
-        return;
-      }
+      if (!user) return;
 
       const profileData = await ProfileService.getUserProfileStats(user.id);
-      if (profileData) {
-        setProfile(profileData as UserProfileStats & { available_hints: number });
-      }
+      setProfile(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
-      // Set default values on error
-      setProfile({
-        id: '',
-        user_id: '',
-        name: 'User',
-        level: 1,
-        total_xp: 0,
-        skill_level: 'Beginner',
-        total_questions: 0,
-        easy_solved: 0,
-        medium_solved: 0,
-        hard_solved: 0,
-        completion_percentage: 0,
-        trophy_count: 0,
-        current_streak: 0,
-        longest_streak: 0,
-        hints_used: 0,
-        available_hints: 5,
-        last_activity_date: new Date().toISOString().split('T')[0],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        total_solved: 0,
-        calculated_skill_level: 'Beginner'
-      } as UserProfileStats & { available_hints: number });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTopicsProgress = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get recent topic navigation history
+      const navigationHistory = await TopicService.getRecentTopicNavigation(user.id);
+      console.log('Navigation history:', navigationHistory);
+      
+      // Get unique topics from navigation history (most recent first)
+      const uniqueTopics = navigationHistory
+        .filter((item, index, self) => 
+          index === self.findIndex(t => t.topic_name === item.topic_name)
+        )
+        .slice(0, 3);
+
+      console.log('Unique topics:', uniqueTopics);
+
+      // Get progress for each recently visited topic
+      const progressPromises = uniqueTopics.map(async (navItem) => {
+        const topicName = navItem.topic_name;
+        
+        // Get all problems for this topic
+        const problems = await TopicService.getTopicProblems(topicName);
+        
+        // Get user's progress for these problems
+        const { data: progressData } = await supabase
+          .from('user_problem_progress')
+          .select('problem_id, is_solved')
+          .eq('user_id', user.id)
+          .in('problem_id', problems.map(p => p.leetcode_id));
+
+        // Calculate completion percentage
+        const completedProblems = progressData?.filter(p => p.is_solved) || [];
+        const totalProblems = problems.length;
+        const percentage = totalProblems > 0 
+          ? Math.round((completedProblems.length / totalProblems) * 100)
+          : 0;
+
+        return {
+          name: topicName,
+          percentage,
+          lastEdited: navItem.visited_at
+        };
+      });
+
+      const allProgress = await Promise.all(progressPromises);
+      console.log('All progress:', allProgress);
+      setTopicsInProgress(allProgress);
+    } catch (error) {
+      console.error('Error loading topics progress:', error);
+    }
+  };
+
+  const handleTopicClick = async (topicName: string) => {
+    console.log('handleTopicClick called with:', topicName);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('User found:', user?.id);
+      if (user) {
+        // Record the topic navigation
+        console.log('Recording navigation for topic:', topicName);
+        await TopicService.recordTopicNavigation(user.id, topicName);
+        console.log('Navigation recorded successfully');
+      }
+      // Navigate to the topic
+      console.log('Navigating to topic:', topicName);
+      router.push(`/screens/roadmaptopic?topic=${topicName}`);
+    } catch (error) {
+      console.error('Error handling topic click:', error);
+      // Still navigate even if recording fails
+      router.push(`/screens/roadmaptopic?topic=${topicName}`);
     }
   };
 
@@ -109,7 +134,6 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
         </View>
       </SafeAreaView>
     );
@@ -139,25 +163,34 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.topicRoadMapContainer}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>Topic roadmap</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Topic Roadmap</ThemedText>
         <ScrollView 
-          horizontal 
+          horizontal
           showsHorizontalScrollIndicator={false} 
           style={styles.topicsScrollView}
+          contentContainerStyle={styles.topicsScrollContent}
         >
           <View style={styles.topicsGrid}>
             {roadmapTopics.map((topic, index) => (
-              <TouchableOpacity key={index} style={styles.topicPill} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic}`)}>
-                <ThemedText>{topic}</ThemedText>
+              <TouchableOpacity 
+                key={index} 
+                style={[styles.topicBubble, { backgroundColor: topic.color }]} 
+                onPress={() => handleTopicClick(topic.name)}
+              >
+                <ThemedText style={styles.topicName}>{topic.name}</ThemedText>
               </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
         
-        <ThemedText type="subtitle" style={styles.sectionTitle}>Topics in progress</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Recent Topics</ThemedText>
         <View style={styles.progressCircles}>
           {topicsInProgress.map((topic) => (
-            <TouchableOpacity key={topic.name} style={styles.progressItem} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic.name}`)}>
+            <TouchableOpacity 
+              key={topic.name} 
+              style={styles.progressItem} 
+              onPress={() => handleTopicClick(topic.name)}
+            >
               <CircularProgress percentage={topic.percentage}>
                 <ThemedText>{topic.percentage}%</ThemedText>
               </CircularProgress>
@@ -284,6 +317,7 @@ const styles = StyleSheet.create({
   topicRoadMapContainer: {
     padding: 16,
     backgroundColor: '#F4EEFF',
+    marginBottom: 16,
   },
   sectionTitle: {
     marginBottom: 16,
@@ -293,36 +327,51 @@ const styles = StyleSheet.create({
   },
   topicsScrollView: {
     flexGrow: 0,
+    height: 140,
+  },
+  topicsScrollContent: {
+    paddingHorizontal: 16,
   },
   topicsGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     flexWrap: 'wrap',
-    width: 650,
-    gap: 8,
-    paddingHorizontal: 4,
-    marginBottom: 24,
+    height: 120,
+    width: '100%',
+    gap: 12,
+    columnGap: 16,
   },
-  topicPill: {
-    backgroundColor: '#b4aaf4',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  topicBubble: {
+    height: 40,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    elevation: 2,
-    borderWidth: 3,
-    borderColor: '#897fef',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 120,
+    maxWidth: 180,
+  },
+  topicName: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   progressCircles: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     marginTop: 4,
+    paddingHorizontal: 16,
   },
   progressItem: {
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    maxWidth: '33%',
+    paddingHorizontal: 4,
   },
   practiceQuestionsContainer: {
     paddingVertical: 4,

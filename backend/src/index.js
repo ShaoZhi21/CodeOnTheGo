@@ -396,6 +396,59 @@ app.post('/api/user-progress/:userId/:topic/:problemId/answer', async (req, res)
   res.json({ success: true });
 });
 
+// Record topic navigation
+app.post('/api/topic-navigation', async (req, res) => {
+  try {
+    const { userId, topicName } = req.body;
+    
+    if (!userId || !topicName) {
+      return res.status(400).json({ error: 'User ID and topic name are required' });
+    }
+
+    const { error } = await supabase
+      .from('user_topic_navigation')
+      .insert({
+        user_id: userId,
+        topic_name: topicName,
+        visited_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Error recording topic navigation:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in topic navigation endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get recent topic navigation for a user
+app.get('/api/topic-navigation/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const { data, error } = await supabase
+      .from('user_topic_navigation')
+      .select('topic_name, visited_at')
+      .eq('user_id', userId)
+      .order('visited_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Error fetching topic navigation:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ navigation: data || [] });
+  } catch (error) {
+    console.error('Error in get topic navigation endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);
