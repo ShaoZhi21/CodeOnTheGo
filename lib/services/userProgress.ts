@@ -32,6 +32,10 @@ export async function markQuestionComplete({
   stars
 }: CompleteQuestionParams): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log('🔍 USER PROGRESS - Raw input params:', { problemId, score, stars });
+    console.log('🔍 USER PROGRESS - Score type:', typeof score, 'Value:', score);
+    console.log('🔍 USER PROGRESS - Stars type:', typeof stars, 'Value:', stars);
+
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
@@ -42,6 +46,10 @@ export async function markQuestionComplete({
     // Validate and sanitize input values
     const validScore = Math.max(0, Math.min(100, Math.floor(Number(score) || 0)));
     const validStars = Math.max(0, Math.min(5, Math.floor(Number(stars) || 0)));
+
+    console.log('🔍 USER PROGRESS - After validation:');
+    console.log('🔍 USER PROGRESS - Original score:', score, '-> Valid score:', validScore);
+    console.log('🔍 USER PROGRESS - Original stars:', stars, '-> Valid stars:', validStars);
 
     console.log('Marking question complete:', {
       problemId,
@@ -73,22 +81,26 @@ export async function markQuestionComplete({
       isNewBest: validScore > currentBestScore
     });
 
+    const upsertData = {
+      user_id: user.id,
+      problem_id: problemId,
+      is_solved: true,
+      score: validScore,
+      best_score: newBestScore,
+      stars: validStars,
+      completed_at: now,
+      first_solved_at: existingProgress ? undefined : now, // Only set on first completion
+      last_attempt_at: now,
+      attempts: currentAttempts + 1,
+      updated_at: now
+    };
+
+    console.log('🔍 USER PROGRESS - Data being upserted:', JSON.stringify(upsertData, null, 2));
+
     // Upsert user progress
     const { data, error } = await supabase
       .from('user_problem_progress')
-      .upsert({
-        user_id: user.id,
-        problem_id: problemId,
-        is_solved: true,
-        score: validScore,
-        best_score: newBestScore,
-        stars: validStars,
-        completed_at: now,
-        first_solved_at: existingProgress ? undefined : now, // Only set on first completion
-        last_attempt_at: now,
-        attempts: currentAttempts + 1,
-        updated_at: now
-      }, {
+      .upsert(upsertData, {
         onConflict: 'user_id,problem_id',
         ignoreDuplicates: false
       })
@@ -99,7 +111,7 @@ export async function markQuestionComplete({
       return { success: false, error: error.message };
     }
 
-    console.log('Question marked as complete:', data);
+    console.log('🔍 USER PROGRESS - Question marked as complete, returned data:', JSON.stringify(data, null, 2));
     return { success: true };
 
   } catch (error) {

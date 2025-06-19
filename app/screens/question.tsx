@@ -796,15 +796,23 @@ export default function QuestionScreen() {
       return;
     }
 
+    console.log('🔍 HANDLE MARK COMPLETE - Full Analysis Object:', JSON.stringify(analysis, null, 2));
+    console.log('🔍 HANDLE MARK COMPLETE - Score from analysis:', analysis.score, 'Type:', typeof analysis.score);
+    console.log('🔍 HANDLE MARK COMPLETE - Stars from analysis:', analysis.stars, 'Type:', typeof analysis.stars);
+
     try {
       // Import the service function
       const { markQuestionComplete } = await import('@/lib/services/userProgress');
       
-      const result = await markQuestionComplete({
+      const completeParams = {
         problemId: problem.leetcode_id,
         score: analysis.score,
         stars: analysis.stars
-      });
+      };
+
+      console.log('🔍 HANDLE MARK COMPLETE - Params being passed:', JSON.stringify(completeParams, null, 2));
+      
+      const result = await markQuestionComplete(completeParams);
 
       if (result.success) {
         console.log('Problem marked as complete!');

@@ -134,6 +134,55 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
     setSelectedAnalysisSection(section);
   };
 
+  // Function to detect if a suggestion is general feedback vs a specific tip
+  const isGeneralFeedback = (suggestion: string) => {
+    const feedbackPatterns = [
+      /you are on the right track/i,
+      /you are on the wrong track/i,
+      /good job/i,
+      /well done/i,
+      /keep going/i,
+      /try again/i,
+      /not quite right/i,
+      /close but/i,
+      /almost there/i,
+      /you're getting there/i
+    ];
+    
+    return feedbackPatterns.some(pattern => pattern.test(suggestion.trim()));
+  };
+
+  // Function to get feedback type and styling
+  const getFeedbackType = (suggestion: string) => {
+    const text = suggestion.toLowerCase().trim();
+    
+    if (text.includes('right track') || text.includes('good job') || text.includes('well done') || text.includes('keep going')) {
+      return {
+        type: 'positive',
+        icon: '✨',
+        bgColor: '#E8F5E8',
+        borderColor: '#4CAF50',
+        textColor: '#2E7D32'
+      };
+    } else if (text.includes('wrong track') || text.includes('try again') || text.includes('not quite')) {
+      return {
+        type: 'constructive',
+        icon: '🎯',
+        bgColor: '#FFF3E0',
+        borderColor: '#FF9800',
+        textColor: '#E65100'
+      };
+    } else {
+      return {
+        type: 'neutral',
+        icon: '💭',
+        bgColor: '#F3E5F5',
+        borderColor: '#9C27B0',
+        textColor: '#6A1B9A'
+      };
+    }
+  };
+
   if (!analysis) return null;
 
   return (
@@ -414,17 +463,52 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
                       </View>
                     ) : (
                       analysis.suggestions && analysis.suggestions.length > 0 ? (
-                        analysis.suggestions.map((suggestion: string, index: number) => (
-                          <View key={index} style={styles.suggestionCard}>
-                            <View style={styles.suggestionIcon}>
-                              <ThemedText style={styles.suggestionEmoji}>💡</ThemedText>
-                            </View>
-                            <View style={styles.suggestionContent}>
-                              <ThemedText style={styles.suggestionLabel}>Tip {index + 1}</ThemedText>
-                              <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
-                            </View>
-                          </View>
-                        ))
+                        analysis.suggestions.map((suggestion: string, index: number) => {
+                          const feedbackType = getFeedbackType(suggestion);
+                          const isGeneralMsg = isGeneralFeedback(suggestion);
+                          
+                          if (isGeneralMsg) {
+                            // Modern feedback card for general messages
+                            return (
+                              <View key={index} style={[styles.feedbackCard, { 
+                                backgroundColor: feedbackType.bgColor,
+                                borderColor: feedbackType.borderColor 
+                              }]}>
+                                <View style={styles.feedbackHeader}>
+                                  <View style={[styles.feedbackIconContainer, { 
+                                    backgroundColor: feedbackType.borderColor 
+                                  }]}>
+                                    <ThemedText style={styles.feedbackIcon}>{feedbackType.icon}</ThemedText>
+                                  </View>
+                                  <ThemedText style={[styles.feedbackTitle, { 
+                                    color: feedbackType.textColor 
+                                  }]}>
+                                    {feedbackType.type === 'positive' ? 'Great Progress!' : 
+                                     feedbackType.type === 'constructive' ? 'Keep Trying!' : 'Feedback'}
+                                  </ThemedText>
+                                </View>
+                                <ThemedText style={[styles.feedbackMessage, { 
+                                  color: feedbackType.textColor 
+                                }]}>
+                                  {suggestion}
+                                </ThemedText>
+                              </View>
+                            );
+                          } else {
+                            // Original tip card for specific suggestions
+                            return (
+                              <View key={index} style={styles.suggestionCard}>
+                                <View style={styles.suggestionIcon}>
+                                  <ThemedText style={styles.suggestionEmoji}>💡</ThemedText>
+                                </View>
+                                <View style={styles.suggestionContent}>
+                                  <ThemedText style={styles.suggestionLabel}>Tip {index + 1}</ThemedText>
+                                  <ThemedText style={styles.suggestionText}>{suggestion}</ThemedText>
+                                </View>
+                              </View>
+                            );
+                          }
+                        })
                       ) : (
                         <View style={styles.noDataCard}>
                           <ThemedText style={styles.noDataText}>No Suggestions</ThemedText>
@@ -891,5 +975,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+  },
+  feedbackCard: {
+    width: '100%',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#fffbeb',
+    borderWidth: 2,
+    borderColor: '#fcd34d',
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#f59e0b',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 6,
+  },
+  feedbackIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fef3c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  feedbackIcon: {
+    fontSize: 16,
+  },
+  feedbackTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#d97706',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  feedbackMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#92400e',
+    fontWeight: '500',
+    paddingLeft: 2,
   },
 }); 

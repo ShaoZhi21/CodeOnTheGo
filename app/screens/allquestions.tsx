@@ -110,15 +110,40 @@ export default function AllQuestionsScreen() {
       // Get user progress for these problems
       const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
       const problemIds = problemsData.map(p => p.leetcode_id);
+      
+      console.log('🔍 FETCH PROBLEMS - Getting progress for problem IDs:', problemIds);
+      
       const progressMap = await getUserProgressForProblems(problemIds);
 
+      console.log('🔍 FETCH PROBLEMS - Raw progress map:', JSON.stringify(progressMap, null, 2));
+
       // Combine problems with their status
-      const problemsWithStatus: ProblemWithStatus[] = problemsData.map(problem => ({
-        ...problem,
-        status: progressMap[problem.leetcode_id]?.is_solved ? 'Completed' : 'Unsolved',
-        score: progressMap[problem.leetcode_id]?.score,
-        stars: progressMap[problem.leetcode_id]?.stars
-      }));
+      const problemsWithStatus: ProblemWithStatus[] = problemsData.map(problem => {
+        const progress = progressMap[problem.leetcode_id];
+        
+        console.log(`🔍 FETCH PROBLEMS - Problem ${problem.leetcode_id}:`, {
+          progress,
+          score: progress?.score,
+          stars: progress?.stars,
+          scoreType: typeof progress?.score,
+          starsType: typeof progress?.stars
+        });
+
+        return {
+          ...problem,
+          status: progress?.is_solved ? 'Completed' : 'Unsolved',
+          score: progress?.score,
+          stars: progress?.stars
+        };
+      });
+
+      console.log('🔍 FETCH PROBLEMS - Final problems with status:', problemsWithStatus.map(p => ({
+        id: p.leetcode_id,
+        title: p.title,
+        status: p.status,
+        score: p.score,
+        stars: p.stars
+      })));
 
       setProblems(problemsWithStatus);
     } catch (err) {
@@ -154,15 +179,38 @@ export default function AllQuestionsScreen() {
       // Get user progress for current problems
       const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
       const problemIds = problems.map(p => p.leetcode_id);
+      
+      console.log('🔍 ALL QUESTIONS - Fetching progress for problem IDs:', problemIds);
+      
       const progressMap = await getUserProgressForProblems(problemIds);
 
+      console.log('🔍 ALL QUESTIONS - Raw progress map from database:', JSON.stringify(progressMap, null, 2));
+
       // Update problems with latest status
-      const updatedProblems: ProblemWithStatus[] = problems.map(problem => ({
-        ...problem,
-        status: progressMap[problem.leetcode_id]?.is_solved ? 'Completed' : 'Unsolved',
-        score: progressMap[problem.leetcode_id]?.score,
-        stars: progressMap[problem.leetcode_id]?.stars
-      }));
+      const updatedProblems: ProblemWithStatus[] = problems.map(problem => {
+        const progress = progressMap[problem.leetcode_id];
+        
+        console.log(`🔍 ALL QUESTIONS - Problem ${problem.leetcode_id} (${problem.title}):`);
+        console.log(`🔍 ALL QUESTIONS - Progress data:`, progress);
+        console.log(`🔍 ALL QUESTIONS - Is solved:`, progress?.is_solved);
+        console.log(`🔍 ALL QUESTIONS - Score:`, progress?.score, 'Type:', typeof progress?.score);
+        console.log(`🔍 ALL QUESTIONS - Stars:`, progress?.stars, 'Type:', typeof progress?.stars);
+
+        return {
+          ...problem,
+          status: progress?.is_solved ? 'Completed' : 'Unsolved',
+          score: progress?.score,
+          stars: progress?.stars
+        };
+      });
+
+      console.log('🔍 ALL QUESTIONS - Updated problems with status:', updatedProblems.map(p => ({
+        id: p.leetcode_id,
+        title: p.title,
+        status: p.status,
+        score: p.score,
+        stars: p.stars
+      })));
 
       setProblems(updatedProblems);
     } catch (err) {
