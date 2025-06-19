@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { createClient } from '@supabase/supabase-js';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -64,6 +64,8 @@ export default function AllQuestionsScreen() {
   const [allProblems, setAllProblems] = useState<Problem[]>([]);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
 
   const totalPages = Math.ceil(totalProblems / PROBLEMS_PER_PAGE);
 
@@ -130,6 +132,46 @@ export default function AllQuestionsScreen() {
   useEffect(() => {
     fetchProblems(currentPage);
   }, [currentPage]);
+
+  // Refresh problems when the screen comes into focus (e.g., returning from question screen)
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we have problems loaded and should refresh
+      if (problems.length > 0 && shouldRefreshStatus) {
+        refreshProblemsStatus();
+        setShouldRefreshStatus(false);
+      }
+    }, [problems.length, shouldRefreshStatus])
+  );
+
+  // Function to refresh only the status of current problems without full reload
+  const refreshProblemsStatus = async () => {
+    try {
+      if (problems.length === 0) return;
+
+      setRefreshingStatus(true);
+
+      // Get user progress for current problems
+      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const problemIds = problems.map(p => p.leetcode_id);
+      const progressMap = await getUserProgressForProblems(problemIds);
+
+      // Update problems with latest status
+      const updatedProblems: ProblemWithStatus[] = problems.map(problem => ({
+        ...problem,
+        status: progressMap[problem.leetcode_id]?.is_solved ? 'Completed' : 'Unsolved',
+        score: progressMap[problem.leetcode_id]?.score,
+        stars: progressMap[problem.leetcode_id]?.stars
+      }));
+
+      setProblems(updatedProblems);
+    } catch (err) {
+      console.error('Error refreshing problem status:', err);
+      // Don't show error to user for status refresh, just log it
+    } finally {
+      setRefreshingStatus(false);
+    }
+  };
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -266,6 +308,9 @@ export default function AllQuestionsScreen() {
   };
 
   const handleProblemPress = (problem: Problem) => {
+    // Set flag to refresh status when returning from question
+    setShouldRefreshStatus(true);
+    
     router.push({
       pathname: '/screens/question',
       params: {
@@ -283,7 +328,19 @@ export default function AllQuestionsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.title}>Problems</ThemedText>
+          <View style={styles.titleContainer}>
+            <ThemedText style={styles.title}>Problems</ThemedText>
+            {refreshingStatus && (
+              <ActivityIndicator 
+                size="small" 
+                color="#6564c7" 
+                style={styles.refreshIndicator} 
+              />
+            )}
+          </View>
+          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
+            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
+          </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
@@ -300,7 +357,19 @@ export default function AllQuestionsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.title}>Problems</ThemedText>
+          <View style={styles.titleContainer}>
+            <ThemedText style={styles.title}>Problems</ThemedText>
+            {refreshingStatus && (
+              <ActivityIndicator 
+                size="small" 
+                color="#6564c7" 
+                style={styles.refreshIndicator} 
+              />
+            )}
+          </View>
+          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
+            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
+          </TouchableOpacity>
         </View>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -320,7 +389,16 @@ export default function AllQuestionsScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
             </TouchableOpacity>
-            <ThemedText style={styles.title}>Problems</ThemedText>
+            <View style={styles.titleContainer}>
+              <ThemedText style={styles.title}>Problems</ThemedText>
+              {refreshingStatus && (
+                <ActivityIndicator 
+                  size="small" 
+                  color="#6564c7" 
+                  style={styles.refreshIndicator} 
+                />
+              )}
+            </View>
             <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
               <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
             </TouchableOpacity>
@@ -549,6 +627,10 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 8,
     tintColor: '#fff',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
@@ -869,5 +951,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 12,
+  },
+  refreshIndicator: {
+    marginLeft: 8,
   },
 });
