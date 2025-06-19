@@ -1,5 +1,6 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
+import { API_BASE_URL } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -7,6 +8,7 @@ import {
   Alert,
   Dimensions,
   Image,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -31,9 +33,14 @@ export default function PseudoToCode() {
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRunningTests, setIsRunningTests] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
   const [isProblemPreloaded, setIsProblemPreloaded] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
+  const [pseudocodeProgress, setPseudocodeProgress] = useState<any>(null);
+  const [functionSignature, setFunctionSignature] = useState<any>(null);
+  const [isLoadingSignature, setIsLoadingSignature] = useState(false);
   const webViewRef = React.useRef<WebView>(null);
 
   // Parse the passed parameters
@@ -74,6 +81,46 @@ export default function PseudoToCode() {
       case 'Hard': return '#e60026';
       default: return '#6564c7';
     }
+  };
+
+  // Fetch function signature from AI
+  const fetchFunctionSignature = async () => {
+    if (functionSignature) return; // Already loaded
+    
+    setIsLoadingSignature(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/analyze-function-signature`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: title,
+          description: description,
+          examples: examples
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const signature = await response.json();
+      console.log('🔍 Function signature received:', signature);
+      setFunctionSignature(signature);
+    } catch (error) {
+      console.error('Error fetching function signature:', error);
+      // Fallback signature
+      setFunctionSignature({
+        functionName: 'solution',
+        parameters: [{"name": "input", "type": "any"}],
+        returnType: 'any',
+        inputFormat: 'input data',
+        sampleCall: 'solution(input)'
+      });
+    } finally {
+      setIsLoadingSignature(false);
+    }
   }; 
 
   const getMonacoLanguage = (language: string) => {
@@ -86,60 +133,225 @@ export default function PseudoToCode() {
     }
   };
 
+  const generateJavaScriptParser = (signature: any) => {
+    if (!signature || !signature.parameters) return '';
+    
+    const params = signature.parameters;
+    let parser = '';
+    
+    // Generate parsing logic based on parameters
+    for (const param of params) {
+      if (param.type === 'number[]' || param.type === 'array') {
+        parser += `        const ${param.name}Match = input.match(/${param.name} = \\\\[(.*?)\\\\]/);\n`;
+        parser += `        const ${param.name} = ${param.name}Match ? ${param.name}Match[1].split(',').map(x => parseInt(x.trim())) : [];\n`;
+      } else if (param.type === 'number') {
+        parser += `        const ${param.name}Match = input.match(/${param.name} = (\\\\d+)/);\n`;
+        parser += `        const ${param.name} = ${param.name}Match ? parseInt(${param.name}Match[1]) : 0;\n`;
+      } else if (param.type === 'string') {
+        parser += `        const ${param.name}Match = input.match(/${param.name} = ['"](.*)['"]/) || input.match(/${param.name} = (\\\\w+)/);\n`;
+        parser += `        const ${param.name} = ${param.name}Match ? ${param.name}Match[1] : '';\n`;
+      }
+    }
+    
+    return parser;
+  };
+
   const getLanguageTemplate = (language: string) => {
+    if (!functionSignature || isLoadingSignature) {
+      // Return loading message while signature is being fetched
+      return getLoadingTemplate(language);
+    }
+
+    const { functionName, parameters } = functionSignature;
+    const paramString = parameters?.map((p: any) => p.name).join(', ') || '';
+    
     switch (language) {
       case 'javascript':
-        return `function solve() {
-    // Your code here
-    
+        return `// Write your ${functionName} function here
+function ${functionName}(${paramString}) {
+    // TODO: Implement your algorithm here
+    // Replace this return statement with your solution
+    return null;
 }
 
-// Example usage:
-// console.log(solve());`;
-      case 'python':
-        return `def solve():
-    # Your code here
-    pass
+// Test runner - DO NOT MODIFY BELOW THIS LINE
+const readline = require('readline');
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
 
-# Example usage:
-# print(solve())`;
+rl.on('line', (input) => {
+    try {
+        // Parse input based on the expected format: ${functionSignature.inputFormat || 'input data'}
+        ${generateJavaScriptParser(functionSignature)}
+        
+        let result = ${functionName}(${parameters?.map((p: any) => p.name).join(', ') || ''});
+        console.log(JSON.stringify(result));
+    } catch (error) {
+        console.log(JSON.stringify(null));
+    }
+    rl.close();
+});`;
+
+      case 'python':
+        return `# Write your ${functionName} function here
+def ${functionName}(${paramString}):
+    # TODO: Implement your algorithm here
+    # Replace this return statement with your solution
+    return None
+
+# Test runner - DO NOT MODIFY
+import json
+
+input_line = input().strip()
+try:
+    # Parse input and call your function
+    # The input format is: ${functionSignature.inputFormat || 'input data'}
+    result = ${functionName}(# parsed parameters)
+    print(json.dumps(result))
+except:
+    print(json.dumps(None))`;
+
+      case 'java':
+        return `import java.util.*;
+
+public class Solution {
+    // Write your ${functionName} function here
+    public Object ${functionName}(${parameters?.map((p: any) => `Object ${p.name}`).join(', ') || ''}) {
+        // TODO: Implement your algorithm here
+        // Replace this return statement with your solution
+        return null;
+    }
+    
+    // Test runner - DO NOT MODIFY
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        String input = scanner.nextLine().trim();
+        Solution sol = new Solution();
+        
+        // Parse input and call your function
+        // The input format is: ${functionSignature.inputFormat || 'input data'}
+        Object result = sol.${functionName}(/* parsed parameters */);
+        
+        if (result instanceof int[]) {
+            System.out.println(Arrays.toString((int[]) result));
+        } else {
+            System.out.println(result);
+        }
+    }
+}`;
+
+      case 'cpp':
+        return `#include <iostream>
+#include <vector>
+#include <string>
+using namespace std;
+
+// Write your ${functionName} function here
+auto ${functionName}(${parameters?.map((p: any) => `auto ${p.name}`).join(', ') || ''}) {
+    // TODO: Implement your algorithm here
+    // Replace this return statement with your solution
+    return 0;
+}
+
+// Test runner - DO NOT MODIFY
+int main() {
+    string input;
+    getline(cin, input);
+    
+    // Parse input and call your function
+    // The input format is: ${functionSignature.inputFormat || 'input data'}
+    auto result = ${functionName}(/* parsed parameters */);
+    
+    cout << result << endl;
+    return 0;
+}`;
+
+      default:
+        return getBasicTemplate(language);
+    }
+  };
+
+  const getLoadingTemplate = (language: string) => {
+    // Return empty string so WebView shows loading UI
+    return '';
+  };
+
+  const getBasicTemplate = (language: string) => {
+    switch (language) {
+      case 'javascript':
+        return `// Write your solution function here
+function solution() {
+    // TODO: Implement your algorithm here
+    return null;
+}`;
+      case 'python':
+        return `# Write your solution function here
+def solution():
+    # TODO: Implement your algorithm here
+    return None`;
       case 'java':
         return `public class Solution {
-    public void solve() {
-        // Your code here
-        
+    // Write your solution function here
+    public Object solution() {
+        // TODO: Implement your algorithm here
+        return null;
     }
 }`;
       case 'cpp':
         return `#include <iostream>
-#include <vector>
 using namespace std;
 
-class Solution {
-public:
-    void solve() {
-        // Your code here
-        
-    }
-};`;
+// Write your solution function here
+auto solution() {
+    // TODO: Implement your algorithm here
+    return 0;
+}`;
       default:
         return '';
     }
   };
 
-  const handleLanguageChange = (language: string) => {
+  const handleLanguageChange = async (language: string) => {
     setSelectedLanguage(language);
-    setCode(getLanguageTemplate(language));
+    
+    // If function signature is already loaded, just update the template
+    if (functionSignature && !isLoadingSignature) {
+      setCode(getLanguageTemplate(language));
+    } else {
+      // Show loading template while signature is being fetched
+      setCode(getLoadingTemplate(language));
+      // Fetch function signature if not already loaded
+      if (!functionSignature) {
+        await fetchFunctionSignature();
+      }
+      setCode(getLanguageTemplate(language));
+    }
+    
     // Force WebView to re-render only when language changes
     setWebViewKey(prev => prev + 1);
   };
 
   // Initialize code when component mounts
   React.useEffect(() => {
-    if (!code) {
+    const initializeCode = async () => {
+      // Set loading template first
+      setCode(getLoadingTemplate(selectedLanguage));
+      // Then fetch function signature and update code
+      await fetchFunctionSignature();
+      setCode(getLanguageTemplate(selectedLanguage));
+    };
+    
+    initializeCode();
+  }, []);
+
+  // Update code when function signature is loaded
+  React.useEffect(() => {
+    if (functionSignature && !isLoadingSignature) {
       setCode(getLanguageTemplate(selectedLanguage));
     }
-  }, [selectedLanguage]);
+  }, [functionSignature, isLoadingSignature, selectedLanguage]);
 
   // Preload problem details to avoid loading when toggling
   React.useEffect(() => {
@@ -174,6 +386,66 @@ public:
     }, 2000);
   };
 
+  const runTests = async () => {
+    if (code.trim() === '' || code.trim() === getLanguageTemplate(selectedLanguage).trim()) {
+      Alert.alert('Empty Code', 'Please write some code before running tests.');
+      return;
+    }
+
+    console.log('🔍 Debug - Code being sent:', code);
+    console.log('🔍 Debug - Language:', selectedLanguage);
+    console.log('🔍 Debug - Test cases:', examples.map(ex => ({ input: ex.input, expected: ex.output })));
+
+    setIsRunningTests(true);
+    setTestResults(null);
+
+    try {
+      // Create test cases from examples
+      const testCases = examples.map(example => ({
+        input: example.input,
+        expected: example.output
+      }));
+
+      const requestBody = {
+        code: code,
+        language: selectedLanguage,
+        testCases: testCases,
+        pseudocode: pseudocode,
+        functionSignature: functionSignature
+      };
+
+      console.log('🔍 Debug - Request body:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(`${API_BASE_URL}/api/execute-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const results = await response.json();
+      console.log('🔍 Debug - Backend response:', results);
+      setTestResults(results);
+      
+      // Update pseudocode progress if available
+      if (results.pseudocodeProgress) {
+        setPseudocodeProgress(results.pseudocodeProgress);
+        console.log('🔍 Debug - Pseudocode progress:', results.pseudocodeProgress);
+      }
+
+    } catch (error) {
+      console.error('Error running tests:', error);
+      Alert.alert('Error', 'Failed to run tests. Please try again.');
+    } finally {
+      setIsRunningTests(false);
+    }
+  };
+
   // Enhanced syntax highlighting for different languages
   const applySyntaxHighlighting = (text: string, language: string) => {
     // This is a simplified syntax highlighting - in a real app you'd use a proper library
@@ -185,6 +457,34 @@ public:
     };
     
     return text; // For now, return as-is. In a real implementation, you'd apply highlighting
+  };
+
+  // Get the progress status for a pseudocode step
+  const getPseudocodeStepStatus = (stepIndex: number) => {
+    if (!pseudocodeProgress?.steps) return 'not_started';
+    
+    const step = pseudocodeProgress.steps.find((s: any) => s.step_number === stepIndex + 1);
+    return step?.status || 'not_started';
+  };
+
+  // Get the border color based on step status
+  const getStepBorderColor = (status: string) => {
+    switch (status) {
+      case 'completed': return '#4caf50'; // Green
+      case 'partial': return '#ff9800'; // Orange
+      case 'not_started': return '#f44336'; // Red
+      default: return '#e0e0e0'; // Default gray
+    }
+  };
+
+  // Get the status icon based on step status
+  const getStepStatusIcon = (status: string) => {
+    switch (status) {
+      case 'completed': return '✓';
+      case 'partial': return '⚠';
+      case 'not_started': return '✗';
+      default: return '';
+    }
   };
 
   const renderProblemDetails = () => (
@@ -438,7 +738,7 @@ public:
     </script>
 </body>
 </html>`;
-  }, [selectedLanguage]); // Only re-generate when language changes
+  }, [selectedLanguage, functionSignature, isLoadingSignature]); // Re-generate when language changes or function signature loads
 
   return (
     <SafeAreaView style={styles.container}>
@@ -502,14 +802,30 @@ public:
                 pseudocode.split('\n').filter(line => line.trim()).map((line, index) => {
                   // Remove leading numbers and dots/periods from pseudocode lines
                   const cleanedLine = line.trim().replace(/^\d+[\.\)\-\s]*/, '');
+                  const stepStatus = getPseudocodeStepStatus(index);
+                  const borderColor = getStepBorderColor(stepStatus);
+                  const statusIcon = getStepStatusIcon(stepStatus);
+                  
                   return (
-                    <View key={index} style={styles.pseudocodeCard}>
+                    <View key={index} style={[
+                      styles.pseudocodeCard,
+                      { borderLeftColor: borderColor, borderLeftWidth: 4 }
+                    ]}>
                       <View style={styles.pseudocodeNumberBubble}>
                         <ThemedText style={styles.pseudocodeNumber}>{index + 1}</ThemedText>
                       </View>
-                      <ThemedText style={styles.pseudocodeLineText}>
-                        {cleanedLine}
-                      </ThemedText>
+                      <View style={styles.pseudocodeTextContainer}>
+                        <ThemedText style={styles.pseudocodeLineText}>
+                          {cleanedLine}
+                        </ThemedText>
+                      </View>
+                      <View style={styles.pseudocodeIconContainer}>
+                        {statusIcon && (
+                          <View style={[styles.statusIndicator, { backgroundColor: borderColor }]}>
+                            <ThemedText style={styles.statusIcon}>{statusIcon}</ThemedText>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   );
                 })
@@ -524,7 +840,9 @@ public:
           {/* Code Editor - Fixed height */}
           <View style={styles.codeEditorContainer}>
             <View style={styles.codeEditorHeader}>
-              <ThemedText style={styles.codeEditorTitle}>Code Editor</ThemedText>
+              <View style={styles.codeEditorTitleContainer}>
+                <ThemedText style={styles.codeEditorTitle}>Code Editor</ThemedText>
+              </View>
               <View style={styles.languageSelector}>
                 {['javascript', 'python', 'java', 'cpp'].map((lang) => (
                   <TouchableOpacity
@@ -534,6 +852,7 @@ public:
                       selectedLanguage === lang && styles.selectedLanguageButton
                     ]}
                     onPress={() => handleLanguageChange(lang)}
+                    disabled={isLoadingSignature}
                   >
                     <ThemedText style={[
                       styles.languageButtonText,
@@ -587,26 +906,169 @@ public:
                   // WebView is loaded and ready
                 }}
               />
+              
+              {/* Loading overlay */}
+              {isLoadingSignature && (
+                <View style={styles.codeEditorLoadingOverlay}>
+                  <ActivityIndicator size="large" color="#6564c7" />
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Submit Button */}
-          <TouchableOpacity 
-            style={[styles.submitButton, isSubmitting && styles.submittingButton]}
-            onPress={handleSubmit}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? (
-              <View style={styles.submittingContent}>
-                <ActivityIndicator size="small" color="#fff" />
-                <ThemedText style={styles.submitButtonText}>Submitting...</ThemedText>
-              </View>
-            ) : (
-              <ThemedText style={styles.submitButtonText}>Submit Code</ThemedText>
-            )}
-          </TouchableOpacity>
+          {/* Action Buttons */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity 
+              style={[styles.runTestsButton, isRunningTests && styles.runningTestsButton]}
+              onPress={runTests}
+              disabled={isRunningTests || isSubmitting}
+            >
+              {isRunningTests ? (
+                <View style={styles.submittingContent}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <ThemedText style={styles.runTestsButtonText}>Running...</ThemedText>
+                </View>
+              ) : (
+                <ThemedText style={styles.runTestsButtonText}>Run Tests</ThemedText>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.submitButton, isSubmitting && styles.submittingButton]}
+              onPress={handleSubmit}
+              disabled={isSubmitting || isRunningTests}
+            >
+              {isSubmitting ? (
+                <View style={styles.submittingContent}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <ThemedText style={styles.submitButtonText}>Submitting...</ThemedText>
+                </View>
+              ) : (
+                <ThemedText style={styles.submitButtonText}>Submit Code</ThemedText>
+              )}
+            </TouchableOpacity>
+          </View>
+
         </View>
       </ScrollView>
+
+      {/* Test Results Modal */}
+      <Modal
+        visible={!!testResults}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setTestResults(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Test Results</ThemedText>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setTestResults(null)}
+              >
+                <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+              </TouchableOpacity>
+            </View>
+            
+            {testResults && (
+              <>
+                <View style={styles.summaryCard}>
+                  <View style={styles.summaryContent}>
+                    <View style={styles.summaryStats}>
+                      <ThemedText style={styles.summaryNumber}>
+                        {testResults.summary.passed}/{testResults.summary.total}
+                      </ThemedText>
+                      <ThemedText style={styles.summaryLabel}>Tests Passed</ThemedText>
+                    </View>
+                    <View style={styles.summaryDivider} />
+                    <View style={styles.summaryPercentage}>
+                      <ThemedText style={[
+                        styles.percentageText,
+                        testResults.summary.percentage === 100 ? styles.perfectScore : styles.partialScore
+                      ]}>
+                        {testResults.summary.percentage}%
+                      </ThemedText>
+                      <ThemedText style={styles.scoreLabel}>Score</ThemedText>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Section Divider */}
+                <View style={styles.sectionDivider} />
+
+                <ScrollView style={styles.testResultsList} showsVerticalScrollIndicator={false}>
+                  {testResults.results.map((result: any, index: number) => (
+                    <View key={index} style={[
+                      styles.testCard,
+                      result.passed ? styles.testCardPassed : styles.testCardFailed
+                    ]}>
+                      <View style={styles.testCardHeader}>
+                        <View style={styles.testNumber}>
+                          <ThemedText style={styles.testNumberText}>{index + 1}</ThemedText>
+                        </View>
+                        <View style={styles.testStatus}>
+                          <View style={[
+                            styles.statusBadge,
+                            result.passed ? styles.passedBadge : styles.failedBadge
+                          ]}>
+                            <ThemedText style={[
+                              styles.statusText,
+                              result.passed ? styles.passedStatusText : styles.failedStatusText
+                            ]}>
+                              {result.passed ? 'PASSED' : 'FAILED'}
+                            </ThemedText>
+                          </View>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.testCardContent}>
+                        <View style={styles.testDataRow}>
+                          <ThemedText style={styles.testDataLabel}>Input</ThemedText>
+                          <View style={styles.testDataValue}>
+                            <ThemedText style={styles.testDataText}>{result.input}</ThemedText>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.testDataRow}>
+                          <ThemedText style={styles.testDataLabel}>Expected</ThemedText>
+                          <View style={styles.testDataValue}>
+                            <ThemedText style={styles.testDataText}>{result.expected}</ThemedText>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.testDataRow}>
+                          <ThemedText style={styles.testDataLabel}>Actual</ThemedText>
+                          <View style={[
+                            styles.testDataValue,
+                            !result.passed && styles.errorValue
+                          ]}>
+                            <ThemedText style={[
+                              styles.testDataText,
+                              !result.passed && styles.errorText
+                            ]}>
+                              {result.actual || 'No output'}
+                            </ThemedText>
+                          </View>
+                        </View>
+                        
+                        {result.error && (
+                          <View style={styles.errorContainer}>
+                            <ThemedText style={styles.errorLabel}>Error</ThemedText>
+                            <View style={styles.errorBox}>
+                              <ThemedText style={styles.errorMessage}>{result.error}</ThemedText>
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -863,7 +1325,7 @@ const styles = StyleSheet.create({
   },
   pseudocodeCard: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     padding: 14,
@@ -896,7 +1358,30 @@ const styles = StyleSheet.create({
     color: '#2D2D2D',
     lineHeight: 22,
     fontWeight: '500',
+    flexWrap: 'wrap',
+  },
+  pseudocodeTextContainer: {
     flex: 1,
+    paddingRight: 8,
+  },
+  pseudocodeIconContainer: {
+    width: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  statusIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  statusIcon: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   noPseudocodeContainer: {
     padding: 24,
@@ -970,6 +1455,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   submitButton: {
+    flex: 1,
     backgroundColor: '#6564c7',
     paddingVertical: 16,
     borderRadius: 12,
@@ -980,7 +1466,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 5,
-    marginTop: 8,
   },
   submittingButton: {
     backgroundColor: '#9896d4',
@@ -1024,10 +1509,11 @@ const styles = StyleSheet.create({
   },
   exampleScrollView: {
     flex: 1,
-    padding: 16,
+    padding: 20,
   },
   exampleContentFormatted: {
     flex: 1,
+    paddingHorizontal: 4,
   },
   exampleFieldContainer: {
     marginBottom: 10,
@@ -1208,5 +1694,303 @@ const styles = StyleSheet.create({
   },
   codeEditor: {
     flex: 1,
+  },
+  runTestsButton: {
+    flex: 1,
+    backgroundColor: '#FF8C00',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  runningTestsButton: {
+    backgroundColor: '#FFAA44',
+  },
+  runTestsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: '95%',
+    height: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2d2d2d',
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  
+  // Summary card styles
+  summaryCard: {
+    backgroundColor: '#f8f9ff',
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e8ebff',
+  },
+  summaryContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryStats: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  summaryNumber: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#6564c7',
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#ddd',
+    marginHorizontal: 16,
+  },
+  summaryPercentage: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  percentageText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  perfectScore: {
+    color: '#4caf50',
+  },
+  partialScore: {
+    color: '#ff9800',
+  },
+  scoreLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  
+  // Section divider
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginHorizontal: 20,
+    marginVertical: 16,
+  },
+  
+  // Test results list
+  testResultsList: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  
+  // Individual test card styles
+  testCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  testCardPassed: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#4caf50',
+  },
+  testCardFailed: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#f44336',
+  },
+  testCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fafafa',
+  },
+  testNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  testNumberText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  testStatus: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  passedBadge: {
+    backgroundColor: '#e8f5e8',
+  },
+  failedBadge: {
+    backgroundColor: '#ffeaea',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  passedStatusText: {
+    color: '#4caf50',
+  },
+  failedStatusText: {
+    color: '#f44336',
+  },
+  
+  // Test card content
+  testCardContent: {
+    padding: 16,
+  },
+  testDataRow: {
+    marginBottom: 12,
+  },
+  testDataLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  testDataValue: {
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  testDataText: {
+    fontSize: 14,
+    color: '#2d2d2d',
+    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
+  },
+  errorValue: {
+    backgroundColor: '#fff5f5',
+    borderColor: '#ffcdd2',
+  },
+  errorText: {
+    color: '#d32f2f',
+  },
+  
+  // Error container
+  errorContainer: {
+    marginTop: 8,
+  },
+  errorLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#f44336',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  errorBox: {
+    backgroundColor: '#fff5f5',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ffcdd2',
+  },
+  errorMessage: {
+    fontSize: 13,
+    color: '#d32f2f',
+    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
+    lineHeight: 18,
+  },
+  
+  // Code editor title container styles
+  codeEditorTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingSignatureContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  loadingSignatureText: {
+    fontSize: 12,
+    color: '#6564c7',
+    fontWeight: '500',
+  },
+  
+  // Code editor loading overlay
+  codeEditorLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(30, 30, 30, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
   },
 }); 

@@ -4,6 +4,12 @@ const cors = require('cors');
 const morgan = require('morgan');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// To use Judge0 API for code execution, you need to:
+// 1. Sign up at https://rapidapi.com/judge0-official/api/judge0-ce/
+// 2. Subscribe to the free tier (60 requests/day)
+// 3. Set your API key: export JUDGE0_API_KEY="your-rapidapi-key-here"
+// 4. Or add to your .env file: JUDGE0_API_KEY=your-rapidapi-key-here
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -435,6 +441,287 @@ Return only the two-line response as shown above, nothing else.`;
   } catch (error) {
     console.error('Error simplifying question:', error);
     res.status(500).json({ error: 'Failed to simplify question' });
+  }
+});
+
+// Function signature analysis endpoint
+app.post('/api/analyze-function-signature', async (req, res) => {
+  try {
+    const { title, description, examples } = req.body;
+    
+    console.log('🔍 Analyzing function signature for:', title);
+    
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title and description are required' });
+    }
+
+    const prompt = `You are a programming expert. Analyze this coding problem and determine the exact function signature needed.
+
+PROBLEM TITLE: ${title}
+
+PROBLEM DESCRIPTION: ${description}
+
+EXAMPLES: ${examples ? JSON.stringify(examples) : 'No examples provided'}
+
+Based on this problem, determine:
+1. The exact function name (use standard LeetCode naming conventions)
+2. The parameter names and types
+3. The return type
+4. Sample input parsing format
+
+Respond in this JSON format:
+{
+  "functionName": "twoSum",
+  "parameters": [
+    {"name": "nums", "type": "array"},
+    {"name": "target", "type": "number"}
+  ],
+  "returnType": "array",
+  "inputFormat": "nums = [2,7,11,15], target = 9",
+  "sampleCall": "twoSum(nums, target)"
+}
+
+Common function names:
+- Two Sum: twoSum
+- Valid Parentheses: isValid
+- Single Number: singleNumber
+- Palindrome: isPalindrome
+- Merge Two Lists: mergeTwoLists
+- etc.`;
+
+    const result = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    console.log('🔍 Function signature analysis response:', text);
+    
+    // Try to parse JSON response
+    let signatureData;
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        signatureData = JSON.parse(jsonMatch[0]);
+        console.log('🔍 Parsed signature data:', signatureData);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.log('🔍 Failed to parse signature JSON, using fallback');
+      signatureData = {
+        functionName: 'solution',
+        parameters: [{"name": "input", "type": "any"}],
+        returnType: 'any',
+        inputFormat: 'input data',
+        sampleCall: 'solution(input)'
+      };
+    }
+
+    res.json(signatureData);
+
+  } catch (error) {
+    console.error('Error analyzing function signature:', error);
+    res.status(500).json({ error: 'Failed to analyze function signature' });
+  }
+});
+
+// Code execution endpoint using Gemini AI
+app.post('/api/execute-code', async (req, res) => {
+  try {
+    const { code, language, testCases, pseudocode, functionSignature } = req.body;
+    
+    console.log('🔍 Backend Debug - Received request:');
+    console.log('  - Code length:', code?.length || 0);
+    console.log('  - Language:', language);
+    console.log('  - Test cases count:', testCases?.length || 0);
+    console.log('  - Pseudocode provided:', !!pseudocode);
+    console.log('  - Function signature:', functionSignature);
+    
+    if (!code || !language || !testCases) {
+      return res.status(400).json({ error: 'Code, language, and test cases are required' });
+    }
+
+    const results = [];
+
+    // Process each test case with Gemini
+    for (const testCase of testCases) {
+      try {
+        console.log(`🔍 Processing test case: ${JSON.stringify(testCase)}`);
+        
+        const functionInfo = functionSignature ? `
+FUNCTION SIGNATURE INFO:
+- Function name: ${functionSignature.functionName}
+- Parameters: ${functionSignature.parameters?.map(p => `${p.name} (${p.type})`).join(', ')}
+- Expected input format: ${functionSignature.inputFormat}
+- Sample call: ${functionSignature.sampleCall}
+` : '';
+
+        const prompt = `You are a code execution engine. Your job is to:
+
+1. Run the provided ${language} code EXACTLY as written - DO NOT modify or change anything
+2. Parse the input according to the function signature and call the appropriate function
+3. Return the exact output the code produces
+4. Compare with expected output
+
+USER'S CODE:
+\`\`\`${language}
+${code}
+\`\`\`
+${functionInfo}
+INPUT: ${testCase.input}
+EXPECTED OUTPUT: ${testCase.expected}
+
+INSTRUCTIONS:
+- Execute the code with the input exactly as provided
+- Parse the input and call the main function in the code
+- Return the actual output the code produces
+- Do NOT modify, fix, or improve the code in any way
+- If there's an error, return the error message
+- Compare actual output with expected output
+
+Respond in this JSON format:
+{
+  "actual_output": "the exact output from running the code",
+  "expected_output": "${testCase.expected}",
+  "passed": true/false,
+  "error": null or "error message if any"
+}`;
+
+        const result = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        
+        console.log('🔍 Gemini raw response:', text);
+        
+        // Try to parse JSON response
+        let testResult;
+        try {
+          // Extract JSON from response (handle markdown code blocks)
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            testResult = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('No JSON found in response');
+          }
+        } catch (parseError) {
+          console.log('🔍 Failed to parse JSON, creating fallback result');
+          // Fallback: create result manually
+          testResult = {
+            actual_output: text.includes('Error') ? '' : text.trim(),
+            expected_output: testCase.expected,
+            passed: false,
+            error: text.includes('Error') ? text : 'Could not parse execution result'
+          };
+        }
+        
+        // Ensure we have the right format
+        const finalResult = {
+          input: testCase.input,
+          expected: testCase.expected,
+          actual: testResult.actual_output || '',
+          passed: testResult.passed || false,
+          error: testResult.error || null,
+          status: testResult.passed ? 'Passed' : 'Failed'
+        };
+        
+        console.log('🔍 Final test result:', finalResult);
+        results.push(finalResult);
+
+      } catch (error) {
+        console.error('Error processing test case:', error);
+        results.push({
+          input: testCase.input,
+          expected: testCase.expected,
+          actual: '',
+          passed: false,
+          error: error.message,
+          status: 'Error'
+        });
+      }
+    }
+
+    // Calculate overall results
+    const passedCount = results.filter(r => r.passed).length;
+    const totalCount = results.length;
+    const allPassed = passedCount === totalCount;
+
+    // Analyze pseudocode progress if provided
+    let pseudocodeProgress = null;
+    if (pseudocode) {
+      try {
+        console.log('🔍 Analyzing pseudocode progress...');
+        
+        const progressPrompt = `You are a code analysis expert. Compare the user's actual code with the pseudocode steps to determine which parts have been implemented correctly.
+
+PSEUDOCODE STEPS:
+${pseudocode}
+
+USER'S ACTUAL CODE:
+\`\`\`${language}
+${code}
+\`\`\`
+
+For each pseudocode step, analyze if it has been implemented in the actual code:
+
+INSTRUCTIONS:
+1. Split the pseudocode into individual logical steps
+2. For each step, determine if it's implemented correctly in the code
+3. Return status as: "completed" (implemented correctly), "partial" (partially implemented), or "not_started" (not implemented)
+
+Respond in this JSON format:
+{
+  "steps": [
+    {
+      "step_number": 1,
+      "description": "first step description",
+      "status": "completed|partial|not_started",
+      "explanation": "brief explanation of implementation status"
+    }
+  ]
+}`;
+
+        const progressResult = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(progressPrompt);
+        const progressResponse = await progressResult.response;
+        const progressText = progressResponse.text();
+        
+        console.log('🔍 Pseudocode progress raw response:', progressText);
+        
+        // Try to parse JSON response
+        try {
+          const jsonMatch = progressText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            pseudocodeProgress = JSON.parse(jsonMatch[0]);
+            console.log('🔍 Parsed pseudocode progress:', pseudocodeProgress);
+          }
+        } catch (parseError) {
+          console.log('🔍 Failed to parse pseudocode progress JSON');
+        }
+      } catch (error) {
+        console.error('Error analyzing pseudocode progress:', error);
+      }
+    }
+
+    console.log('Code execution results:', {
+      language,
+      passedCount,
+      totalCount,
+      allPassed,
+      pseudocodeProgressSteps: pseudocodeProgress?.steps?.length || 0
+    });
+
+    res.json({
+      results,
+      summary: {
+        passed: passedCount,
+        total: totalCount,
+        allPassed,
+        percentage: Math.round((passedCount / totalCount) * 100)
+      },
+      pseudocodeProgress
+    });
+
+  } catch (error) {
+    console.error('Error in code execution:', error);
+    res.status(500).json({ error: 'Failed to execute code' });
   }
 });
 
