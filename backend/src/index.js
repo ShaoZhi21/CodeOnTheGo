@@ -359,6 +359,15 @@ app.post('/api/user-progress/:userId/:topic/:problemId/answer', async (req, res)
   const { code, result, completed, stars } = req.body;
   const now = new Date().toISOString();
 
+  console.log('Saving progress:', {
+    userId,
+    topic,
+    problemId,
+    completed,
+    stars,
+    result
+  });
+
   // Fetch existing progress
   let { data: progress, error } = await supabase
     .from('user_problem_progress')
@@ -378,22 +387,29 @@ app.post('/api/user-progress/:userId/:topic/:problemId/answer', async (req, res)
     attempts,
     updated_at: now,
   };
-  if (typeof completed === 'boolean') updateFields.completed = completed;
+  if (typeof completed === 'boolean') updateFields.is_solved = completed;
   if (typeof stars === 'number') updateFields.stars = stars;
 
   let upsertData = {
     user_id: userId,
     problem_id: parseInt(problemId),
-    topic,
     ...updateFields,
   };
 
-  const { error: upsertError } = await supabase
-    .from('user_problem_progress')
-    .upsert(upsertData, { onConflict: ['user_id', 'problem_id'] });
+  console.log('Upsert data:', upsertData);
 
-  if (upsertError) return res.status(500).json({ error: upsertError.message });
-  res.json({ success: true });
+  const { data: upsertResult, error: upsertError } = await supabase
+    .from('user_problem_progress')
+    .upsert(upsertData, { onConflict: ['user_id', 'problem_id'] })
+    .select();
+
+  if (upsertError) {
+    console.error('Upsert error:', upsertError);
+    return res.status(500).json({ error: upsertError.message });
+  }
+  
+  console.log('Progress saved successfully:', upsertResult);
+  res.json({ success: true, data: upsertResult });
 });
 
 // Record topic navigation
@@ -445,6 +461,256 @@ app.get('/api/topic-navigation/:userId', async (req, res) => {
     res.json({ navigation: data || [] });
   } catch (error) {
     console.error('Error in get topic navigation endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Generate quiz questions for a problem using Gemini AI
+app.post('/api/generate-quiz', async (req, res) => {
+  try {
+    const { problemId, questionTitle, questionDescription } = req.body;
+    
+    if (!problemId || !questionTitle || !questionDescription) {
+      return res.status(400).json({ error: 'Problem ID, title, and description are required' });
+    }
+
+    // Check if quiz questions already exist for this problem
+    const { data: existingQuestions, error: checkError } = await supabase
+      .from('quiz_questions')
+      .select('*')
+      .eq('problem_id', problemId)
+      .limit(3);
+
+    if (checkError) {
+      console.error('Error checking existing quiz questions:', checkError);
+      return res.status(500).json({ error: checkError.message });
+    }
+
+    // If we already have 3 questions, return them
+    if (existingQuestions && existingQuestions.length >= 3) {
+      console.log(`Returning existing quiz questions for problem ${problemId}`);
+      return res.json({ 
+        questions: existingQuestions.slice(0, 3),
+        fromCache: true 
+      });
+    }
+
+    console.log(`Generating new quiz questions for problem ${problemId}`);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are an expert programming instructor. Your job is to create multiple choice questions that test understanding of programming concepts and problem-solving approaches.",
+    });
+
+    const prompt = `
+You are creating a quiz to test understanding of a programming problem. Generate exactly 3 multiple choice questions.
+
+Problem Title: ${questionTitle}
+Problem Description: ${questionDescription}
+
+Create 3 questions that test:
+1. Understanding of the problem requirements
+2. Knowledge of the algorithmic approach
+3. Awareness of edge cases or implementation details
+
+For each question, provide:
+- A clear question text
+- 4 multiple choice options (A, B, C, D)
+- The correct answer (0-3, where 0=A, 1=B, 2=C, 3=D)
+- A brief explanation of why the answer is correct
+
+Format your response as JSON:
+{
+  "questions": [
+    {
+      "question_text": "What is the main goal of this problem?",
+      "options": [
+        {"text": "Option A text", "correct": false},
+        {"text": "Option B text", "correct": true},
+        {"text": "Option C text", "correct": false},
+        {"text": "Option D text", "correct": false}
+      ],
+      "correct_option": 1,
+      "explanation": "Brief explanation of why this is correct"
+    }
+  ]
+}
+
+Make sure:
+- Each question has exactly 4 options
+- Only one option is correct per question
+- Questions are relevant to the problem
+- Options are plausible but only one is correct
+- Explanations are clear and educational
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('Raw Gemini quiz response:', text);
+
+    // Try to parse JSON from the response
+    let quizData;
+    try {
+      // Extract JSON from the response (handle cases where AI adds extra text)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        quizData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.error('Failed to parse quiz JSON:', parseError);
+      return res.status(500).json({ error: 'Failed to generate quiz questions' });
+    }
+
+    if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length !== 3) {
+      return res.status(500).json({ error: 'Invalid quiz format generated' });
+    }
+
+    // Store the generated questions in the database
+    const questionsToInsert = quizData.questions.map(q => ({
+      problem_id: problemId,
+      question_text: q.question_text,
+      options: q.options,
+      correct_option: q.correct_option,
+      explanation: q.explanation
+    }));
+
+    const { data: insertedQuestions, error: insertError } = await supabase
+      .from('quiz_questions')
+      .insert(questionsToInsert)
+      .select();
+
+    if (insertError) {
+      console.error('Error inserting quiz questions:', insertError);
+      return res.status(500).json({ error: insertError.message });
+    }
+
+    console.log(`Successfully generated and stored ${insertedQuestions.length} quiz questions`);
+
+    res.json({ 
+      questions: insertedQuestions,
+      fromCache: false
+    });
+
+  } catch (error) {
+    console.error('Error generating quiz:', error);
+    res.status(500).json({ error: 'Failed to generate quiz questions' });
+  }
+});
+
+// Get lesson completion status for a user and problem
+app.get('/api/lesson-completion/:userId/:problemId', async (req, res) => {
+  try {
+    const { userId, problemId } = req.params;
+    
+    const { data, error } = await supabase
+      .from('user_lesson_completion')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('problem_id', parseInt(problemId))
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+      console.error('Error fetching lesson completion:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ 
+      completion: data || { 
+        quiz_completed: false, 
+        quiz_score: 0, 
+        quiz_attempts: 0 
+      } 
+    });
+  } catch (error) {
+    console.error('Error in lesson completion endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Submit quiz attempt
+app.post('/api/quiz-attempt', async (req, res) => {
+  try {
+    const { userId, problemId, quizQuestionIds, userAnswers } = req.body;
+    
+    if (!userId || !problemId || !quizQuestionIds || !userAnswers) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Get the correct answers for the quiz questions
+    const { data: questions, error: questionsError } = await supabase
+      .from('quiz_questions')
+      .select('id, correct_option')
+      .in('id', quizQuestionIds);
+
+    if (questionsError) {
+      console.error('Error fetching quiz questions:', questionsError);
+      return res.status(500).json({ error: questionsError.message });
+    }
+
+    // Calculate score
+    let score = 0;
+    const questionMap = new Map(questions.map(q => [q.id, q.correct_option]));
+    
+    for (let i = 0; i < quizQuestionIds.length; i++) {
+      const questionId = quizQuestionIds[i];
+      const userAnswer = userAnswers[i];
+      const correctAnswer = questionMap.get(questionId);
+      
+      if (userAnswer === correctAnswer) {
+        score++;
+      }
+    }
+
+    // Insert quiz attempt
+    const { data: attempt, error: insertError } = await supabase
+      .from('quiz_attempts')
+      .insert({
+        user_id: userId,
+        problem_id: parseInt(problemId),
+        quiz_question_ids: quizQuestionIds,
+        user_answers: userAnswers,
+        score: score,
+        completed: true,
+        completed_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting quiz attempt:', insertError);
+      return res.status(500).json({ error: insertError.message });
+    }
+
+    // Update lesson completion if score is 3/3
+    if (score === 3) {
+      const { error: completionError } = await supabase
+        .from('user_lesson_completion')
+        .upsert({
+          user_id: userId,
+          problem_id: parseInt(problemId),
+          quiz_completed: true,
+          quiz_score: score,
+          completed_at: new Date().toISOString()
+        }, { onConflict: ['user_id', 'problem_id'] });
+
+      if (completionError) {
+        console.error('Error updating lesson completion:', completionError);
+      }
+    }
+
+    res.json({ 
+      attempt,
+      score,
+      passed: score === 3,
+      correctAnswers: questions.map(q => q.correct_option)
+    });
+
+  } catch (error) {
+    console.error('Error in quiz attempt endpoint:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

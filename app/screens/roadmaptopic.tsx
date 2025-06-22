@@ -1,8 +1,10 @@
+import { QuestionActionModal } from '@/components/QuestionActionModal';
 import { ThemedText } from '@/components/ThemedText';
 import { TopicProblem, TopicService } from '@/lib/services/topicService';
 import { supabase } from '@/lib/supabase';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { decodeHtmlEntities } from '@/lib/utils/textUtils';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Path, Svg } from 'react-native-svg';
 
@@ -52,6 +54,8 @@ function StarSVG({ size, filled }: { size: number; filled: boolean }) {
 
 export default function RoadmapTopic() {
   const { topic } = useLocalSearchParams();
+  console.log('RoadmapTopic: topic param =', topic);
+  
   const router = useRouter();
   const [questions, setQuestions] = useState<TopicProblemWithProgress[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +63,21 @@ export default function RoadmapTopic() {
   const [progress, setProgress] = useState<Record<number, UserProgress>>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
+  
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
+  const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Beginner');
+  const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
-  useEffect(() => {
-    loadTopicData();
-  }, [topic]);
+  console.log('RoadmapTopic: Component initialized');
+
+  // Reload data when screen comes into focus (e.g., returning from question screen)
+  useFocusEffect(
+    useCallback(() => {
+      loadTopicData();
+    }, [topic])
+  );
 
   useEffect(() => {
     if (currentQuestionIndex !== null && !loading) {
@@ -74,62 +89,145 @@ export default function RoadmapTopic() {
   }, [currentQuestionIndex, loading]);
 
   const loadTopicData = async () => {
+    console.log('RoadmapTopic: loadTopicData called');
     try {
       setLoading(true);
-      const [problems, stats] = await Promise.all([
-        TopicService.getTopicProblems(topic as string),
-        TopicService.getTopicStats(topic as string)
-      ]);
+      console.log('RoadmapTopic: Fetching problems for topic:', topic);
+      
+      const problems = await TopicService.getTopicProblems(topic as string);
+
+      console.log('RoadmapTopic: Problems fetched:', problems?.length || 0);
+      console.log('RoadmapTopic: First problem:', problems?.[0]);
 
       // Get user progress for these problems
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('RoadmapTopic: User found:', !!user);
+      
       let progressMap: Record<number, UserProgress> = {};
+      let lessonProgressMap: Record<number, boolean> = {};
+      
       if (user) {
+        // Get problem progress
         const { data: progressData } = await supabase
           .from('user_problem_progress')
-          .select('problem_id, completed, stars')
+          .select('problem_id, is_solved, stars')
           .eq('user_id', user.id);
         progressData?.forEach(p => {
-          progressMap[p.problem_id] = p;
+          progressMap[p.problem_id] = {
+            problem_id: p.problem_id,
+            completed: p.is_solved,
+            stars: p.stars
+          };
         });
+
+        // Get user profile for skill level
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('skill_level')
+          .eq('user_id', user.id)
+          .single();
+        
+        console.log('Profile query result:', { profileData, profileError });
+        
+        if (profileData?.skill_level) {
+          setUserSkillLevel(profileData.skill_level);
+          console.log('User skill level loaded:', profileData.skill_level);
+        } else {
+          console.log('No skill level found, defaulting to Beginner');
+          setUserSkillLevel('Beginner');
+        }
+
+        // Get lesson completion status from database
+        const { data: lessonData, error: lessonError } = await supabase
+          .from('user_lesson_completion')
+          .select('problem_id, quiz_completed')
+          .eq('user_id', user.id);
+        
+        console.log('Lesson completion query result:', { lessonData, lessonError });
+        
+        if (lessonData) {
+          lessonData.forEach(lesson => {
+            lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
+          });
+        } else {
+          // Default to no quizzes completed for beginners
+          problems.forEach((problem, index) => {
+            lessonProgressMap[problem.leetcode_id] = false;
+          });
+        }
+        setLessonProgress(lessonProgressMap);
+        console.log('Lesson progress set:', lessonProgressMap);
       }
-      // Combine problems with progress data (original order: easy to hard)
-      const problemsWithProgress = problems.map(problem => ({
-        ...problem,
-        completed: progressMap[problem.leetcode_id]?.completed || false,
-        stars: progressMap[problem.leetcode_id]?.stars || 0
-      }));
+      
+      // Combine problems with progress
+      const problemsWithProgress: TopicProblemWithProgress[] = problems
+        .filter(problem => problem && problem.leetcode_id) // Filter out undefined/null problems
+        .map(problem => {
+          const safeTitle = problem.title || 'Untitled Problem';
+          console.log(`RoadmapTopic: Processing problem - ID: ${problem.leetcode_id}, Title: "${safeTitle}"`);
+          console.log(`RoadmapTopic: Raw title: "${safeTitle}"`);
+          console.log(`RoadmapTopic: Decoded title: "${decodeHtmlEntities(safeTitle)}"`);
+          return {
+            ...problem,
+            title: safeTitle, // Ensure title is never undefined
+            completed: progressMap[problem.leetcode_id]?.completed || false,
+            stars: progressMap[problem.leetcode_id]?.stars || 0,
+          };
+        });
+
+      // Calculate user-specific stats
+      const totalStars = problemsWithProgress.reduce((sum, problem) => {
+        const problemStars = problem.stars || 0;
+        console.log(`RoadmapTopic: Problem ${problem.leetcode_id} "${problem.title}" - stars: ${problemStars}, completed: ${problem.completed}`);
+        return sum + problemStars;
+      }, 0);
+      const completedProblems = problemsWithProgress.filter(problem => problem.completed).length;
+      const completionPercentage = problemsWithProgress.length > 0 ? Math.round((completedProblems / problemsWithProgress.length) * 100) : 0;
+      
+      const userStats = {
+        total_stars: totalStars,
+        completion_percentage: completionPercentage
+      };
+
+      console.log('RoadmapTopic: Problems with progress created:', problemsWithProgress.length);
+      console.log('RoadmapTopic: User stats calculated:', userStats);
+      console.log('RoadmapTopic: Progress map details:', progressMap);
+      console.log('RoadmapTopic: Problems with progress details:', problemsWithProgress.map(p => ({
+        id: p.leetcode_id,
+        title: p.title,
+        stars: p.stars,
+        completed: p.completed
+      })));
       setQuestions(problemsWithProgress);
-      setTopicStats(stats);
-      // Find the first unlocked but not completed question (original order)
-      const currentIndex = problemsWithProgress.findIndex((q, idx, arr) =>
-        !q.completed && (idx === 0 || arr[idx - 1].completed)
-      );
-      setCurrentQuestionIndex(currentIndex >= 0 ? currentIndex : 0);
+      setTopicStats(userStats);
+      setCurrentQuestionIndex(problemsWithProgress.findIndex(q => !q.completed));
+      console.log('RoadmapTopic: Data loading completed successfully');
     } catch (error) {
-      console.error('Error loading topic data:', error);
+      console.error('RoadmapTopic: Error loading topic data:', error);
     } finally {
       setLoading(false);
+      console.log('RoadmapTopic: Loading state set to false');
     }
   };
 
   const handleQuestionPress = (q: TopicProblemWithProgress, idx: number) => {
-    if (!q.completed && !isUnlocked(q, idx)) return;
-    router.push({
-      pathname: '/screens/question',
-      params: {
-        id: q.leetcode_id.toString(),
-        name: q.title,
-        difficulty: q.difficulty,
-        topic,
-      },
-    });
+    if (!q?.completed && !isUnlocked(q, idx)) return;
+    
+    // Show the action modal instead of directly navigating
+    setSelectedQuestion(q);
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    console.log('Closing modal');
+    setModalVisible(false);
+    setSelectedQuestion(null);
   };
 
   const isUnlocked = (q: TopicProblemWithProgress, idx: number) => {
     if (idx === 0) return true;
     const prev = questions[idx - 1];
-    return prev.completed;
+    return prev?.completed || false;
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -185,7 +283,7 @@ export default function RoadmapTopic() {
             numberOfLines={2}
             ellipsizeMode="tail"
           >
-            {question.title}
+            {decodeHtmlEntities(question.title || 'Untitled Problem')}
           </ThemedText>
         </View>
       </View>
@@ -193,6 +291,7 @@ export default function RoadmapTopic() {
   };
 
   if (loading) {
+    console.log('RoadmapTopic: Rendering loading state');
     return (
       <SafeAreaView style={styles.container}>
         <ActivityIndicator size="large" color="#6564c7" />
@@ -200,6 +299,8 @@ export default function RoadmapTopic() {
     );
   }
 
+  console.log('RoadmapTopic: Rendering main content, questions count:', questions.length);
+  console.log('RoadmapTopic: Current topicStats being displayed:', topicStats);
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -265,13 +366,19 @@ export default function RoadmapTopic() {
             const isLeft = index % 2 === 0;
             const isCurrent = actualIndex === currentQuestionIndex;
             const isLocked = !isUnlocked(question, actualIndex);
+            const isCompleted = question.stars && question.stars > 0;
+            
+            // Safety checks for all properties
+            const safeTitle = question.title || 'Untitled Problem';
+            const safeDifficulty = question.difficulty || 'Easy';
+            const safeLeetcodeId = question.leetcode_id || 0;
             
             let icon = coinIcon;
             if (actualIndex % 4 === 1) icon = bookIcon;
             if (actualIndex % 4 === 3) icon = chestIcon;
             
             return (
-              <View key={question.leetcode_id} style={styles.milestoneWrapper}>
+              <View key={safeLeetcodeId} style={styles.milestoneWrapper}>
                 <View style={[
                   styles.milestoneContent,
                   isLeft ? styles.milestoneLeft : styles.milestoneRight
@@ -289,8 +396,17 @@ export default function RoadmapTopic() {
                       numberOfLines={2}
                       ellipsizeMode="tail"
                     >
-                      {question.title}
+                      {decodeHtmlEntities(safeTitle)}
                     </ThemedText>
+                    {/* Difficulty indicator */}
+                    <View style={[
+                      styles.difficultyBadge,
+                      { backgroundColor: getDifficultyColor(safeDifficulty) }
+                    ]}>
+                      <ThemedText style={styles.difficultyText}>
+                        {safeDifficulty}
+                      </ThemedText>
+                    </View>
                   </View>
 
                   {/* Center Bubble */}
@@ -321,7 +437,8 @@ export default function RoadmapTopic() {
                         />
                       )}
                     </TouchableOpacity>
-                    {isCurrent && (
+                    {/* Show stars for completed questions */}
+                    {isCompleted && (
                       <View style={styles.starsRow}>
                         {[1, 2, 3].map((star, i) => (
                           <Image
@@ -347,8 +464,17 @@ export default function RoadmapTopic() {
                       numberOfLines={2}
                       ellipsizeMode="tail"
                     >
-                      {question.title}
+                      {decodeHtmlEntities(safeTitle)}
                     </ThemedText>
+                    {/* Difficulty indicator */}
+                    <View style={[
+                      styles.difficultyBadge,
+                      { backgroundColor: getDifficultyColor(safeDifficulty) }
+                    ]}>
+                      <ThemedText style={styles.difficultyText}>
+                        {safeDifficulty}
+                      </ThemedText>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -356,6 +482,20 @@ export default function RoadmapTopic() {
           })}
         </View>
       </ScrollView>
+
+      {/* Question Action Modal */}
+      {selectedQuestion && (
+        <QuestionActionModal
+          visible={modalVisible}
+          onClose={handleCloseModal}
+          questionTitle={decodeHtmlEntities(selectedQuestion.title || 'Untitled Problem')}
+          questionId={selectedQuestion.leetcode_id || 0}
+          userSkillLevel={userSkillLevel}
+          hasCompletedLesson={lessonProgress[selectedQuestion.leetcode_id || 0] || false}
+          questionDifficulty={selectedQuestion.difficulty || 'Easy'}
+          questionDescription={selectedQuestion.description || `Solve the problem: ${decodeHtmlEntities(selectedQuestion.title || 'Untitled Problem')}`}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -621,5 +761,16 @@ const styles = StyleSheet.create({
   },
   milestoneRight: {
     flexDirection: 'row',
+  },
+  difficultyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 16,
+    marginTop: 4,
+  },
+  difficultyText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#fff',
   },
 });

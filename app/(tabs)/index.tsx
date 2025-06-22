@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import CircularProgress from '@/components/CircularProgress';
 import { ThemedText } from '@/components/ThemedText';
 import { ProfileService } from '@/lib/services/profileService';
+import { RecentTopicsService } from '@/lib/services/recentTopicsService';
 import { TopicService } from '@/lib/services/topicService';
 import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
@@ -54,49 +55,49 @@ export default function HomeScreen() {
     }
   };
 
-  const loadTopicsProgress = async () => {
+  const loadTopicsProgress = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log('Loading recent topics');
 
-      // Get recent topic navigation history
-      const navigationHistory = await TopicService.getRecentTopicNavigation(user.id);
-      console.log('Navigation history:', navigationHistory);
-      
-      // Get unique topics from navigation history (most recent first)
-      const uniqueTopics = navigationHistory
-        .filter((item, index, self) => 
-          index === self.findIndex(t => t.topic_name === item.topic_name)
-        )
-        .slice(0, 3);
+      // Get recent topics from the new service
+      const recentTopics = await RecentTopicsService.getRecentTopics();
+      console.log('Recent topics:', recentTopics);
 
-      console.log('Unique topics:', uniqueTopics);
-
-      // Get progress for each recently visited topic
-      const progressPromises = uniqueTopics.map(async (navItem) => {
-        const topicName = navItem.topic_name;
+      // Get progress for each recent topic
+      const progressPromises = recentTopics.map(async (topicName) => {
+        console.log('Loading progress for topic:', topicName);
         
         // Get all problems for this topic
         const problems = await TopicService.getTopicProblems(topicName);
+        console.log(`Found ${problems.length} problems for topic ${topicName}`);
         
         // Get user's progress for these problems
-        const { data: progressData } = await supabase
-          .from('user_problem_progress')
-          .select('problem_id, is_solved')
-          .eq('user_id', user.id)
-          .in('problem_id', problems.map(p => p.leetcode_id));
+        const { data: { user } } = await supabase.auth.getUser();
+        let percentage = 0;
+        
+        if (user) {
+          const { data: progressData } = await supabase
+            .from('user_problem_progress')
+            .select('problem_id, is_solved')
+            .eq('user_id', user.id)
+            .in('problem_id', problems.map(p => p.leetcode_id));
 
-        // Calculate completion percentage
-        const completedProblems = progressData?.filter(p => p.is_solved) || [];
-        const totalProblems = problems.length;
-        const percentage = totalProblems > 0 
-          ? Math.round((completedProblems.length / totalProblems) * 100)
-          : 0;
+          // Calculate completion percentage
+          const completedProblems = progressData?.filter(p => p.is_solved) || [];
+          const totalProblems = problems.length;
+          percentage = totalProblems > 0 
+            ? Math.round((completedProblems.length / totalProblems) * 100)
+            : 0;
+
+          console.log(`Topic ${topicName}: ${completedProblems.length}/${totalProblems} completed (${percentage}%)`);
+        } else {
+          console.log(`Topic ${topicName}: No user found, showing 0% progress`);
+        }
 
         return {
           name: topicName,
           percentage,
-          lastEdited: navItem.visited_at
+          lastEdited: new Date().toISOString() // We'll update this when we have actual visit timestamps
         };
       });
 
@@ -105,26 +106,33 @@ export default function HomeScreen() {
       setTopicsInProgress(allProgress);
     } catch (error) {
       console.error('Error loading topics progress:', error);
+      // Fallback to default topics
+      const defaultTopics = ['Array', 'String', 'LinkedList'].map(topic => ({
+        name: topic,
+        percentage: 0,
+        lastEdited: new Date().toISOString()
+      }));
+      setTopicsInProgress(defaultTopics);
     }
-  };
+  }, []);
 
   const handleTopicClick = async (topicName: string) => {
     console.log('handleTopicClick called with:', topicName);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      console.log('User found:', user?.id);
-      if (user) {
-        // Record the topic navigation
-        console.log('Recording navigation for topic:', topicName);
-        await TopicService.recordTopicNavigation(user.id, topicName);
-        console.log('Navigation recorded successfully');
-      }
+      // Update recent topics using the new service
+      console.log('Updating recent topics for:', topicName);
+      await RecentTopicsService.updateRecentTopics(topicName);
+      console.log('Recent topics updated successfully');
+      
+      // Refresh the recent topics to show the new order
+      await loadTopicsProgress();
+      
       // Navigate to the topic
       console.log('Navigating to topic:', topicName);
       router.push(`/screens/roadmaptopic?topic=${topicName}`);
     } catch (error) {
       console.error('Error handling topic click:', error);
-      // Still navigate even if recording fails
+      // Still navigate even if updating fails
       router.push(`/screens/roadmaptopic?topic=${topicName}`);
     }
   };
@@ -194,7 +202,7 @@ export default function HomeScreen() {
               <CircularProgress percentage={topic.percentage}>
                 <ThemedText>{topic.percentage}%</ThemedText>
               </CircularProgress>
-              <ThemedText>{topic.name}</ThemedText>
+              <ThemedText style={styles.topicProgressName}>{topic.name}</ThemedText>
             </TouchableOpacity>
           ))}
         </View>
@@ -462,5 +470,21 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6564c7',
+  },
+  topicProgressName: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: '#333',
   },
 });

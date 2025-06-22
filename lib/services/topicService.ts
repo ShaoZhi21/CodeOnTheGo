@@ -1,3 +1,4 @@
+import { apiCall } from '@/lib/api-config';
 import { supabase } from '@/lib/supabase';
 
 export interface TopicProblem {
@@ -10,6 +11,7 @@ export interface TopicProblem {
   acceptance_rate: number;
   is_premium: boolean;
   difficulty_order: number;
+  description?: string;
 }
 
 export interface TopicStats {
@@ -102,7 +104,7 @@ export class TopicService {
    */
   static async recordTopicNavigation(userId: string, topicName: string): Promise<void> {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/topic-navigation`, {
+      const response = await apiCall('/api/topic-navigation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +129,7 @@ export class TopicService {
    */
   static async getRecentTopicNavigation(userId: string): Promise<{ topic_name: string; visited_at: string }[]> {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/topic-navigation/${userId}`);
+      const response = await apiCall(`/api/topic-navigation/${userId}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch topic navigation');
