@@ -1,4 +1,4 @@
-import { QuestionActionModal } from '@/components/QuestionActionModal';
+import QuestionActionModal from '@/components/QuestionActionModal';
 import { ThemedText } from '@/components/ThemedText';
 import { TopicProblem, TopicService } from '@/lib/services/topicService';
 import { supabase } from '@/lib/supabase';
@@ -53,8 +53,11 @@ function StarSVG({ size, filled }: { size: number; filled: boolean }) {
 }
 
 export default function RoadmapTopic() {
-  const { topic } = useLocalSearchParams();
-  console.log('RoadmapTopic: topic param =', topic);
+  const params = useLocalSearchParams();
+  const topic = Array.isArray(params.topic) ? params.topic[0] : params.topic;
+  const topicString = typeof topic === 'string' ? topic : '';
+
+  console.log('RoadmapTopic: topic param =', topicString);
   
   const router = useRouter();
   const [questions, setQuestions] = useState<TopicProblemWithProgress[]>([]);
@@ -67,7 +70,7 @@ export default function RoadmapTopic() {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
-  const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Beginner');
+  const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
   console.log('RoadmapTopic: Component initialized');
@@ -75,8 +78,10 @@ export default function RoadmapTopic() {
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      loadTopicData();
-    }, [topic])
+      if (topicString) {
+        loadTopicData();
+      }
+    }, [topicString])
   );
 
   useEffect(() => {
@@ -90,11 +95,16 @@ export default function RoadmapTopic() {
 
   const loadTopicData = async () => {
     console.log('RoadmapTopic: loadTopicData called');
+    if (!topicString) {
+      console.log('RoadmapTopic: Aborting load, no topic string.');
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      console.log('RoadmapTopic: Fetching problems for topic:', topic);
+      console.log('RoadmapTopic: Fetching problems for topic:', topicString);
       
-      const problems = await TopicService.getTopicProblems(topic as string);
+      const problems = await TopicService.getTopicProblems(topicString);
 
       console.log('RoadmapTopic: Problems fetched:', problems?.length || 0);
       console.log('RoadmapTopic: First problem:', problems?.[0]);
@@ -225,9 +235,49 @@ export default function RoadmapTopic() {
   };
 
   const isUnlocked = (q: TopicProblemWithProgress, idx: number) => {
-    if (idx === 0) return true;
-    const prev = questions[idx - 1];
-    return prev?.completed || false;
+    console.log(`🔓 Checking unlock for question ${idx}: ${q.title}`);
+    console.log(`🔓 User skill level: ${userSkillLevel}`);
+    console.log(`🔓 Question difficulty: ${q.difficulty}`);
+    
+    // First question is always unlocked
+    if (idx === 0) {
+      console.log(`🔓 First question - always unlocked`);
+      return true;
+    }
+    
+    // Advanced users: all questions unlocked
+    if (userSkillLevel === 'Advanced') {
+      console.log(`🔓 Advanced user - all unlocked`);
+      return true;
+    }
+    
+    // Level unlocking: previous question must have 3+ stars
+    const previousQuestion = questions[idx - 1];
+    console.log(`🔓 Previous question:`, previousQuestion ? {
+      title: previousQuestion.title,
+      stars: previousQuestion.stars,
+      completed: previousQuestion.completed
+    } : 'null');
+    
+    if (!previousQuestion || (previousQuestion.stars || 0) < 3) {
+      console.log(`🔓 Previous question not cleared (need 3+ stars) - LOCKED`);
+      return false;
+    }
+    
+    console.log(`🔓 Previous question cleared with ${previousQuestion.stars} stars - LEVEL UNLOCKED`);
+    
+    // For Intermediate users, check if Hard questions require all Easy/Medium to be completed
+    if (userSkillLevel === 'Intermediate' && q.difficulty === 'Hard') {
+      const allEasyMediumCompleted = questions
+        .filter(qq => qq.difficulty === 'Easy' || qq.difficulty === 'Medium')
+        .every(qq => (qq.stars || 0) >= 3);
+      console.log(`🔓 Intermediate Hard - all Easy/Medium completed: ${allEasyMediumCompleted}`);
+      return allEasyMediumCompleted;
+    }
+    
+    // All other cases: level is unlocked if previous has 3+ stars
+    console.log(`🔓 Level unlocked - previous question has 3+ stars`);
+    return true;
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -272,8 +322,12 @@ export default function RoadmapTopic() {
               />
             ) : (
               <View style={styles.starsInsideBubble}>
-                {[1, 2, 3].map((star, i) => (
-                  <StarSVG key={star} size={22} filled={filled[i]} />
+                {[1, 2, 3, 4, 5].map((star, i) => (
+                  <Image
+                    key={String(star)}
+                    source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
+                    style={styles.starIcon}
+                  />
                 ))}
               </View>
             )}
@@ -290,7 +344,7 @@ export default function RoadmapTopic() {
     );
   };
 
-  if (loading) {
+  if (loading || !topicString) {
     console.log('RoadmapTopic: Rendering loading state');
     return (
       <SafeAreaView style={styles.container}>
@@ -299,7 +353,7 @@ export default function RoadmapTopic() {
     );
   }
 
-  console.log('RoadmapTopic: Rendering main content, questions count:', questions.length);
+  console.log('RoadmapTopic: Rendering main content, questions count:', questions?.length || 0);
   console.log('RoadmapTopic: Current topicStats being displayed:', topicStats);
   return (
     <SafeAreaView style={styles.container}>
@@ -311,18 +365,18 @@ export default function RoadmapTopic() {
       </View>
 
       <View style={styles.topicHeader}>
-        <ThemedText style={styles.topicTitle}>{topic}</ThemedText>
+        <ThemedText style={styles.topicTitle}>{topicString}</ThemedText>
         {topicStats && (
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <View style={styles.starContainer}>
                 <ThemedText style={styles.starIconText}>★</ThemedText>
-                <ThemedText style={styles.statValue}>{topicStats.total_stars}</ThemedText>
+                <ThemedText style={styles.statValue}>{String(topicStats.total_stars || 0)}</ThemedText>
               </View>
               <ThemedText style={styles.statLabel}>Total Stars</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{topicStats.completion_percentage}%</ThemedText>
+              <ThemedText style={styles.statValue}>{String(topicStats.completion_percentage || 0)}%</ThemedText>
               <ThemedText style={styles.statLabel}>Completed</ThemedText>
             </View>
           </View>
@@ -332,15 +386,15 @@ export default function RoadmapTopic() {
       <ScrollView
         ref={scrollViewRef}
         style={styles.roadmapContainer}
-        contentContainerStyle={[styles.roadmapContent, { minHeight: questions.length * (BUBBLE_SIZE + BUBBLE_VERTICAL_GAP * 2) }]}
+        contentContainerStyle={[styles.roadmapContent, { minHeight: (questions?.length || 0) * (BUBBLE_SIZE + BUBBLE_VERTICAL_GAP * 2) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.verticalPathContainer}>
           {/* Background Path */}
           <View style={styles.backgroundPath}>
             <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-              {[...questions].reverse().map((_, index) => {
-                if (index === questions.length - 1) return null;
+              {(questions || []).map((_, index) => {
+                if (index === (questions?.length || 0) - 1) return null;
                 const startY = (index + 0.5) * (BUBBLE_SIZE + 48); // 48 is the adjusted vertical gap
                 const endY = (index + 1.5) * (BUBBLE_SIZE + 48);
                 const isLeft = index % 2 === 0;
@@ -361,10 +415,10 @@ export default function RoadmapTopic() {
           </View>
 
           {/* Milestones */}
-          {[...questions].reverse().map((question, index) => {
-            const actualIndex = questions.length - 1 - index;
+          {[...(questions || [])].reverse().map((question, index) => {
+            const actualIndex = (questions?.length || 0) - 1 - index;
             const isLeft = index % 2 === 0;
-            const isCurrent = actualIndex === currentQuestionIndex;
+            const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
             const isLocked = !isUnlocked(question, actualIndex);
             const isCompleted = question.stars && question.stars > 0;
             
@@ -378,7 +432,7 @@ export default function RoadmapTopic() {
             if (actualIndex % 4 === 3) icon = chestIcon;
             
             return (
-              <View key={safeLeetcodeId} style={styles.milestoneWrapper}>
+              <View key={String(safeLeetcodeId)} style={styles.milestoneWrapper}>
                 <View style={[
                   styles.milestoneContent,
                   isLeft ? styles.milestoneLeft : styles.milestoneRight
@@ -396,7 +450,7 @@ export default function RoadmapTopic() {
                       numberOfLines={2}
                       ellipsizeMode="tail"
                     >
-                      {decodeHtmlEntities(safeTitle)}
+                      {decodeHtmlEntities(String(safeTitle))}
                     </ThemedText>
                     {/* Difficulty indicator */}
                     <View style={[
@@ -404,14 +458,15 @@ export default function RoadmapTopic() {
                       { backgroundColor: getDifficultyColor(safeDifficulty) }
                     ]}>
                       <ThemedText style={styles.difficultyText}>
-                        {safeDifficulty}
+                        {String(safeDifficulty)}
                       </ThemedText>
                     </View>
                   </View>
 
                   {/* Center Bubble */}
-                  <View style={styles.milestoneCenter}>
-                    <TouchableOpacity 
+                  <View style={{ position: 'relative', alignItems: 'center' }}>
+                    {/* Bubble */}
+                    <TouchableOpacity
                       style={[
                         styles.milestoneIconWrapper,
                         isCurrent && styles.currentMilestone,
@@ -437,16 +492,19 @@ export default function RoadmapTopic() {
                         />
                       )}
                     </TouchableOpacity>
-                    {/* Show stars for completed questions */}
-                    {isCompleted && (
-                      <View style={styles.starsRow}>
-                        {[1, 2, 3].map((star, i) => (
-                          <Image
-                            key={star}
-                            source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
-                            style={styles.starIcon}
-                          />
-                        ))}
+                    {/* Concave stars below bubble: only show if unlocked and completed */}
+                    {isUnlocked(question, actualIndex) && isCompleted && (
+                      <View style={styles.concaveStarsContainer} pointerEvents="none">
+                        {[1, 2, 3, 4, 5].map((star, i) => {
+                          const arcOffsets = [18, 9, 0, 9, 18];
+                          return (
+                            <Image
+                              key={String(star)}
+                              source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
+                              style={[styles.starIcon, { marginBottom: arcOffsets[i] }]}
+                            />
+                          );
+                        })}
                       </View>
                     )}
                   </View>
@@ -464,7 +522,7 @@ export default function RoadmapTopic() {
                       numberOfLines={2}
                       ellipsizeMode="tail"
                     >
-                      {decodeHtmlEntities(safeTitle)}
+                      {decodeHtmlEntities(String(safeTitle))}
                     </ThemedText>
                     {/* Difficulty indicator */}
                     <View style={[
@@ -472,7 +530,7 @@ export default function RoadmapTopic() {
                       { backgroundColor: getDifficultyColor(safeDifficulty) }
                     ]}>
                       <ThemedText style={styles.difficultyText}>
-                        {safeDifficulty}
+                        {String(safeDifficulty)}
                       </ThemedText>
                     </View>
                   </View>
@@ -716,16 +774,22 @@ const styles = StyleSheet.create({
     height: 40,
     resizeMode: 'contain',
   },
-  starsRow: {
+  concaveStarsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 4,
+    alignItems: 'flex-start',
+    position: 'absolute',
+    top: 'auto',
+    bottom: -28,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    pointerEvents: 'none',
   },
   starIcon: {
-    width: 24,
-    height: 24,
-    marginHorizontal: 2,
+    width: 22,
+    height: 22,
+    marginHorizontal: 1,
   },
   milestoneTitle: {
     fontSize: 15,

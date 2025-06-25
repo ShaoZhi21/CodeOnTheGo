@@ -1,0 +1,37 @@
+# CodeOnTheGo Project Rules
+
+## Project Overview
+This is a React Native/Expo app with a Node.js backend that uses:
+- Supabase for database and authentication
+- Google Gemini AI for code analysis and lesson generation
+- Express.js for the backend API
+
+## Backend Structure
+- `backend/src/index.js` - Main server file with API endpoints
+- `backend/src/services/` - Service files for database operations
+- `backend/.env` - Environment variables (GEMINI_API_KEY, SUPABASE_URL, etc.)
+
+## Key Endpoints
+- `/api/analyze` - Code analysis with Gemini AI
+- `/generate-lesson` - Generate educational content
+- `/generate-quiz` - Generate quiz questions
+- `/api/quiz-completion` - Save quiz results
+
+## Database Tables (Supabase)
+- `user_problem_progress` - User progress on problems
+- `user_lesson_completion` - Lesson and quiz completion
+- `user_profiles` - User skill levels and profiles
+- `topics` - Available topics
+- `problems` - LeetCode problems
+
+## Common Issues
+- Backend server not starting (port conflicts, missing dependencies)
+- AI endpoints returning 404 (duplicate routes, missing environment variables)
+- Database connection issues (wrong Supabase credentials)
+
+## MCP Configuration
+Use Supabase MCP to:
+- Query database tables directly
+- Check user progress and lesson completion
+- Verify data integrity
+- Debug authentication issues 

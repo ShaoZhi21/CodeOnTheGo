@@ -9,19 +9,19 @@ import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Professional'>('Beginner');
+  const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const router = useRouter();
 
   const levelDescriptions = {
     Beginner: 'Little to no programming knowledge, have not done or done little leetcode.',
     Intermediate: 'Decent amount of knowledge, can do leetcode easy and medium questions with some assistance.',
-    Professional: 'Lots of knowledge, can do leetcode medium and hard questions.'
+    Advanced: 'Lots of knowledge, can do leetcode medium and hard questions.'
   };
 
   const levelColors = {
     Beginner: '#4CAF50',
     Intermediate: '#FF9800', 
-    Professional: '#F44336'
+    Advanced: '#F44336'
   };
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const updateSkillLevel = async (level: 'Beginner' | 'Intermediate' | 'Professional') => {
+  const updateSkillLevel = async (level: 'Beginner' | 'Intermediate' | 'Advanced') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -124,16 +124,16 @@ export default function ProfileScreen() {
     router.push('/data-privacy');
   };
 
-  const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Professional') => {
+  const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Advanced') => {
     switch(level) {
       case 'Beginner': return 1;
       case 'Intermediate': return 2;
-      case 'Professional': return 3;
+      case 'Advanced': return 3;
       default: return 1;
     }
   };
 
-  const renderLevelButton = (level: 'Beginner' | 'Intermediate' | 'Professional') => (
+  const renderLevelButton = (level: 'Beginner' | 'Intermediate' | 'Advanced') => (
     <TouchableOpacity
       key={level}
               style={[
@@ -290,7 +290,7 @@ export default function ProfileScreen() {
             </ThemedText>
             
             <View style={styles.levelButtons}>
-              {(['Beginner', 'Intermediate', 'Professional'] as const).map(renderLevelButton)}
+              {(['Beginner', 'Intermediate', 'Advanced'] as const).map(renderLevelButton)}
             </View>
             
             {/* Progress Bar */}

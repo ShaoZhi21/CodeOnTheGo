@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-type SkillLevel = 'Beginner' | 'Intermediate' | 'Professional';
+type SkillLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 
 const questions = [
   // Very Simple Logic Questions (1-2)
@@ -110,13 +110,13 @@ export default function OnboardingScreen() {
   const levelDescriptions: Record<SkillLevel, string> = {
     Beginner: 'Little to no programming knowledge, new to coding challenges.',
     Intermediate: 'Some programming experience, can solve basic to moderate problems.',
-    Professional: 'Strong programming background, comfortable with complex algorithms.'
+    Advanced: 'Strong programming background, comfortable with complex algorithms.'
   };
 
   const levelColors: Record<SkillLevel, string> = {
     Beginner: '#4CAF50',
     Intermediate: '#FF9800',
-    Professional: '#F44336'
+    Advanced: '#F44336'
   };
 
   const getDifficultyColor = (difficulty: string) => {
@@ -168,7 +168,7 @@ export default function OnboardingScreen() {
       } else if (correctAnswers <= 5) {
         level = 'Intermediate';
       } else {
-        level = 'Professional';
+        level = 'Advanced';
       }
 
       setSuggestedLevel(level);
@@ -395,7 +395,7 @@ export default function OnboardingScreen() {
         </ThemedText>
 
         <View style={styles.levelOptions}>
-          {['Beginner', 'Intermediate', 'Professional'].map((level) => (
+          {['Beginner', 'Intermediate', 'Advanced'].map((level) => (
             <TouchableOpacity
               key={level}
               style={[

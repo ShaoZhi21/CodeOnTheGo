@@ -1,442 +1,168 @@
-import { QuizModal } from '@/app/components/QuizModal';
+import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
-import {
-    Alert,
-    Dimensions,
-    Image,
-    Modal,
-    StyleSheet,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { ThemedText } from './ThemedText';
+import React from 'react';
+import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface QuestionActionModalProps {
   visible: boolean;
   onClose: () => void;
   questionTitle: string;
   questionId: number;
-  userSkillLevel: 'Beginner' | 'Intermediate' | 'Professional';
+  questionDescription: string;
+  userSkillLevel: 'Beginner' | 'Intermediate' | 'Advanced';
   hasCompletedLesson: boolean;
   questionDifficulty: 'Easy' | 'Medium' | 'Hard';
-  questionDescription: string;
 }
 
-const { width, height } = Dimensions.get('window');
-
-export const QuestionActionModal: React.FC<QuestionActionModalProps> = ({
+export default function QuestionActionModal({
   visible,
   onClose,
   questionTitle,
   questionId,
+  questionDescription,
   userSkillLevel,
   hasCompletedLesson,
-  questionDifficulty,
-  questionDescription,
-}) => {
-  const [showQuiz, setShowQuiz] = useState(false);
+  questionDifficulty
+}: QuestionActionModalProps) {
+  const skillLevels = { 'Beginner': 1, 'Intermediate': 2, 'Advanced': 3 };
+  const difficultyLevels = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
 
-  // Determine if attempt question should be locked based on skill level and lesson completion
-  const shouldLockAttemptQuestion = () => {
-    if (userSkillLevel === 'Professional') return false;
-    if (userSkillLevel === 'Intermediate' && questionDifficulty !== 'Hard') return false;
-    if (userSkillLevel === 'Beginner') return !hasCompletedLesson;
-    return false;
+  const isLessonLocked = () => {
+    if (hasCompletedLesson) return false; // Already completed lessons are never locked
+    return skillLevels[userSkillLevel] < difficultyLevels[questionDifficulty];
   };
 
-  const isAttemptLocked = shouldLockAttemptQuestion();
-  
-  console.log('Modal Debug:', {
-    userSkillLevel,
-    questionDifficulty,
-    hasCompletedLesson,
-    isAttemptLocked,
-    shouldLock: shouldLockAttemptQuestion()
-  });
-
-  const handleQuickQuiz = () => {
-    setShowQuiz(true);
+  const handleLockedLessonPress = () => {
+    Alert.alert(
+      "Lesson Locked",
+      `This lesson requires a skill level of '${questionDifficulty}'. Your current level is '${userSkillLevel}'.\n\nSolve more problems to increase your skill level!`
+    );
   };
 
-  const handleAttemptQuestion = () => {
-    if (isAttemptLocked) {
-      Alert.alert(
-        'Quiz Required',
-        `As a ${userSkillLevel}, you must complete the quiz first before attempting this question.`,
-        [
-          { text: 'OK', style: 'default' },
-          { text: 'Take Quiz', onPress: handleQuickQuiz }
-        ]
-      );
+  const handleViewLesson = () => {
+    if (isLessonLocked()) {
+      handleLockedLessonPress();
       return;
     }
     
+    // Navigate to lesson screen
+    router.push({
+      pathname: '/screens/lesson',
+      params: {
+        questionId: questionId.toString(),
+        questionTitle: questionTitle,
+        questionDescription: questionDescription,
+      },
+    });
     onClose();
+  };
+
+  const handleSolveProblem = () => {
     router.push({
       pathname: '/screens/question',
       params: {
         id: questionId.toString(),
         name: questionTitle,
-        difficulty: questionDifficulty,
+        difficulty: questionDifficulty
       },
     });
+    onClose();
   };
 
-  const handleQuizComplete = (passed: boolean) => {
-    setShowQuiz(false);
-    if (passed) {
-      // Quiz passed, now allow attempting the question
-      onClose();
-      router.push({
-        pathname: '/screens/question',
-        params: {
-          id: questionId.toString(),
-          name: questionTitle,
-          difficulty: questionDifficulty,
-        },
-      });
-    }
-  };
-
-  const getSkillLevelRequirement = () => {
-    switch (userSkillLevel) {
-      case 'Beginner':
-        return 'You must complete the quiz for all questions before attempting them.';
-      case 'Intermediate':
-        return 'You must complete the quiz for Hard questions only.';
-      case 'Professional':
-        return 'No quiz requirements.';
-      default:
-        return '';
-    }
-  };
+  const lessonLocked = isLessonLocked();
+  const lessonButtonText = hasCompletedLesson ? 'Lesson Completed' : (lessonLocked ? `Lesson Locked (${questionDifficulty})` : 'View Lesson');
+  const lessonButtonStyle = hasCompletedLesson
+    ? styles.buttonCompleted
+    : lessonLocked
+    ? styles.buttonLocked
+    : styles.buttonLesson;
 
   return (
-    <>
-      <Modal
-        visible={visible && !showQuiz}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.header}>
-              <ThemedText style={styles.title}>Choose Action</ThemedText>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <ThemedText style={styles.closeButtonText}>✕</ThemedText>
-              </TouchableOpacity>
-            </View>
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <View style={styles.centeredView}>
+        <View style={styles.modalView}>
+          <ThemedText style={styles.modalTitle}>{questionTitle}</ThemedText>
+          
+          <TouchableOpacity 
+            style={[styles.button, lessonButtonStyle]} 
+            onPress={handleViewLesson}
+          >
+            <Text style={styles.textStyle}>{lessonButtonText}</Text>
+          </TouchableOpacity>
 
-            {/* Question Info */}
-            <View style={styles.questionInfo}>
-              <ThemedText style={styles.questionTitle} numberOfLines={2}>
-                {questionTitle}
-              </ThemedText>
-              <View style={styles.difficultyContainer}>
-                <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(questionDifficulty) }]}>
-                  <ThemedText style={styles.difficultyText}>{questionDifficulty}</ThemedText>
-                </View>
-              </View>
-            </View>
-
-            {/* Skill Level Info */}
-            <View style={styles.skillLevelInfo}>
-              <ThemedText style={styles.skillLevelTitle}>Your Skill Level: {userSkillLevel}</ThemedText>
-              <ThemedText style={styles.requirementText}>{getSkillLevelRequirement()}</ThemedText>
-              {isAttemptLocked && (
-                <View style={styles.lockWarning}>
-                  <ThemedText style={styles.lockWarningText}>⚠️ Quiz Required</ThemedText>
-                </View>
-              )}
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.actionButtons}>
-              {/* Quick Quiz Button */}
-              <TouchableOpacity
-                style={[styles.actionButton, styles.quickQuizButton]}
-                onPress={handleQuickQuiz}
-              >
-                <View style={styles.buttonContent}>
-                  <ThemedText style={styles.buttonIcon}>📚</ThemedText>
-                  <View style={styles.buttonTextContainer}>
-                    <ThemedText style={styles.buttonTitle}>Quick Quiz</ThemedText>
-                    <ThemedText style={styles.buttonSubtitle}>
-                      3 questions to help you understand the approach
-                    </ThemedText>
-                  </View>
-                </View>
-              </TouchableOpacity>
-
-              {/* Attempt Question Button */}
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.attemptButton,
-                  isAttemptLocked && styles.lockedButton
-                ]}
-                onPress={handleAttemptQuestion}
-                disabled={isAttemptLocked}
-              >
-                <View style={styles.buttonContent}>
-                  {isAttemptLocked ? (
-                    <Image
-                      source={require('@/assets/images/icons/lock-icon.png')}
-                      style={styles.lockIcon}
-                    />
-                  ) : (
-                    <ThemedText style={styles.buttonIcon}>💻</ThemedText>
-                  )}
-                  <View style={styles.buttonTextContainer}>
-                    <ThemedText style={[
-                      styles.buttonTitle,
-                      isAttemptLocked && styles.lockedText
-                    ]}>
-                      {isAttemptLocked ? 'LOCKED - Attempt Question' : 'Attempt Question'}
-                    </ThemedText>
-                    <ThemedText style={[
-                      styles.buttonSubtitle,
-                      isAttemptLocked && styles.lockedText
-                    ]}>
-                      {isAttemptLocked 
-                        ? 'Complete the quiz first' 
-                        : 'Start solving the problem'
-                      }
-                    </ThemedText>
-                  </View>
-                  {isAttemptLocked && (
-                    <View style={styles.lockIndicator}>
-                      <Image
-                        source={require('@/assets/images/icons/lock-icon.png')}
-                        style={styles.smallLockIcon}
-                      />
-                      <ThemedText style={styles.lockText}> LOCKED</ThemedText>
-                    </View>
-                  )}
-                </View>
-                
-                {/* Lock overlay for more prominent visual */}
-                {isAttemptLocked && (
-                  <View style={styles.lockOverlay}>
-                    <Image
-                      source={require('@/assets/images/icons/lock-icon.png')}
-                      style={styles.lockOverlayIcon}
-                    />
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+          <TouchableOpacity style={[styles.button, styles.buttonSolve]} onPress={handleSolveProblem}>
+            <Text style={styles.textStyle}>Solve Problem</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={[styles.button, styles.buttonClose]} onPress={onClose}>
+            <Text style={styles.textStyle}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
-
-      {/* Quiz Modal */}
-      <QuizModal
-        visible={showQuiz}
-        onClose={() => setShowQuiz(false)}
-        problemId={questionId}
-        questionTitle={questionTitle}
-        questionDescription={questionDescription}
-        onQuizComplete={handleQuizComplete}
-      />
-    </>
+      </View>
+    </Modal>
   );
-};
-
-const getDifficultyColor = (difficulty: string) => {
-  switch (difficulty) {
-    case 'Easy':
-      return '#22C55E';
-    case 'Medium':
-      return '#F59E0B';
-    case 'Hard':
-      return '#EF4444';
-    default:
-      return '#6B7280';
-  }
-};
+}
 
 const styles = StyleSheet.create({
-  overlay: {
+  centeredView: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
-  modalContainer: {
-    backgroundColor: '#F4EEFF',
-    borderRadius: 20,
-    padding: 24,
-    width: width * 0.9,
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#1F2937',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 18,
-    color: '#6B7280',
-    fontWeight: 'bold',
-  },
-  questionInfo: {
-    marginBottom: 20,
-  },
-  questionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  difficultyContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-  },
-  difficultyBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  difficultyText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  skillLevelInfo: {
-    backgroundColor: '#E0E7FF',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-  },
-  skillLevelTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#3730A3',
-    marginBottom: 4,
-  },
-  requirementText: {
-    fontSize: 14,
-    color: '#6366F1',
-    lineHeight: 20,
-  },
-  actionButtons: {
-    gap: 16,
-  },
-  actionButton: {
+  modalView: {
+    margin: 20,
     backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-  },
-  quickQuizButton: {
-    borderColor: '#8B5CF6',
-  },
-  attemptButton: {
-    borderColor: '#10B981',
-  },
-  lockedButton: {
-    borderColor: '#EF4444',
-    backgroundColor: '#FEF2F2',
-    opacity: 0.8,
-    borderWidth: 3,
-  },
-  buttonContent: {
-    flexDirection: 'row',
+    borderRadius: 20,
+    padding: 35,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    width: '80%',
   },
-  buttonIcon: {
-    fontSize: 24,
-    marginRight: 16,
-  },
-  buttonTextContainer: {
-    flex: 1,
-  },
-  buttonTitle: {
+  modalTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  buttonSubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 18,
-  },
-  lockedText: {
-    color: '#EF4444',
     fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
   },
-  lockIndicator: {
-    backgroundColor: '#EF4444',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#DC2626',
+  button: {
+    borderRadius: 10,
+    padding: 10,
+    elevation: 2,
+    marginBottom: 10,
+    width: '100%',
   },
-  lockText: {
+  buttonLesson: {
+    backgroundColor: '#2196F3',
+  },
+  buttonCompleted: {
+    backgroundColor: '#4CAF50',
+  },
+  buttonLocked: {
+    backgroundColor: '#9E9E9E', // Grey color for locked state
+  },
+  buttonSolve: {
+    backgroundColor: '#FFC107',
+  },
+  buttonClose: {
+    backgroundColor: '#f44336',
+    marginTop: 10,
+  },
+  textStyle: {
     color: 'white',
-    fontSize: 12,
     fontWeight: 'bold',
-  },
-  lockOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(239, 68, 68, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#EF4444',
-  },
-  lockOverlayIcon: {
-    width: 48,
-    height: 48,
-  },
-  lockWarning: {
-    backgroundColor: '#EF4444',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  lockWarningText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  lockIcon: {
-    width: 24,
-    height: 24,
-  },
-  smallLockIcon: {
-    width: 16,
-    height: 16,
+    textAlign: 'center',
   },
 }); 
