@@ -12,6 +12,8 @@ interface QuestionActionModalProps {
   userSkillLevel: 'Beginner' | 'Intermediate' | 'Advanced';
   hasCompletedLesson: boolean;
   questionDifficulty: 'Easy' | 'Medium' | 'Hard';
+  isLessonRequired: boolean;
+  isQuestionSolved: boolean;
 }
 
 export default function QuestionActionModal({
@@ -22,29 +24,11 @@ export default function QuestionActionModal({
   questionDescription,
   userSkillLevel,
   hasCompletedLesson,
-  questionDifficulty
+  questionDifficulty,
+  isLessonRequired,
+  isQuestionSolved
 }: QuestionActionModalProps) {
-  const skillLevels = { 'Beginner': 1, 'Intermediate': 2, 'Advanced': 3 };
-  const difficultyLevels = { 'Easy': 1, 'Medium': 2, 'Hard': 3 };
-
-  const isLessonLocked = () => {
-    if (hasCompletedLesson) return false; // Already completed lessons are never locked
-    return skillLevels[userSkillLevel] < difficultyLevels[questionDifficulty];
-  };
-
-  const handleLockedLessonPress = () => {
-    Alert.alert(
-      "Lesson Locked",
-      `This lesson requires a skill level of '${questionDifficulty}'. Your current level is '${userSkillLevel}'.\n\nSolve more problems to increase your skill level!`
-    );
-  };
-
   const handleViewLesson = () => {
-    if (isLessonLocked()) {
-      handleLockedLessonPress();
-      return;
-    }
-    
     // Navigate to lesson screen
     router.push({
       pathname: '/screens/lesson',
@@ -58,6 +42,15 @@ export default function QuestionActionModal({
   };
 
   const handleSolveProblem = () => {
+    // Check if lesson is required but not completed
+    if (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) {
+      Alert.alert(
+        "Lesson Required",
+        "You must complete the lesson before attempting this question."
+      );
+      return;
+    }
+    
     router.push({
       pathname: '/screens/question',
       params: {
@@ -69,13 +62,16 @@ export default function QuestionActionModal({
     onClose();
   };
 
-  const lessonLocked = isLessonLocked();
-  const lessonButtonText = hasCompletedLesson ? 'Lesson Completed' : (lessonLocked ? `Lesson Locked (${questionDifficulty})` : 'View Lesson');
-  const lessonButtonStyle = hasCompletedLesson
-    ? styles.buttonCompleted
-    : lessonLocked
-    ? styles.buttonLocked
-    : styles.buttonLesson;
+  const lessonButtonText = hasCompletedLesson ? 'Lesson Completed ✓' : 'Learn skills!';
+  const lessonButtonStyle = hasCompletedLesson ? styles.buttonCompleted : styles.buttonLesson;
+  
+  // If question is solved (3+ stars), both buttons should be unlocked
+  const attemptButtonText = (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) 
+    ? 'Attempt Question! (Locked)' 
+    : 'Attempt Question!';
+  const attemptButtonStyle = (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) 
+    ? styles.buttonLocked 
+    : styles.buttonSolve;
 
   return (
     <Modal
@@ -95,8 +91,8 @@ export default function QuestionActionModal({
             <Text style={styles.textStyle}>{lessonButtonText}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.button, styles.buttonSolve]} onPress={handleSolveProblem}>
-            <Text style={styles.textStyle}>Solve Problem</Text>
+          <TouchableOpacity style={[styles.button, attemptButtonStyle]} onPress={handleSolveProblem}>
+            <Text style={styles.textStyle}>{attemptButtonText}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity style={[styles.button, styles.buttonClose]} onPress={onClose}>

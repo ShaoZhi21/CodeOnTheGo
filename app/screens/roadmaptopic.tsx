@@ -245,13 +245,7 @@ export default function RoadmapTopic() {
       return true;
     }
     
-    // Advanced users: all questions unlocked
-    if (userSkillLevel === 'Advanced') {
-      console.log(`🔓 Advanced user - all unlocked`);
-      return true;
-    }
-    
-    // Level unlocking: previous question must have 3+ stars
+    // Level unlocking: previous question must have 3+ stars (out of 5) for ALL users
     const previousQuestion = questions[idx - 1];
     console.log(`🔓 Previous question:`, previousQuestion ? {
       title: previousQuestion.title,
@@ -265,18 +259,32 @@ export default function RoadmapTopic() {
     }
     
     console.log(`🔓 Previous question cleared with ${previousQuestion.stars} stars - LEVEL UNLOCKED`);
-    
-    // For Intermediate users, check if Hard questions require all Easy/Medium to be completed
-    if (userSkillLevel === 'Intermediate' && q.difficulty === 'Hard') {
-      const allEasyMediumCompleted = questions
-        .filter(qq => qq.difficulty === 'Easy' || qq.difficulty === 'Medium')
-        .every(qq => (qq.stars || 0) >= 3);
-      console.log(`🔓 Intermediate Hard - all Easy/Medium completed: ${allEasyMediumCompleted}`);
-      return allEasyMediumCompleted;
+    return true;
+  };
+
+  // Check if lesson is required before attempting the problem
+  const isLessonRequired = (q: TopicProblemWithProgress) => {
+    // If question is already solved (3+ stars), no lesson required
+    if (q.stars && q.stars >= 3) {
+      return false;
     }
     
-    // All other cases: level is unlocked if previous has 3+ stars
-    console.log(`🔓 Level unlocked - previous question has 3+ stars`);
+    // Beginner: Must complete lesson before attempting any problem
+    if (userSkillLevel === 'Beginner') {
+      return true;
+    }
+    
+    // Intermediate: Must complete lesson for Medium and Hard problems
+    if (userSkillLevel === 'Intermediate') {
+      return q.difficulty === 'Medium' || q.difficulty === 'Hard';
+    }
+    
+    // Advanced: No lesson required, can attempt problems directly
+    if (userSkillLevel === 'Advanced') {
+      return false;
+    }
+    
+    // Default to requiring lesson
     return true;
   };
 
@@ -290,55 +298,130 @@ export default function RoadmapTopic() {
   };
 
   const renderRoadmapItem = (question: TopicProblemWithProgress, index: number) => {
-    const isLocked = index > 0 && !questions[index - 1].completed;
-    const isCompleted = question.completed;
-    const stars = question.stars || 0;
-    const isLeft = index % 2 === 0;
-    const bubbleAlignStyle = isLeft ? styles.bubbleLeft : styles.bubbleRight;
-
-    // Determine which stars are filled
-    const filled = [false, false, false];
-    if (isCompleted) {
-      for (let i = 0; i < stars; i++) filled[i] = true;
+    // Safety check: ensure question is valid
+    if (!question || !question.leetcode_id) {
+      console.warn('RoadmapTopic: Skipping invalid question:', question);
+      return null;
     }
-
+    
+    const actualIndex = (questions?.length || 0) - 1 - index;
+    const isLeft = index % 2 === 0;
+    const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
+    const isLocked = !isUnlocked(question, actualIndex);
+    const isCompleted = question.stars && question.stars > 0;
+    
+    // Safety checks for all properties with proper string conversion
+    const safeTitle = String(question.title || 'Untitled Problem');
+    const safeDifficulty = String(question.difficulty || 'Easy');
+    const safeLeetcodeId = question.leetcode_id || 0;
+    
+    let icon = coinIcon;
+    if (actualIndex % 4 === 1) icon = bookIcon;
+    if (actualIndex % 4 === 3) icon = chestIcon;
+    
     return (
-      <View key={question.leetcode_id} style={[styles.roadmapItem]}>
-        <View style={bubbleAlignStyle}>
-          <TouchableOpacity
-            style={[
-              styles.questionCard,
-              isLocked && styles.lockedCard,
-              isCompleted && styles.completedCard,
-            ]}
-            onPress={() => handleQuestionPress(question, index)}
-            disabled={isLocked}
-            activeOpacity={isLocked ? 1 : 0.7}
-          >
-            {isLocked ? (
-              <Image
-                source={require('@/assets/images/icons/lock-icon.png')}
-                style={styles.lockIcon}
-              />
-            ) : (
-              <View style={styles.starsInsideBubble}>
-                {[1, 2, 3, 4, 5].map((star, i) => (
-                  <Image
-                    key={String(star)}
-                    source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
-                    style={styles.starIcon}
-                  />
-                ))}
+      <View key={String(safeLeetcodeId)} style={styles.milestoneWrapper}>
+        <View style={[
+          styles.milestoneContent,
+          isLeft ? styles.milestoneLeft : styles.milestoneRight
+        ]}>
+          {/* Left Text Container */}
+          <View style={[
+            styles.textContainer,
+            isLeft ? styles.textLeft : styles.textHidden
+          ]}>
+            <ThemedText 
+              style={[
+                styles.milestoneTitle,
+                isLocked && styles.lockedText
+              ]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {decodeHtmlEntities(safeTitle)}
+            </ThemedText>
+            {/* Difficulty indicator */}
+            <View style={[
+              styles.difficultyBadge,
+              { backgroundColor: getDifficultyColor(safeDifficulty) }
+            ]}>
+              <ThemedText style={styles.difficultyText}>
+                {safeDifficulty}
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* Center Bubble */}
+          <View style={{ position: 'relative', alignItems: 'center' }}>
+            {/* Bubble */}
+            <TouchableOpacity
+              style={[
+                styles.milestoneIconWrapper,
+                isCurrent && styles.currentMilestone,
+                isLocked && styles.lockedMilestone
+              ]}
+              onPress={() => handleQuestionPress(question, actualIndex)}
+              disabled={isLocked}
+            >
+              {isLocked ? (
+                <Image 
+                  source={require('@/assets/images/icons/lock-icon.png')} 
+                  style={[styles.lockIcon, { tintColor: '#fff' }]} 
+                />
+              ) : isCurrent ? (
+                <Image source={mascotIcon} style={styles.mascotIcon} />
+              ) : (
+                <Image 
+                  source={icon} 
+                  style={[
+                    styles.milestoneIcon,
+                    isLocked && { tintColor: '#fff' }
+                  ]} 
+                />
+              )}
+            </TouchableOpacity>
+            {/* Concave stars below bubble: only show if unlocked and completed */}
+            {isUnlocked(question, actualIndex) && isCompleted && (
+              <View style={styles.concaveStarsContainer} pointerEvents="none">
+                {[1, 2, 3, 4, 5].map((star, i) => {
+                  const arcOffsets = [18, 9, 0, 9, 18];
+                  return (
+                    <Image
+                      key={String(star)}
+                      source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
+                      style={[styles.starIcon, { marginBottom: arcOffsets[i] }]}
+                    />
+                  );
+                })}
               </View>
             )}
-          </TouchableOpacity>
-          <ThemedText
-            style={styles.questionTitleBelow}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
-            {decodeHtmlEntities(question.title || 'Untitled Problem')}
-          </ThemedText>
+          </View>
+
+          {/* Right Text Container */}
+          <View style={[
+            styles.textContainer,
+            !isLeft ? styles.textRight : styles.textHidden
+          ]}>
+            <ThemedText 
+              style={[
+                styles.milestoneTitle,
+                isLocked && styles.lockedText
+              ]}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {decodeHtmlEntities(safeTitle)}
+            </ThemedText>
+            {/* Difficulty indicator */}
+            <View style={[
+              styles.difficultyBadge,
+              { backgroundColor: getDifficultyColor(safeDifficulty) }
+            ]}>
+              <ThemedText style={styles.difficultyText}>
+                {safeDifficulty}
+              </ThemedText>
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -355,6 +438,27 @@ export default function RoadmapTopic() {
 
   console.log('RoadmapTopic: Rendering main content, questions count:', questions?.length || 0);
   console.log('RoadmapTopic: Current topicStats being displayed:', topicStats);
+  
+  // Safety check: if no questions, show empty state
+  if (!questions || questions.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+            <ThemedText>Back</ThemedText>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.topicHeader}>
+          <ThemedText style={styles.topicTitle}>{topicString}</ThemedText>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ThemedText>No problems found for this topic.</ThemedText>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -416,127 +520,7 @@ export default function RoadmapTopic() {
 
           {/* Milestones */}
           {[...(questions || [])].reverse().map((question, index) => {
-            const actualIndex = (questions?.length || 0) - 1 - index;
-            const isLeft = index % 2 === 0;
-            const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
-            const isLocked = !isUnlocked(question, actualIndex);
-            const isCompleted = question.stars && question.stars > 0;
-            
-            // Safety checks for all properties
-            const safeTitle = question.title || 'Untitled Problem';
-            const safeDifficulty = question.difficulty || 'Easy';
-            const safeLeetcodeId = question.leetcode_id || 0;
-            
-            let icon = coinIcon;
-            if (actualIndex % 4 === 1) icon = bookIcon;
-            if (actualIndex % 4 === 3) icon = chestIcon;
-            
-            return (
-              <View key={String(safeLeetcodeId)} style={styles.milestoneWrapper}>
-                <View style={[
-                  styles.milestoneContent,
-                  isLeft ? styles.milestoneLeft : styles.milestoneRight
-                ]}>
-                  {/* Left Text Container */}
-                  <View style={[
-                    styles.textContainer,
-                    isLeft ? styles.textLeft : styles.textHidden
-                  ]}>
-                    <ThemedText 
-                      style={[
-                        styles.milestoneTitle,
-                        isLocked && styles.lockedText
-                      ]}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {decodeHtmlEntities(String(safeTitle))}
-                    </ThemedText>
-                    {/* Difficulty indicator */}
-                    <View style={[
-                      styles.difficultyBadge,
-                      { backgroundColor: getDifficultyColor(safeDifficulty) }
-                    ]}>
-                      <ThemedText style={styles.difficultyText}>
-                        {String(safeDifficulty)}
-                      </ThemedText>
-                    </View>
-                  </View>
-
-                  {/* Center Bubble */}
-                  <View style={{ position: 'relative', alignItems: 'center' }}>
-                    {/* Bubble */}
-                    <TouchableOpacity
-                      style={[
-                        styles.milestoneIconWrapper,
-                        isCurrent && styles.currentMilestone,
-                        isLocked && styles.lockedMilestone
-                      ]}
-                      onPress={() => handleQuestionPress(question, actualIndex)}
-                      disabled={isLocked}
-                    >
-                      {isLocked ? (
-                        <Image 
-                          source={require('@/assets/images/icons/lock-icon.png')} 
-                          style={[styles.lockIcon, { tintColor: '#fff' }]} 
-                        />
-                      ) : isCurrent ? (
-                        <Image source={mascotIcon} style={styles.mascotIcon} />
-                      ) : (
-                        <Image 
-                          source={icon} 
-                          style={[
-                            styles.milestoneIcon,
-                            isLocked && { tintColor: '#fff' }
-                          ]} 
-                        />
-                      )}
-                    </TouchableOpacity>
-                    {/* Concave stars below bubble: only show if unlocked and completed */}
-                    {isUnlocked(question, actualIndex) && isCompleted && (
-                      <View style={styles.concaveStarsContainer} pointerEvents="none">
-                        {[1, 2, 3, 4, 5].map((star, i) => {
-                          const arcOffsets = [18, 9, 0, 9, 18];
-                          return (
-                            <Image
-                              key={String(star)}
-                              source={i < (question.stars || 0) ? starIcon : emptyStarIcon}
-                              style={[styles.starIcon, { marginBottom: arcOffsets[i] }]}
-                            />
-                          );
-                        })}
-                      </View>
-                    )}
-                  </View>
-
-                  {/* Right Text Container */}
-                  <View style={[
-                    styles.textContainer,
-                    !isLeft ? styles.textRight : styles.textHidden
-                  ]}>
-                    <ThemedText 
-                      style={[
-                        styles.milestoneTitle,
-                        isLocked && styles.lockedText
-                      ]}
-                      numberOfLines={2}
-                      ellipsizeMode="tail"
-                    >
-                      {decodeHtmlEntities(String(safeTitle))}
-                    </ThemedText>
-                    {/* Difficulty indicator */}
-                    <View style={[
-                      styles.difficultyBadge,
-                      { backgroundColor: getDifficultyColor(safeDifficulty) }
-                    ]}>
-                      <ThemedText style={styles.difficultyText}>
-                        {String(safeDifficulty)}
-                      </ThemedText>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            );
+            return renderRoadmapItem(question, index);
           })}
         </View>
       </ScrollView>
@@ -546,12 +530,14 @@ export default function RoadmapTopic() {
         <QuestionActionModal
           visible={modalVisible}
           onClose={handleCloseModal}
-          questionTitle={decodeHtmlEntities(selectedQuestion.title || 'Untitled Problem')}
+          questionTitle={decodeHtmlEntities(String(selectedQuestion.title || 'Untitled Problem'))}
           questionId={selectedQuestion.leetcode_id || 0}
           userSkillLevel={userSkillLevel}
           hasCompletedLesson={lessonProgress[selectedQuestion.leetcode_id || 0] || false}
-          questionDifficulty={selectedQuestion.difficulty || 'Easy'}
-          questionDescription={selectedQuestion.description || `Solve the problem: ${decodeHtmlEntities(selectedQuestion.title || 'Untitled Problem')}`}
+          questionDifficulty={(selectedQuestion.difficulty || 'Easy') as 'Easy' | 'Medium' | 'Hard'}
+          questionDescription={String(selectedQuestion.description || `Solve the problem: ${decodeHtmlEntities(String(selectedQuestion.title || 'Untitled Problem'))}`)}
+          isLessonRequired={isLessonRequired(selectedQuestion)}
+          isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
         />
       )}
     </SafeAreaView>
