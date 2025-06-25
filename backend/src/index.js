@@ -444,85 +444,6 @@ Return only the two-line response as shown above, nothing else.`;
   }
 });
 
-// Function signature analysis endpoint
-app.post('/api/analyze-function-signature', async (req, res) => {
-  try {
-    const { title, description, examples } = req.body;
-    
-    console.log('🔍 Analyzing function signature for:', title);
-    
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required' });
-    }
-
-    const prompt = `You are a programming expert. Analyze this coding problem and determine the exact function signature needed.
-
-PROBLEM TITLE: ${title}
-
-PROBLEM DESCRIPTION: ${description}
-
-EXAMPLES: ${examples ? JSON.stringify(examples) : 'No examples provided'}
-
-Based on this problem, determine:
-1. The exact function name (use standard LeetCode naming conventions)
-2. The parameter names and types
-3. The return type
-4. Sample input parsing format
-
-Respond in this JSON format:
-{
-  "functionName": "twoSum",
-  "parameters": [
-    {"name": "nums", "type": "array"},
-    {"name": "target", "type": "number"}
-  ],
-  "returnType": "array",
-  "inputFormat": "nums = [2,7,11,15], target = 9",
-  "sampleCall": "twoSum(nums, target)"
-}
-
-Common function names:
-- Two Sum: twoSum
-- Valid Parentheses: isValid
-- Single Number: singleNumber
-- Palindrome: isPalindrome
-- Merge Two Lists: mergeTwoLists
-- etc.`;
-
-    const result = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-    
-    console.log('🔍 Function signature analysis response:', text);
-    
-    // Try to parse JSON response
-    let signatureData;
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        signatureData = JSON.parse(jsonMatch[0]);
-        console.log('🔍 Parsed signature data:', signatureData);
-      } else {
-        throw new Error('No JSON found in response');
-      }
-    } catch (parseError) {
-      console.log('🔍 Failed to parse signature JSON, using fallback');
-      signatureData = {
-        functionName: 'solution',
-        parameters: [{"name": "input", "type": "any"}],
-        returnType: 'any',
-        inputFormat: 'input data',
-        sampleCall: 'solution(input)'
-      };
-    }
-
-    res.json(signatureData);
-
-  } catch (error) {
-    console.error('Error analyzing function signature:', error);
-    res.status(500).json({ error: 'Failed to analyze function signature' });
-  }
-});
 
 // Code execution endpoint using Gemini AI
 app.post('/api/execute-code', async (req, res) => {
@@ -722,6 +643,407 @@ Respond in this JSON format:
   } catch (error) {
     console.error('Error in code execution:', error);
     res.status(500).json({ error: 'Failed to execute code' });
+  }
+});
+
+// MCQ generation endpoint for pseudocode lines
+app.post('/api/generate-mcq', async (req, res) => {
+  try {
+    const { pseudocodeLine, language, context, nextStep, problemTitle, problemDescription } = req.body;
+    
+    if (!pseudocodeLine || !language) {
+      return res.status(400).json({ error: 'Pseudocode line and language are required' });
+    }
+
+    console.log('Generating MCQ for pseudocode line:', pseudocodeLine);
+    console.log('Language:', language);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are a coding education expert. Create multiple choice questions to help users learn how to convert pseudocode to actual code.",
+    });
+    
+    const prompt = `You are a coding education expert creating MCQ questions that map pseudocode to real code solutions.
+
+PROBLEM: "${problemTitle || 'Programming Problem'}"
+${problemDescription ? `DESCRIPTION: ${problemDescription.replace(/<[^>]*>/g, '').substring(0, 500)}...` : ''}
+
+USER'S PSEUDOCODE STEP: "${pseudocodeLine}"
+TARGET LANGUAGE: ${language}
+${context ? `CONTEXT: ${context}` : ''}
+${nextStep ? `NEXT STEP: "${nextStep}"` : ''}
+
+CRITICAL INSTRUCTION: You MUST follow this exact process to ensure the MCQ matches the user's pseudocode:
+
+STEP 1: ANALYZE USER'S PSEUDOCODE
+Carefully read and understand what the user's pseudocode step "${pseudocodeLine}" is trying to accomplish:
+- What is the specific action or operation described?
+- What data structures or variables are mentioned?
+- What is the intent behind this step?
+- Is this step logically correct for solving the problem?
+
+STEP 2: GENERATE MATCHING SOLUTION
+Create a ${language} code solution that DIRECTLY implements the user's pseudocode step as written:
+- If the user's pseudocode mentions specific approaches (e.g., "use hash map", "sort array"), use exactly those approaches
+- If the user's pseudocode uses specific variable names, try to match them
+- If the user's pseudocode describes a specific algorithm step, implement that exact step
+- The code MUST be a faithful translation of what the user wrote, even if it's not the most optimal approach
+- Do NOT assume or add steps the user didn't mention
+- Do NOT optimize beyond what the user described
+
+CRITICAL FORMATTING REQUIREMENTS:
+- Use proper indentation (4 spaces) for nested code blocks
+- Format control structures clearly with proper line breaks
+- Ensure all MCQ options have consistent, readable formatting
+- Use \\n for line breaks and proper spacing within code blocks
+- Make multi-line code easy to read and understand
+
+STEP 3: CREATE REALISTIC VARIATIONS
+Generate 3 incorrect variations with OBVIOUS and DISTINCT differences:
+- Variation 1: Clear syntax error (wrong operators like = vs ==, missing semicolons, bracket mismatches)
+- Variation 2: Obvious logic error (wrong data type, incorrect method name, wrong variable)
+- Variation 3: Different approach entirely (using different data structure or completely different logic)
+
+MAKE DIFFERENCES OBVIOUS:
+- Each option should be clearly distinguishable at first glance
+- Use different variable names, operators, or data structures between options
+- Avoid subtle differences that require careful examination
+- Make errors that beginners would easily spot as wrong
+
+STEP 4: VALIDATE MATCH
+Ensure the correct answer truly represents what the user's pseudocode describes:
+- Does it implement the exact operation mentioned?
+- Does it use the same approach/data structure the user specified?
+- Would someone reading the user's pseudocode expect this code?
+
+NESTING CONSISTENCY RULES:
+${nextStep ? `Since the next step is "${nextStep}":
+- IF the current pseudocode creates a control structure (if/while/for) that would contain the next step, ALL OPTIONS must include "(next pseudocode here)" placeholder INSIDE the block
+- IF the current and next steps are SEQUENTIAL operations, NO OPTIONS should have any placeholder
+- CRITICAL: Be consistent across ALL 4 options - either ALL have the placeholder or NONE do
+- Example: "for each element in array" → ALL options: "for (...) {\\n    (next pseudocode here)\\n}"
+- Example: "initialize sum to zero" → ALL options: just the initialization, no placeholder` : 'This appears to be a standalone step without nesting requirements.'}
+
+LANGUAGE-SPECIFIC FORMATTING RULES:
+
+For ${language}:
+${language === 'JavaScript' ? `
+- Use proper brace placement: "if (condition) {\\n    code\\n}"
+- Use 4-space indentation for nested blocks
+- Include semicolons where appropriate
+- Use proper spacing around operators: "i < arr.length"
+- Format multi-line structures clearly` : 
+language === 'Python' ? `
+- Use proper indentation (4 spaces) for nested blocks
+- No braces needed: "if condition:\\n    code"
+- Use proper spacing around operators: "i < len(arr)"
+- Format multi-line structures with consistent indentation` :
+language === 'Java' ? `
+- Use proper brace placement: "if (condition) {\\n    code\\n}"
+- Use 4-space indentation for nested blocks
+- Include semicolons for statements
+- Use proper spacing around operators
+- Format multi-line structures clearly` : `
+- Use language-appropriate formatting conventions
+- Ensure proper indentation for nested structures
+- Use consistent spacing and line breaks`}
+
+QUALITY REQUIREMENTS:
+1. The correct answer MUST directly implement what the user's pseudocode describes
+2. Do NOT create "better" or "more optimal" solutions than what the user described
+3. If the user's pseudocode is inefficient or suboptimal, implement it as described
+4. All options should look plausible but only the correct one should match the user's intent
+5. Use variable names and approaches that align with the user's pseudocode
+6. Avoid artificial patterns like single-iteration loops unless the user's pseudocode specifically describes such patterns
+
+EXAMPLES OF OBVIOUS DIFFERENCES:
+
+Example 1 - "create hash map to store numbers and their indices":
+✓ Correct: "let map = new Map();"
+✗ Wrong A: "let map = new Set();" (wrong data structure - Set vs Map)
+✗ Wrong B: "let map = [];" (completely wrong - array instead of map)  
+✗ Wrong C: "let map = new Map;" (syntax error - missing parentheses)
+
+Example 2 - "initialize counter to zero":
+✓ Correct: "let counter = 0;"
+✗ Wrong A: "let counter == 0;" (wrong operator - comparison instead of assignment)
+✗ Wrong B: "let count = 0;" (wrong variable name - count vs counter)
+✗ Wrong C: "counter = 0;" (missing declaration keyword)
+
+Example 3 - "for each element in array" (with next step):
+✓ Correct: "for (let i = 0; i < arr.length; i++) {\\n    (next pseudocode here)\\n}"
+✗ Wrong A: "for (let i = 1; i <= arr.length; i++) {\\n    (next pseudocode here)\\n}" (off-by-one error)
+✗ Wrong B: "for (let element of arr) {\\n    (next pseudocode here)\\n}" (different loop style)
+✗ Wrong C: "while (i < arr.length) {\\n    (next pseudocode here)\\n}" (wrong loop type)
+
+Example 4 - "if current element equals target" (with next step):
+✓ Correct: "if (arr[i] === target) {\\n    (next pseudocode here)\\n}"
+✗ Wrong A: "if (arr[i] == target) {\\n    (next pseudocode here)\\n}" (wrong equality operator)
+✗ Wrong B: "if arr[i] === target {\\n    (next pseudocode here)\\n}" (missing parentheses)
+✗ Wrong C: "if (arr[i] = target) {\\n    (next pseudocode here)\\n}" (assignment instead of comparison)
+
+Example 5 - Complex nested structure "for each element, if element is even":
+✓ Correct: "for (let i = 0; i < arr.length; i++) {\\n    if (arr[i] % 2 === 0) {\\n        (next pseudocode here)\\n    }\\n}"
+✗ Wrong A: "for (let i = 0; i < arr.length; i++) {\\nif (arr[i] % 2 === 0) {\\n(next pseudocode here)\\n}\\n}" (poor indentation)
+✗ Wrong B: "for (let i = 0; i < arr.length; i++) { if (arr[i] % 2 === 0) { (next pseudocode here) } }" (no line breaks)
+✗ Wrong C: "for (let i = 0; i < arr.length; i++) {\\n    if (arr[i] % 2 == 0) {\\n        (next pseudocode here)\\n    }\\n}" (wrong equality operator)
+
+FORMATTING REQUIREMENTS:
+- Each nested level should be indented 4 spaces deeper
+- Use \\n for line breaks between statements and blocks
+- Keep opening braces on the same line as the control statement
+- Closing braces should align with the control statement
+- Maintain consistent spacing around operators and parentheses
+
+CRITICAL: All options must be consistent with placeholder usage - either ALL have it or NONE do.
+
+This ensures the MCQ tests the user's ability to implement their own pseudocode with clearly distinguishable options.
+
+Format your response as JSON:
+{
+  "question": "How would you convert this pseudocode to ${language}?",
+  "pseudocode": "${pseudocodeLine}",
+  "options": [
+    {
+      "id": "A",
+      "text": "option A code",
+      "isCorrect": false
+    },
+    {
+      "id": "B", 
+      "text": "option B code",
+      "isCorrect": true
+    },
+    {
+      "id": "C",
+      "text": "option C code", 
+      "isCorrect": false
+    },
+    {
+      "id": "D",
+      "text": "option D code",
+      "isCorrect": false
+    }
+  ],
+  "explanation": "Brief explanation of why the correct answer is right",
+  "optionExplanations": {
+    "A": "Why option A is wrong - specific reason",
+    "B": "Why option B is correct - specific reason", 
+    "C": "Why option C is wrong - specific reason",
+    "D": "Why option D is wrong - specific reason"
+  }
+}
+
+Return only valid JSON, no additional text.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('Raw MCQ generation response:', text);
+
+    // Parse the JSON response
+    let mcqData;
+    try {
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        mcqData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.log('Failed to parse MCQ JSON, creating fallback');
+      // Fallback MCQ
+      const fallbackOptions = language === 'JavaScript' ? [
+        { id: "A", text: "let result = 0;", isCorrect: true },
+        { id: "B", text: "var result == 0;", isCorrect: false },
+        { id: "C", text: "result = null;", isCorrect: false },
+        { id: "D", text: "int result = 0;", isCorrect: false }
+      ] : language === 'Python' ? [
+        { id: "A", text: "result = 0", isCorrect: true },
+        { id: "B", text: "result == 0", isCorrect: false },
+        { id: "C", text: "let result = 0", isCorrect: false },
+        { id: "D", text: "result := 0", isCorrect: false }
+      ] : language === 'Java' ? [
+        { id: "A", text: "int result = 0;", isCorrect: true },
+        { id: "B", text: "result = 0;", isCorrect: false },
+        { id: "C", text: "let result = 0;", isCorrect: false },
+        { id: "D", text: "int result == 0;", isCorrect: false }
+      ] : [
+        { id: "A", text: "int result = 0;", isCorrect: true },
+        { id: "B", text: "result = 0;", isCorrect: false },
+        { id: "C", text: "let result = 0;", isCorrect: false },
+        { id: "D", text: "var result = 0;", isCorrect: false }
+      ];
+
+      mcqData = {
+        question: `How would you convert this pseudocode to ${language}?`,
+        pseudocode: pseudocodeLine,
+        options: fallbackOptions,
+        explanation: "This is a fallback question for basic variable initialization.",
+        optionExplanations: {
+          "A": "Correct syntax for variable declaration and initialization",
+          "B": "Wrong operator - uses comparison instead of assignment",
+          "C": "Wrong language syntax for this language", 
+          "D": "Invalid syntax or wrong language construct"
+        }
+      };
+    }
+
+    console.log('Final MCQ data sent to frontend:', mcqData);
+
+    res.json(mcqData);
+  } catch (error) {
+    console.error('Error generating MCQ:', error);
+    res.status(500).json({ error: 'Failed to generate MCQ' });
+  }
+});
+
+// Code summary generation endpoint
+app.post('/api/generate-code-summary', async (req, res) => {
+  try {
+    const { problemTitle, problemDescription, pseudocode, language, mcqAnswers } = req.body;
+    
+    if (!problemTitle || !pseudocode || !language) {
+      return res.status(400).json({ error: 'Problem title, pseudocode, and language are required' });
+    }
+
+    console.log('Generating code summary for:', problemTitle);
+    console.log('Language:', language);
+    console.log('MCQ Answers provided:', mcqAnswers?.length || 0);
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are a coding education expert. Create comprehensive code summaries that help users understand the complete solution and algorithm.",
+    });
+    
+    const prompt = `Generate a comprehensive code summary that implements the user's exact pseudocode approach:
+
+PROBLEM: "${problemTitle}"
+${problemDescription ? `DESCRIPTION: ${problemDescription.replace(/<[^>]*>/g, '').substring(0, 1000)}` : ''}
+
+USER'S PSEUDOCODE STEPS:
+${pseudocode}
+
+TARGET LANGUAGE: ${language}
+${mcqAnswers && mcqAnswers.length > 0 ? `USER'S MCQ ANSWERS: ${JSON.stringify(mcqAnswers)}` : ''}
+
+CRITICAL INSTRUCTION: You must implement the solution based on the USER'S PSEUDOCODE, not an optimal solution.
+
+IMPLEMENTATION REQUIREMENTS:
+1. FOLLOW USER'S APPROACH: Implement exactly what the user described in their pseudocode
+   - If they mentioned specific data structures (hash map, array, etc.), use those
+   - If they described a particular algorithm approach, follow that approach
+   - If their approach is suboptimal, implement it as described anyway
+   - Do NOT substitute with more optimal solutions
+
+2. USE USER'S MCQ ANSWERS: If provided, incorporate the code segments the user selected
+   - The MCQ answers represent the user's understanding of how to implement each step
+   - Build the final solution using these code segments as building blocks
+   - Ensure the final code is consistent with their choices
+
+3. FINAL COMPLETE CODE: Write the full, working ${language} solution that:
+   - Implements all the user's pseudocode steps in order
+   - Uses the approaches and data structures they specified
+   - Incorporates their MCQ answer choices where applicable
+   - Actually solves the problem (even if not optimally)
+
+4. EXPLANATION: Explain how the algorithm works based on the user's approach:
+   - Walk through each step of their pseudocode
+   - Explain why their approach works for this problem
+   - Highlight the logic behind their chosen method
+
+5. PSEUDOCODE BREAKDOWN: List the user's original pseudocode steps clearly
+
+6. EFFICIENCY ANALYSIS: Analyze the complexity of the user's chosen approach:
+   - What is the time/space complexity of their specific implementation?
+   - Are there any trade-offs in their approach?
+   - Explain the efficiency characteristics of their chosen method
+
+CRITICAL CODE FORMATTING REQUIREMENTS:
+- DO NOT include function parameters or function signatures
+- DO NOT include return statements or return type declarations
+- Focus ONLY on the core algorithm implementation
+- Start directly with variable declarations and algorithm logic
+- Exclude any function wrapper, just show the algorithm body
+- Make it look like code that would go inside a function, not the function itself
+
+EXAMPLE FORMAT:
+Instead of: function twoSum(nums, target) { ... return result; }
+Generate: let map = new Map();
+         for (let i = 0; i < nums.length; i++) {
+             // algorithm logic here
+         }
+
+REQUIREMENTS:
+- Implement the user's exact approach, not the most optimal one
+- Use the data structures and methods they specified in pseudocode
+- Make the code match their understanding as shown in MCQ answers
+- Ensure the solution works but reflects their chosen approach
+- Keep explanations focused on their specific implementation
+- Show only the algorithm implementation, not function boilerplate
+
+Format your response as JSON:
+{
+  "finalCode": "Complete working ${language} code solution",
+  "explanation": "Detailed explanation of how the algorithm works and why it's effective",
+  "pseudocodeSteps": [
+    "Step 1: Clear description",
+    "Step 2: Clear description",
+    "Step 3: Clear description"
+  ],
+  "efficiency": {
+    "timeComplexity": "O(n) or appropriate complexity",
+    "spaceComplexity": "O(1) or appropriate complexity", 
+    "explanation": "Detailed explanation of why these complexities and any trade-offs"
+  }
+}
+
+Return only valid JSON, no additional text.`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('Raw code summary response:', text);
+
+    // Parse the JSON response
+    let summaryData;
+    try {
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        summaryData = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.log('Failed to parse code summary JSON, creating fallback');
+      // Fallback summary
+      summaryData = {
+        finalCode: `// ${language} solution for ${problemTitle}\n// TODO: Implement solution based on pseudocode`,
+        explanation: "This is a fallback explanation. The AI was unable to generate a proper code summary.",
+        pseudocodeSteps: pseudocode.split('\n').filter(line => line.trim()).map((line, index) => 
+          `${index + 1}. ${line.trim().replace(/^\d+[\.\)\-\s]*/, '')}`
+        ),
+        efficiency: {
+          timeComplexity: "O(n)",
+          spaceComplexity: "O(1)",
+          explanation: "Complexity analysis unavailable due to generation error."
+        }
+      };
+    }
+
+    console.log('Final code summary sent to frontend:', {
+      ...summaryData,
+      finalCode: summaryData.finalCode.substring(0, 100) + '...' // Log truncated code
+    });
+
+    res.json(summaryData);
+  } catch (error) {
+    console.error('Error generating code summary:', error);
+    res.status(500).json({ error: 'Failed to generate code summary' });
   }
 });
 

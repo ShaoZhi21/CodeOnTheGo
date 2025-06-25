@@ -876,6 +876,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: 'center',
+    minWidth: 75,
   },
   statusText: {
     color: '#fff',

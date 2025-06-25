@@ -1,21 +1,19 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
-import { API_BASE_URL } from '@/lib/api-config';
+import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Image,
-  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View
 } from 'react-native';
-import { WebView } from 'react-native-webview';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -26,22 +24,46 @@ interface Example {
   image?: string;
 }
 
+interface MCQOption {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+}
+
+interface MCQData {
+  question: string;
+  pseudocode: string;
+  options: MCQOption[];
+  explanation: string;
+  optionExplanations?: { [key: string]: string };
+}
+
+interface PseudocodeStep {
+  text: string;
+  completed: boolean;
+  selectedAnswer?: string;
+  correctAnswer?: string;
+}
+
 export default function PseudoToCode() {
   const params = useLocalSearchParams();
   const [showProblemDetails, setShowProblemDetails] = useState(false);
   const [activeTab, setActiveTab] = useState<'problem' | 'examples'>('problem');
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
-  const [code, setCode] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRunningTests, setIsRunningTests] = useState(false);
-  const [testResults, setTestResults] = useState<any>(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [pseudocodeSteps, setPseudocodeSteps] = useState<PseudocodeStep[]>([]);
+  const [allMCQs, setAllMCQs] = useState<(MCQData | null)[]>([]);
+  const [currentMCQ, setCurrentMCQ] = useState<MCQData | null>(null);
+  const [selectedOption, setSelectedOption] = useState<string>('');
+  const [isLoadingMCQ, setIsLoadingMCQ] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [isCorrect, setIsCorrect] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('javascript');
-  const [isProblemPreloaded, setIsProblemPreloaded] = useState(false);
-  const [webViewKey, setWebViewKey] = useState(0);
-  const [pseudocodeProgress, setPseudocodeProgress] = useState<any>(null);
-  const [functionSignature, setFunctionSignature] = useState<any>(null);
-  const [isLoadingSignature, setIsLoadingSignature] = useState(false);
-  const webViewRef = React.useRef<WebView>(null);
+  const [allStepsCompleted, setAllStepsCompleted] = useState(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [loadedMCQCount, setLoadedMCQCount] = useState(0);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
 
   // Parse the passed parameters
   const problemId = params.problemId as string;
@@ -51,6 +73,53 @@ export default function PseudoToCode() {
   const examples: Example[] = params.examples ? JSON.parse(params.examples as string) : [];
   const constraints: string[] = params.constraints ? JSON.parse(params.constraints as string) : [];
   const pseudocode = params.pseudocode as string;
+
+  // Initialize pseudocode steps and start loading all MCQs
+  useEffect(() => {
+    if (pseudocode && pseudocode.trim()) {
+      const steps = pseudocode
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => ({
+          text: line.trim().replace(/^\d+[\.\)\-\s]*/, ''), // Remove leading numbers
+          completed: false
+        }));
+      setPseudocodeSteps(steps);
+      if (steps.length > 0) {
+        // Initialize MCQ array with nulls
+        setAllMCQs(new Array(steps.length).fill(null));
+        setLoadedMCQCount(0);
+        // Start loading all MCQs
+        loadAllMCQs(steps);
+      }
+    }
+  }, [pseudocode]);
+
+  // Update current MCQ when step changes or MCQs are loaded
+  useEffect(() => {
+    if (allMCQs[currentStepIndex]) {
+      setCurrentMCQ(allMCQs[currentStepIndex]);
+      setIsLoadingMCQ(false);
+    } else if (allMCQs.length > 0) {
+      setCurrentMCQ(null);
+      setIsLoadingMCQ(true);
+    }
+  }, [currentStepIndex, allMCQs]);
+
+  // Check if all steps are completed and navigate to summary
+  useEffect(() => {
+    const allCompleted = pseudocodeSteps.length > 0 && pseudocodeSteps.every(step => step.completed);
+    setAllStepsCompleted(allCompleted);
+    
+    // Auto-navigate to code summary when all steps are completed (only once)
+    if (allCompleted && pseudocodeSteps.length > 0 && !isGeneratingSummary && !hasNavigatedToSummary) {
+      setHasNavigatedToSummary(true);
+      // Small delay to allow user to see the completion state
+      setTimeout(() => {
+        handleFinish();
+      }, 1000);
+    }
+  }, [pseudocodeSteps, isGeneratingSummary, hasNavigatedToSummary]);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -64,11 +133,9 @@ export default function PseudoToCode() {
   const getDifficultyBubbleColor = (diff: string) => {
     switch (diff) {
       case 'Easy':
-        return 'rgba(255, 255, 255, 0.25)'; // Slightly more opaque white for better contrast
       case 'Medium':
-        return 'rgba(255, 255, 255, 0.25)'; // Consistent white background
       case 'Hard':
-        return 'rgba(255, 255, 255, 0.25)'; // Consistent white background
+        return 'rgba(255, 255, 255, 0.25)';
       default:
         return 'rgba(255, 255, 255, 0.25)';
     }
@@ -76,28 +143,34 @@ export default function PseudoToCode() {
 
   const getDifficultyAccentColor = (diff: string) => {
     switch (diff) {
-      case 'Easy': return '#009045';
-      case 'Medium': return '#e68a00';
-      case 'Hard': return '#e60026';
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
       default: return '#6564c7';
     }
   };
 
-  // Fetch function signature from AI
-  const fetchFunctionSignature = async () => {
-    if (functionSignature) return; // Already loaded
+  const loadAllMCQs = async (steps: PseudocodeStep[]) => {
+    setIsLoadingMCQ(true);
     
-    setIsLoadingSignature(true);
+    // Load MCQs sequentially, but update UI as each one completes
+    for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/analyze-function-signature`, {
+        // Check if there's a next step to provide context about nesting
+        const nextStep = stepIndex + 1 < steps.length ? steps[stepIndex + 1].text : null;
+        
+        const response = await fetch(`${API_BASE_URL}/api/generate-mcq`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          title: title,
-          description: description,
-          examples: examples
+            pseudocodeLine: steps[stepIndex].text,
+            language: selectedLanguage,
+            context: `This is step ${stepIndex + 1} of ${steps.length} in converting pseudocode to ${selectedLanguage} code.`,
+            nextStep: nextStep,
+            problemTitle: title,
+            problemDescription: description
         }),
       });
 
@@ -105,646 +178,429 @@ export default function PseudoToCode() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const signature = await response.json();
-      console.log('🔍 Function signature received:', signature);
-      setFunctionSignature(signature);
-    } catch (error) {
-      console.error('Error fetching function signature:', error);
-      // Fallback signature
-      setFunctionSignature({
-        functionName: 'solution',
-        parameters: [{"name": "input", "type": "any"}],
-        returnType: 'any',
-        inputFormat: 'input data',
-        sampleCall: 'solution(input)'
-      });
-    } finally {
-      setIsLoadingSignature(false);
-    }
-  }; 
-
-  const getMonacoLanguage = (language: string) => {
-    switch (language) {
-      case 'javascript': return 'javascript';
-      case 'python': return 'python';
-      case 'java': return 'java';
-      case 'cpp': return 'cpp';
-      default: return 'javascript';
-    }
-  };
-
-  const generateJavaScriptParser = (signature: any) => {
-    if (!signature || !signature.parameters) return '';
-    
-    const params = signature.parameters;
-    let parser = '';
-    
-    // Generate parsing logic based on parameters
-    for (const param of params) {
-      if (param.type === 'number[]' || param.type === 'array') {
-        parser += `        const ${param.name}Match = input.match(/${param.name} = \\\\[(.*?)\\\\]/);\n`;
-        parser += `        const ${param.name} = ${param.name}Match ? ${param.name}Match[1].split(',').map(x => parseInt(x.trim())) : [];\n`;
-      } else if (param.type === 'number') {
-        parser += `        const ${param.name}Match = input.match(/${param.name} = (\\\\d+)/);\n`;
-        parser += `        const ${param.name} = ${param.name}Match ? parseInt(${param.name}Match[1]) : 0;\n`;
-      } else if (param.type === 'string') {
-        parser += `        const ${param.name}Match = input.match(/${param.name} = ['"](.*)['"]/) || input.match(/${param.name} = (\\\\w+)/);\n`;
-        parser += `        const ${param.name} = ${param.name}Match ? ${param.name}Match[1] : '';\n`;
-      }
-    }
-    
-    return parser;
-  };
-
-  const getLanguageTemplate = (language: string) => {
-    if (!functionSignature || isLoadingSignature) {
-      // Return loading message while signature is being fetched
-      return getLoadingTemplate(language);
-    }
-
-    const { functionName, parameters } = functionSignature;
-    const paramString = parameters?.map((p: any) => p.name).join(', ') || '';
-    
-    switch (language) {
-      case 'javascript':
-        return `// Write your ${functionName} function here
-function ${functionName}(${paramString}) {
-    // TODO: Implement your algorithm here
-    // Replace this return statement with your solution
-    return null;
-}
-
-// Test runner - DO NOT MODIFY BELOW THIS LINE
-const readline = require('readline');
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
-rl.on('line', (input) => {
-    try {
-        // Parse input based on the expected format: ${functionSignature.inputFormat || 'input data'}
-        ${generateJavaScriptParser(functionSignature)}
+        const mcqData = await response.json();
         
-        let result = ${functionName}(${parameters?.map((p: any) => p.name).join(', ') || ''});
-        console.log(JSON.stringify(result));
-    } catch (error) {
-        console.log(JSON.stringify(null));
-    }
-    rl.close();
-});`;
-
-      case 'python':
-        return `# Write your ${functionName} function here
-def ${functionName}(${paramString}):
-    # TODO: Implement your algorithm here
-    # Replace this return statement with your solution
-    return None
-
-# Test runner - DO NOT MODIFY
-import json
-
-input_line = input().strip()
-try:
-    # Parse input and call your function
-    # The input format is: ${functionSignature.inputFormat || 'input data'}
-    result = ${functionName}(# parsed parameters)
-    print(json.dumps(result))
-except:
-    print(json.dumps(None))`;
-
-      case 'java':
-        return `import java.util.*;
-
-public class Solution {
-    // Write your ${functionName} function here
-    public Object ${functionName}(${parameters?.map((p: any) => `Object ${p.name}`).join(', ') || ''}) {
-        // TODO: Implement your algorithm here
-        // Replace this return statement with your solution
-        return null;
-    }
-    
-    // Test runner - DO NOT MODIFY
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        String input = scanner.nextLine().trim();
-        Solution sol = new Solution();
+        // Update the specific MCQ in the array
+        setAllMCQs(prev => {
+          const updated = [...prev];
+          updated[stepIndex] = mcqData;
+          return updated;
+        });
         
-        // Parse input and call your function
-        // The input format is: ${functionSignature.inputFormat || 'input data'}
-        Object result = sol.${functionName}(/* parsed parameters */);
+        setLoadedMCQCount(prev => prev + 1);
         
-        if (result instanceof int[]) {
-            System.out.println(Arrays.toString((int[]) result));
-        } else {
-            System.out.println(result);
+        // If this is the first MCQ (step 0), show it immediately
+        if (stepIndex === 0) {
+          setCurrentMCQ(mcqData);
+          setIsLoadingMCQ(false);
         }
-    }
-}`;
-
-      case 'cpp':
-        return `#include <iostream>
-#include <vector>
-#include <string>
-using namespace std;
-
-// Write your ${functionName} function here
-auto ${functionName}(${parameters?.map((p: any) => `auto ${p.name}`).join(', ') || ''}) {
-    // TODO: Implement your algorithm here
-    // Replace this return statement with your solution
-    return 0;
-}
-
-// Test runner - DO NOT MODIFY
-int main() {
-    string input;
-    getline(cin, input);
-    
-    // Parse input and call your function
-    // The input format is: ${functionSignature.inputFormat || 'input data'}
-    auto result = ${functionName}(/* parsed parameters */);
-    
-    cout << result << endl;
-    return 0;
-}`;
-
-      default:
-        return getBasicTemplate(language);
-    }
-  };
-
-  const getLoadingTemplate = (language: string) => {
-    // Return empty string so WebView shows loading UI
-    return '';
-  };
-
-  const getBasicTemplate = (language: string) => {
-    switch (language) {
-      case 'javascript':
-        return `// Write your solution function here
-function solution() {
-    // TODO: Implement your algorithm here
-    return null;
-}`;
-      case 'python':
-        return `# Write your solution function here
-def solution():
-    # TODO: Implement your algorithm here
-    return None`;
-      case 'java':
-        return `public class Solution {
-    // Write your solution function here
-    public Object solution() {
-        // TODO: Implement your algorithm here
-        return null;
-    }
-}`;
-      case 'cpp':
-        return `#include <iostream>
-using namespace std;
-
-// Write your solution function here
-auto solution() {
-    // TODO: Implement your algorithm here
-    return 0;
-}`;
-      default:
-        return '';
-    }
-  };
-
-  const handleLanguageChange = async (language: string) => {
-    setSelectedLanguage(language);
-    
-    // If function signature is already loaded, just update the template
-    if (functionSignature && !isLoadingSignature) {
-      setCode(getLanguageTemplate(language));
-    } else {
-      // Show loading template while signature is being fetched
-      setCode(getLoadingTemplate(language));
-      // Fetch function signature if not already loaded
-      if (!functionSignature) {
-        await fetchFunctionSignature();
+        
+      } catch (error) {
+        console.error(`Error loading MCQ for step ${stepIndex + 1}:`, error);
+        // Set null for failed MCQ so we know it failed
+        setAllMCQs(prev => {
+          const updated = [...prev];
+          updated[stepIndex] = null;
+          return updated;
+        });
       }
-      setCode(getLanguageTemplate(language));
     }
-    
-    // Force WebView to re-render only when language changes
-    setWebViewKey(prev => prev + 1);
   };
 
-  // Initialize code when component mounts
-  React.useEffect(() => {
-    const initializeCode = async () => {
-      // Set loading template first
-      setCode(getLoadingTemplate(selectedLanguage));
-      // Then fetch function signature and update code
-      await fetchFunctionSignature();
-      setCode(getLanguageTemplate(selectedLanguage));
-    };
-    
-    initializeCode();
-  }, []);
+  const loadMCQForCurrentStep = async (stepIndex: number, steps: PseudocodeStep[] = pseudocodeSteps) => {
+    // This function is now mainly used for language changes
+    if (stepIndex >= steps.length) return;
 
-  // Update code when function signature is loaded
-  React.useEffect(() => {
-    if (functionSignature && !isLoadingSignature) {
-      setCode(getLanguageTemplate(selectedLanguage));
-    }
-  }, [functionSignature, isLoadingSignature, selectedLanguage]);
-
-  // Preload problem details to avoid loading when toggling
-  React.useEffect(() => {
-    // Set a small delay to ensure the main UI renders first
-    const timer = setTimeout(() => {
-      setIsProblemPreloaded(true);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleSubmit = async () => {
-    if (code.trim() === '' || code.trim() === getLanguageTemplate(selectedLanguage).trim()) {
-      Alert.alert('Empty Code', 'Please write some code before submitting.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    
-    // Simulate submission process
-    setTimeout(() => {
-      setIsSubmitting(false);
-      Alert.alert(
-        'Code Submitted!', 
-        'Your code has been submitted successfully. This would typically run tests and provide feedback.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back()
-          }
-        ]
-      );
-    }, 2000);
-  };
-
-  const runTests = async () => {
-    if (code.trim() === '' || code.trim() === getLanguageTemplate(selectedLanguage).trim()) {
-      Alert.alert('Empty Code', 'Please write some code before running tests.');
-      return;
-    }
-
-    console.log('🔍 Debug - Code being sent:', code);
-    console.log('🔍 Debug - Language:', selectedLanguage);
-    console.log('🔍 Debug - Test cases:', examples.map(ex => ({ input: ex.input, expected: ex.output })));
-
-    setIsRunningTests(true);
-    setTestResults(null);
+    setIsLoadingMCQ(true);
+    setShowResult(false);
+    setSelectedOption('');
 
     try {
-      // Create test cases from examples
-      const testCases = examples.map(example => ({
-        input: example.input,
-        expected: example.output
-      }));
-
-      const requestBody = {
-        code: code,
-        language: selectedLanguage,
-        testCases: testCases,
-        pseudocode: pseudocode,
-        functionSignature: functionSignature
-      };
-
-      console.log('🔍 Debug - Request body:', JSON.stringify(requestBody, null, 2));
-
-      const response = await fetch(`${API_BASE_URL}/api/execute-code`, {
+      // Check if there's a next step to provide context about nesting
+      const nextStep = stepIndex + 1 < steps.length ? steps[stepIndex + 1].text : null;
+      
+      const response = await fetch(`${API_BASE_URL}/api/generate-mcq`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          pseudocodeLine: steps[stepIndex].text,
+          language: selectedLanguage,
+          context: `This is step ${stepIndex + 1} of ${steps.length} in converting pseudocode to ${selectedLanguage} code.`,
+          nextStep: nextStep,
+          problemTitle: title,
+          problemDescription: description
+        }),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const results = await response.json();
-      console.log('🔍 Debug - Backend response:', results);
-      setTestResults(results);
+      const mcqData = await response.json();
+      setCurrentMCQ(mcqData);
       
-      // Update pseudocode progress if available
-      if (results.pseudocodeProgress) {
-        setPseudocodeProgress(results.pseudocodeProgress);
-        console.log('🔍 Debug - Pseudocode progress:', results.pseudocodeProgress);
-      }
-
+      // Also update the MCQ in the array
+      setAllMCQs(prev => {
+        const updated = [...prev];
+        updated[stepIndex] = mcqData;
+        return updated;
+      });
     } catch (error) {
-      console.error('Error running tests:', error);
-      Alert.alert('Error', 'Failed to run tests. Please try again.');
+      console.error('Error loading MCQ:', error);
+      Alert.alert('Error', 'Failed to load question. Please try again.');
     } finally {
-      setIsRunningTests(false);
+      setIsLoadingMCQ(false);
     }
   };
 
-  // Enhanced syntax highlighting for different languages
-  const applySyntaxHighlighting = (text: string, language: string) => {
-    // This is a simplified syntax highlighting - in a real app you'd use a proper library
-    const keywords = {
-      javascript: ['function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'class', 'import', 'export'],
-      python: ['def', 'class', 'if', 'else', 'elif', 'for', 'while', 'return', 'import', 'from', 'as', 'try', 'except'],
-      java: ['public', 'private', 'class', 'interface', 'if', 'else', 'for', 'while', 'return', 'import', 'package'],
-      cpp: ['#include', 'using', 'namespace', 'class', 'public', 'private', 'if', 'else', 'for', 'while', 'return']
-    };
+  const handleOptionSelect = (optionId: string) => {
+    if (showResult) return; // Prevent selection after showing result
+    setSelectedOption(optionId);
+  };
+
+  const handleSubmit = () => {
+    if (!selectedOption || !currentMCQ) return;
+
+    const correct = currentMCQ.options.find(opt => opt.id === selectedOption)?.isCorrect || false;
+    setIsCorrect(correct);
+    setShowResult(true);
+
+    if (correct) {
+      // Update the current step as completed
+      const updatedSteps = [...pseudocodeSteps];
+      updatedSteps[currentStepIndex] = {
+        ...updatedSteps[currentStepIndex],
+        completed: true,
+        selectedAnswer: selectedOption,
+        correctAnswer: currentMCQ.options.find(opt => opt.isCorrect)?.id
+      };
+      setPseudocodeSteps(updatedSteps);
+
+      // Check if this is the last step and immediately show loading
+      const isLastStep = currentStepIndex === pseudocodeSteps.length - 1;
+      if (isLastStep) {
+        // Small delay to show the correct answer, then show loading
+        setTimeout(() => {
+          setIsGeneratingSummary(true);
+        }, 800);
+      }
+    }
+  };
+
+  const handleNextStep = () => {
+    if (currentStepIndex < pseudocodeSteps.length - 1) {
+      const nextIndex = currentStepIndex + 1;
+      setCurrentStepIndex(nextIndex);
+      // No need to load MCQ - it's already preloaded or will be set by useEffect
+      setShowResult(false);
+      setSelectedOption('');
+    }
+  };
+
+  const handleStepNavigation = (stepIndex: number) => {
+    // Allow navigation to current step, previous steps, or completed steps
+    if (stepIndex <= currentStepIndex || pseudocodeSteps[stepIndex]?.completed) {
+      setCurrentStepIndex(stepIndex);
+      setShowResult(false);
+      setSelectedOption('');
+    }
+  };
+
+  const handleRetry = () => {
+    setShowResult(false);
+    setSelectedOption('');
+  };
+
+  const handleFinish = async () => {
+    // Show immediate feedback
+    setIsGeneratingSummary(true);
     
-    return text; // For now, return as-is. In a real implementation, you'd apply highlighting
+    // Collect MCQ answers for the summary
+    const mcqAnswers = pseudocodeSteps.map((step, index) => ({
+      step: step.text,
+      selectedAnswer: step.selectedAnswer,
+      correctAnswer: step.correctAnswer,
+      completed: step.completed
+    }));
+
+    try {
+      // Pre-generate the code summary for faster loading
+      const response = await apiCall('/api/generate-code-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          problemTitle: title,
+          problemDescription: description,
+          pseudocode: pseudocode,
+          language: selectedLanguage,
+          mcqAnswers: mcqAnswers
+        }),
+      });
+
+      if (response.ok) {
+        const summaryData = await response.json();
+        
+        // Navigate with pre-generated summary
+        router.push({
+          pathname: '/screens/codeSummary',
+          params: {
+            problemId: problemId,
+            title: title,
+            difficulty: difficulty,
+            description: description,
+            pseudocode: pseudocode,
+            language: selectedLanguage,
+            mcqAnswers: JSON.stringify(mcqAnswers),
+            preGeneratedSummary: JSON.stringify(summaryData)
+          }
+        });
+      } else {
+        throw new Error('Failed to generate summary');
+      }
+    } catch (error) {
+      console.error('Error pre-generating summary:', error);
+      // Fallback: navigate without pre-generated summary
+      router.push({
+        pathname: '/screens/codeSummary',
+        params: {
+          problemId: problemId,
+          title: title,
+          difficulty: difficulty,
+          description: description,
+          pseudocode: pseudocode,
+          language: selectedLanguage,
+          mcqAnswers: JSON.stringify(mcqAnswers)
+        }
+      });
+    } finally {
+      setIsGeneratingSummary(false);
+    }
   };
 
-  // Get the progress status for a pseudocode step
-  const getPseudocodeStepStatus = (stepIndex: number) => {
-    if (!pseudocodeProgress?.steps) return 'not_started';
+  const handleLanguageChange = (language: string) => {
+    setSelectedLanguage(language);
+    setShowLanguageDropdown(false);
+    // Reload MCQ for current step with new language
+    loadMCQForCurrentStep(currentStepIndex);
+  };
+
+  const getLanguageLabel = (lang: string) => {
+    switch (lang) {
+      case 'javascript': return 'JS';
+      case 'python': return 'PY';
+      case 'java': return 'Java';
+      case 'c': return 'C';
+      default: return lang.toUpperCase();
+    }
+  };
+
+  const renderOptionText = (optionText: string, baseStyle: any) => {
+    // Check if the text contains "(next pseudocode here)"
+    if (optionText.includes('(next pseudocode here)')) {
+      const parts = optionText.split('(next pseudocode here)');
+      return (
+        <ThemedText style={baseStyle}>
+          {parts[0]}
+          <ThemedText style={styles.nestedPseudocodeHint}>
+            (next pseudocode here)
+          </ThemedText>
+          {parts[1]}
+        </ThemedText>
+      );
+    }
+    return (
+      <ThemedText style={baseStyle}>
+        {optionText}
+      </ThemedText>
+    );
+  };
+
+  const formatExplanationText = (text: string) => {
+    // Split by sentences (periods followed by space or end of string)
+    // and add line breaks for better readability
+    const formattedText = text
+      .split(/(\.[^\w]|\.$)/)
+      .map((part, index) => {
+        if (part.match(/(\.[^\w]|\.$)/)) {
+          return part + '\n\n';
+        }
+        return part;
+      })
+      .join('')
+      .trim();
+
+    // Now handle text inside backticks and make it bold
+    const parts = formattedText.split(/(`[^`]+`)/g);
     
-    const step = pseudocodeProgress.steps.find((s: any) => s.step_number === stepIndex + 1);
-    return step?.status || 'not_started';
+    return (
+      <ThemedText style={styles.explanationText}>
+        {parts.map((part, index) => {
+          // Check if this part is text inside backticks (e.g., `word`)
+          if (part.match(/^`[^`]+`$/)) {
+            const cleanWord = part.replace(/`/g, '');
+            return (
+              <ThemedText key={index} style={styles.boldText}>
+                {cleanWord}
+              </ThemedText>
+            );
+          }
+          // Return regular text inline
+          return part;
+        })}
+      </ThemedText>
+    );
   };
 
-  // Get the border color based on step status
-  const getStepBorderColor = (status: string) => {
-    switch (status) {
-      case 'completed': return '#4caf50'; // Green
-      case 'partial': return '#ff9800'; // Orange
-      case 'not_started': return '#f44336'; // Red
-      default: return '#e0e0e0'; // Default gray
+  const formatCodeWithNestedPseudocode = (currentStep: string, nextStep?: string) => {
+    if (!nextStep) return { mainCode: currentStep, hasNested: false };
+    
+    // Common nesting patterns
+    const nestingKeywords = ['if', 'for', 'while', 'else', 'elseif', 'try', 'catch'];
+    const currentLower = currentStep.toLowerCase();
+    const nextLower = nextStep.toLowerCase();
+    
+    // Check if current step is a control structure and next step could be nested
+    const isCurrentNesting = nestingKeywords.some(keyword => currentLower.includes(keyword));
+    const isNextNested = nestingKeywords.some(keyword => nextLower.includes(keyword)) || 
+                        nextLower.includes('return') || 
+                        nextLower.includes('print') ||
+                        nextLower.includes('assign') ||
+                        nextLower.includes('set') ||
+                        nextLower.includes('increment') ||
+                        nextLower.includes('decrement');
+    
+    if (isCurrentNesting && isNextNested) {
+      // Format the code to show nesting structure
+      let formattedCode = currentStep;
+      
+      // Add opening brace if not present
+      if (!formattedCode.includes('{')) {
+        formattedCode += ' {';
+      }
+      
+      return {
+        mainCode: formattedCode,
+        nestedCode: nextStep,
+        hasNested: true
+      };
     }
-  };
-
-  // Get the status icon based on step status
-  const getStepStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed': return '✓';
-      case 'partial': return '⚠';
-      case 'not_started': return '✗';
-      default: return '';
-    }
+    
+    return { mainCode: currentStep, hasNested: false };
   };
 
   const renderProblemDetails = () => (
-    <View style={styles.section}>
-      <View style={styles.buttonContainer}>
+    <View style={styles.modalContainer}>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <ThemedText style={styles.modalTitle}>Problem Details</ThemedText>
         <TouchableOpacity 
-          style={[styles.toggleButton, { backgroundColor: activeTab === 'problem' ? '#6564c7' : '#c7c1e9' }]} 
+            style={styles.closeButton}
+            onPress={() => setShowProblemDetails(false)}
+          >
+            <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tabButton, activeTab === 'problem' && styles.activeTab]}
           onPress={() => setActiveTab('problem')}
         >
-          <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
+            <ThemedText style={[
+              styles.tabButtonText,
+              activeTab === 'problem' && styles.activeTabButtonText
+            ]}>Problem</ThemedText>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={[styles.toggleButton, { backgroundColor: activeTab === 'examples' ? '#6564c7' : '#c7c1e9' }]} 
+            style={[styles.tabButton, activeTab === 'examples' && styles.activeTab]}
           onPress={() => setActiveTab('examples')}
         >
-          <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
+            <ThemedText style={[
+              styles.tabButtonText,
+              activeTab === 'examples' && styles.activeTabButtonText
+            ]}>Examples</ThemedText>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.descriptionContainer}>
+        <View style={styles.tabContent}>
         {activeTab === 'problem' ? (
-          <HtmlRenderer 
-            htmlContent={description || 'No description available'} 
-            style={styles.webviewContainer}
-          />
-        ) : (
-          <>
             <ScrollView 
-              style={styles.exampleScrollView} 
+              style={styles.problemContent} 
+              contentContainerStyle={styles.problemContentContainer}
               showsVerticalScrollIndicator={false}
             >
-              <View style={styles.exampleContentFormatted}>
-                <View style={styles.exampleFieldContainer}>
-                  <View style={styles.exampleLabelRowContainer}>
-                    <View style={styles.exampleLabelContainer}>
-                      <ThemedText style={styles.exampleLabelFormatted}>Input:</ThemedText>
-                    </View>
-                    {examples[currentExampleIndex]?.image && (
-                      <TouchableOpacity 
-                        style={styles.imageIndicator}
-                        activeOpacity={0.7}
-                      >
-                        <View style={styles.imageIconPlaceholder}>
-                          <ThemedText style={styles.imageIconText}>📷</ThemedText>
-                        </View>
-                        <ThemedText style={styles.imageIndicatorText}>Image present</ThemedText>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  <View style={styles.exampleValueContainer}>
-                    <ThemedText style={styles.exampleTextFormatted}>
-                      {examples[currentExampleIndex]?.input || 'No input available'}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <View style={styles.exampleFieldContainer}>
-                  <View style={styles.exampleLabelContainer}>
-                    <ThemedText style={styles.exampleLabelFormatted}>Output:</ThemedText>
-                  </View>
-                  <View style={styles.exampleValueContainer}>
-                    <ThemedText style={styles.exampleTextFormatted}>
-                      {examples[currentExampleIndex]?.output || 'No output available'}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                <View style={styles.exampleFieldContainer}>
-                  <View style={styles.exampleLabelContainer}>
-                    <ThemedText style={styles.exampleLabelFormatted}>Explanation:</ThemedText>
-                  </View>
-                  <View style={styles.exampleValueContainer}>
-                    <ThemedText style={styles.exampleTextFormatted}>
-                      {examples[currentExampleIndex]?.explanation || 'No explanation available'}
-                    </ThemedText>
-                  </View>
-                </View>
-
-                {examples[currentExampleIndex]?.image && (
-                  <View style={styles.exampleFieldContainer}>
-                    <View style={styles.exampleLabelContainer}>
-                      <ThemedText style={styles.exampleLabelFormatted}>Image:</ThemedText>
-                    </View>
-                    <View style={styles.exampleValueContainer}>
-                      <View style={styles.exampleImageContainerFormatted}>
-                        <Image 
-                          source={{ uri: examples[currentExampleIndex].image }}
-                          style={styles.exampleImageFormatted}
-                          resizeMode="contain"
-                        />
-                      </View>
-                    </View>
-                  </View>
-                )}
-              </View>
+              <HtmlRenderer 
+                htmlContent={description || 'No description available'} 
+                style={styles.descriptionContainer}
+              />
             </ScrollView>
-            
+          ) : (
+            <View style={styles.examplesContent}>
+              {examples.length > 0 ? (
+                <View style={styles.exampleContainer}>
             <View style={styles.exampleNavigation}>
               <TouchableOpacity 
-                style={[styles.navArrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
+                      style={[styles.navButton, currentExampleIndex === 0 && styles.disabledNavButton]}
                 onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
                 disabled={currentExampleIndex === 0}
               >
-                <ThemedText style={[styles.navArrowText, currentExampleIndex === 0 && styles.disabledNavText]}>‹</ThemedText>
+                      <ThemedText style={[styles.navButtonText, currentExampleIndex === 0 && styles.disabledNavText]}>‹</ThemedText>
               </TouchableOpacity>
               
-              <View style={styles.exampleIndicatorsContainer}>
-                {examples.map((_, index) => (
-                  <TouchableOpacity 
-                    key={index}
-                    onPress={() => setCurrentExampleIndex(index)}
-                    style={[
-                      styles.exampleIndicatorButton,
-                      currentExampleIndex === index && styles.activeExampleIndicatorButton
-                    ]}
-                  >
-                    <ThemedText style={[
-                      styles.exampleIndicatorNumber,
-                      currentExampleIndex === index && styles.activeExampleIndicatorNumber
-                    ]}>
-                      {index + 1}
+                    <ThemedText style={styles.exampleCounter}>
+                      Example {currentExampleIndex + 1} of {examples.length}
                     </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
 
               <TouchableOpacity 
-                style={[styles.navArrowButton, currentExampleIndex === examples.length - 1 && styles.disabledNavButton]}
+                      style={[styles.navButton, currentExampleIndex === examples.length - 1 && styles.disabledNavButton]}
                 onPress={() => setCurrentExampleIndex(prev => Math.min(examples.length - 1, prev + 1))}
                 disabled={currentExampleIndex === examples.length - 1}
               >
-                <ThemedText style={[styles.navArrowText, currentExampleIndex === examples.length - 1 && styles.disabledNavText]}>›</ThemedText>
+                      <ThemedText style={[styles.navButtonText, currentExampleIndex === examples.length - 1 && styles.disabledNavText]}>›</ThemedText>
               </TouchableOpacity>
             </View>
-          </>
-        )}
+
+                  <ScrollView style={styles.exampleScrollContainer} showsVerticalScrollIndicator={false}>
+                    <View style={styles.exampleDetails}>
+                      <View style={styles.exampleField}>
+                        <ThemedText style={styles.exampleLabel}>Input:</ThemedText>
+                        <ThemedText style={styles.exampleValue}>{examples[currentExampleIndex]?.input || 'N/A'}</ThemedText>
+                      </View>
+                      <View style={styles.exampleField}>
+                        <ThemedText style={styles.exampleLabel}>Output:</ThemedText>
+                        <ThemedText style={styles.exampleValue}>{examples[currentExampleIndex]?.output || 'N/A'}</ThemedText>
+                      </View>
+                      <View style={styles.exampleField}>
+                        <ThemedText style={styles.exampleLabel}>Explanation:</ThemedText>
+                        <ThemedText style={styles.exampleValue}>{examples[currentExampleIndex]?.explanation || 'N/A'}</ThemedText>
+                      </View>
+                    </View>
+                  </ScrollView>
+                </View>
+              ) : (
+                <ThemedText style={styles.noExamplesText}>No examples available</ThemedText>
+              )}
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
 
-  const getCodeMirrorMode = (language: string) => {
-    switch (language) {
-      case 'javascript': return 'javascript';
-      case 'python': return 'python';
-      case 'java': return 'text/x-java';
-      case 'cpp': return 'text/x-c++src';
-      default: return 'javascript';
-    }
-  };
-
-  // Memoize the HTML to prevent re-rendering during typing
-  const stableHTML = React.useMemo(() => {
-    const mode = getCodeMirrorMode(selectedLanguage);
-    const initialCode = getLanguageTemplate(selectedLanguage);
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
-    <style>
-        * {
-            -webkit-touch-callout: none;
-            -webkit-user-select: text;
-            -webkit-tap-highlight-color: transparent;
-        }
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            background: #1E1E1E;
-            overflow: hidden;
-            -webkit-overflow-scrolling: touch;
-        }
-        .CodeMirror {
-            height: 100vh;
-            font-size: 14px;
-            line-height: 1.5;
-            background: #1E1E1E;
-            border: none;
-            outline: none;
-        }
-        .CodeMirror-focused {
-            outline: none;
-        }
-        .CodeMirror-gutters {
-            background: #252526;
-            border-right: 1px solid #3E3E42;
-        }
-        .CodeMirror-linenumber {
-            color: #858585;
-            padding: 0 8px;
-        }
-        .CodeMirror-cursor {
-            border-left: 1px solid #fff;
-        }
-    </style>
-</head>
-<body>
-    <textarea id="code-editor">${initialCode.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
-    <script>
-        // Prevent context menu and other mobile behaviors
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            return false;
-        });
-        
-        document.addEventListener('selectstart', function(e) {
-            if (e.target.tagName === 'TEXTAREA' || e.target.closest('.CodeMirror')) {
-                return true;
-            }
-            e.preventDefault();
-            return false;
-        });
-
-        const editor = CodeMirror.fromTextArea(document.getElementById('code-editor'), {
-            mode: '${mode}',
-            theme: 'monokai',
-            lineNumbers: true,
-            indentUnit: 2,
-            tabSize: 2,
-            autoCloseBrackets: true,
-            matchBrackets: true,
-            lineWrapping: false,
-            styleActiveLine: true,
-            foldGutter: true,
-            gutters: ['CodeMirror-linenumbers', 'CodeMirror-foldgutter'],
-            extraKeys: {
-                'Ctrl-Space': 'autocomplete'
-            }
-        });
-
-        editor.on('change', function(instance, changeObj) {
-            const content = instance.getValue();
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'code-change',
-                content: content
-            }));
-        });
-        
-        // Focus the editor after a short delay to ensure proper initialization
-        setTimeout(() => {
-            editor.focus();
-        }, 100);
-    </script>
-</body>
-</html>`;
-  }, [selectedLanguage, functionSignature, isLoadingSignature]); // Re-generate when language changes or function signature loads
+  // Calculate progress
+  const completedSteps = pseudocodeSteps.filter(step => step.completed).length;
+  const totalSteps = pseudocodeSteps.length;
+  const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header with title bubble */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         
@@ -752,11 +608,11 @@ auto solution() {
           <View style={[
             styles.headerTitleBubble, 
             { 
-              backgroundColor: getDifficultyBubbleColor(difficulty || 'Easy'),
-              shadowColor: getDifficultyAccentColor(difficulty || 'Easy'),
+              backgroundColor: getDifficultyBubbleColor(difficulty),
+              shadowColor: getDifficultyAccentColor(difficulty),
             }
           ]}>
-            <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(difficulty || 'Easy') }]} />
+            <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(difficulty) }]} />
             <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
               {title}
             </ThemedText>
@@ -764,311 +620,263 @@ auto solution() {
         </View>
         
         <TouchableOpacity 
-          style={[
-            styles.problemToggleButton,
-            showProblemDetails && styles.problemToggleButtonActive
-          ]}
-          onPress={() => setShowProblemDetails(!showProblemDetails)}
+          style={styles.infoButton}
+          onPress={() => setShowProblemDetails(true)}
         >
-          <ThemedText style={[
-            styles.problemToggleLabel,
-            showProblemDetails && styles.problemToggleLabelActive
-          ]}>
-            {showProblemDetails ? 'Hide' : 'Show'}
-          </ThemedText>
+          <ThemedText style={styles.infoButtonText}>i</ThemedText>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Problem Details (Collapsible) */}
-        {showProblemDetails && renderProblemDetails()}
-
-        {/* Hidden preloaded problem details to avoid loading delay */}
-        {!showProblemDetails && isProblemPreloaded && (
-          <View style={styles.hiddenPreloader}>
+      {/* Problem details modal */}
+      {showProblemDetails && (
+        <View style={styles.modalOverlay}>
             {renderProblemDetails()}
           </View>
         )}
 
-        {/* Main Content - Vertical Layout */}
-        <View style={styles.mainContent}>
-          {/* Pseudocode Reference - Dynamic height */}
-          <View style={styles.pseudocodeContainer}>
-            <View style={styles.pseudocodeHeader}>
-              <ThemedText style={styles.pseudocodeTitle}>Your Pseudocode</ThemedText>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Progress bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progress}%` }]} />
             </View>
-            <View style={styles.pseudocodeContent}>
-              {pseudocode && pseudocode.trim() ? (
-                pseudocode.split('\n').filter(line => line.trim()).map((line, index) => {
-                  // Remove leading numbers and dots/periods from pseudocode lines
-                  const cleanedLine = line.trim().replace(/^\d+[\.\)\-\s]*/, '');
-                  const stepStatus = getPseudocodeStepStatus(index);
-                  const borderColor = getStepBorderColor(stepStatus);
-                  const statusIcon = getStepStatusIcon(stepStatus);
-                  
-                  return (
-                    <View key={index} style={[
-                      styles.pseudocodeCard,
-                      { borderLeftColor: borderColor, borderLeftWidth: 4 }
-                    ]}>
-                      <View style={styles.pseudocodeNumberBubble}>
-                        <ThemedText style={styles.pseudocodeNumber}>{index + 1}</ThemedText>
-                      </View>
-                      <View style={styles.pseudocodeTextContainer}>
-                        <ThemedText style={styles.pseudocodeLineText}>
-                          {cleanedLine}
+          <ThemedText style={styles.progressText}>
+            {completedSteps} / {totalSteps} steps completed
                         </ThemedText>
-                      </View>
-                      <View style={styles.pseudocodeIconContainer}>
-                        {statusIcon && (
-                          <View style={[styles.statusIndicator, { backgroundColor: borderColor }]}>
-                            <ThemedText style={styles.statusIcon}>{statusIcon}</ThemedText>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <View style={styles.noPseudocodeContainer}>
-                  <ThemedText style={styles.noPseudocodeText}>No pseudocode available</ThemedText>
-                </View>
-              )}
-            </View>
           </View>
 
-          {/* Code Editor - Fixed height */}
-          <View style={styles.codeEditorContainer}>
-            <View style={styles.codeEditorHeader}>
-              <View style={styles.codeEditorTitleContainer}>
-                <ThemedText style={styles.codeEditorTitle}>Code Editor</ThemedText>
-              </View>
-              <View style={styles.languageSelector}>
-                {['javascript', 'python', 'java', 'cpp'].map((lang) => (
+        {/* Pseudocode steps header with language selector */}
+        <View style={styles.stepsHeaderContainer}>
+          <ThemedText style={styles.stepsTitle}>Pseudocode Steps:</ThemedText>
+          
+          {/* Language dropdown */}
+          <View style={styles.languageDropdownContainer}>
                   <TouchableOpacity
-                    key={lang}
+              style={styles.languageDropdownButton}
+              onPress={() => setShowLanguageDropdown(!showLanguageDropdown)}
+            >
+              <ThemedText style={styles.languageDropdownText}>
+                {getLanguageLabel(selectedLanguage)}
+              </ThemedText>
+              <ThemedText style={[styles.dropdownArrow, showLanguageDropdown && styles.dropdownArrowUp]}>
+                ▼
+              </ThemedText>
+            </TouchableOpacity>
+            
+            {showLanguageDropdown && (
+              <View style={styles.languageDropdownMenu}>
+                {[
+                  { value: 'javascript', label: 'JS' },
+                  { value: 'python', label: 'PY' },
+                  { value: 'java', label: 'Java' },
+                  { value: 'c', label: 'C' }
+                ].map((lang) => (
+                  <TouchableOpacity
+                    key={lang.value}
                     style={[
-                      styles.languageButton,
-                      selectedLanguage === lang && styles.selectedLanguageButton
+                      styles.languageDropdownItem,
+                      selectedLanguage === lang.value && styles.selectedLanguageDropdownItem
                     ]}
-                    onPress={() => handleLanguageChange(lang)}
-                    disabled={isLoadingSignature}
+                    onPress={() => handleLanguageChange(lang.value)}
                   >
                     <ThemedText style={[
-                      styles.languageButtonText,
-                      selectedLanguage === lang && styles.selectedLanguageButtonText
+                      styles.languageDropdownItemText,
+                      selectedLanguage === lang.value && styles.selectedLanguageDropdownItemText
                     ]}>
-                      {lang === 'javascript' ? 'JS' : lang === 'python' ? 'PY' : lang === 'cpp' ? 'C++' : 'JAVA'}
+                      {lang.label}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
-              </View>
-            </View>
-            
-            <View style={styles.codeInputContainer}>
-              <WebView
-                ref={webViewRef}
-                key={webViewKey}
-                style={styles.codeEditor}
-                source={{ html: stableHTML }}
-                setSupportMultipleWindows={false}
-                onShouldStartLoadWithRequest={() => true}
-                onMessage={(event) => {
-                  try {
-                    const data = JSON.parse(event.nativeEvent.data);
-                    if (data.type === 'code-change') {
-                      setCode(data.content);
-                    }
-                  } catch (error) {
-                    console.error('Error parsing WebView message:', error);
-                  }
-                }}
-                javaScriptEnabled={true}
-                domStorageEnabled={true}
-                startInLoadingState={false}
-                scalesPageToFit={false}
-                scrollEnabled={false}
-                nestedScrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-                showsHorizontalScrollIndicator={false}
-                bounces={false}
-                overScrollMode="never"
-                keyboardDisplayRequiresUserAction={false}
-                hideKeyboardAccessoryView={true}
-                allowsInlineMediaPlayback={false}
-                mediaPlaybackRequiresUserAction={true}
-                allowsBackForwardNavigationGestures={false}
-                decelerationRate="normal"
-                automaticallyAdjustContentInsets={false}
-                contentInset={{ top: 0, left: 0, bottom: 0, right: 0 }}
-                contentInsetAdjustmentBehavior="never"
-                onLoad={() => {
-                  // WebView is loaded and ready
-                }}
-              />
-              
-              {/* Loading overlay */}
-              {isLoadingSignature && (
-                <View style={styles.codeEditorLoadingOverlay}>
-                  <ActivityIndicator size="large" color="#6564c7" />
                 </View>
               )}
             </View>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.buttonContainer}>
+        {/* Pseudocode steps grid */}
+        <View style={styles.stepsGrid}>
+          {pseudocodeSteps.map((step, index) => (
             <TouchableOpacity 
-              style={[styles.runTestsButton, isRunningTests && styles.runningTestsButton]}
-              onPress={runTests}
-              disabled={isRunningTests || isSubmitting}
+              key={index} 
+              style={[
+                styles.stepCard,
+                index === currentStepIndex && styles.activeStepCard,
+                step.completed && styles.completedStepCard
+              ]}
+              onPress={() => handleStepNavigation(index)}
+              disabled={index > currentStepIndex && !step.completed}
             >
-              {isRunningTests ? (
-                <View style={styles.submittingContent}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <ThemedText style={styles.runTestsButtonText}>Running...</ThemedText>
+              <View style={styles.stepHeader}>
+                <ThemedText style={[
+                  styles.stepNumber,
+                  index === currentStepIndex && styles.activeStepNumber,
+                  step.completed && styles.completedStepNumber
+                ]}>
+                  {index + 1}
+                </ThemedText>
+                {step.completed && (
+                  <View style={styles.checkIcon}>
+                    <ThemedText style={styles.checkIconText}>✓</ThemedText>
                 </View>
-              ) : (
-                <ThemedText style={styles.runTestsButtonText}>Run Tests</ThemedText>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={[styles.submitButton, isSubmitting && styles.submittingButton]}
-              onPress={handleSubmit}
-              disabled={isSubmitting || isRunningTests}
-            >
-              {isSubmitting ? (
-                <View style={styles.submittingContent}>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <ThemedText style={styles.submitButtonText}>Submitting...</ThemedText>
+                )}
                 </View>
-              ) : (
-                <ThemedText style={styles.submitButtonText}>Submit Code</ThemedText>
-              )}
-            </TouchableOpacity>
-          </View>
-
-        </View>
-      </ScrollView>
-
-      {/* Test Results Modal */}
-      <Modal
-        visible={!!testResults}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setTestResults(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Test Results</ThemedText>
-              <TouchableOpacity 
-                style={styles.closeButton}
-                onPress={() => setTestResults(null)}
+              <ThemedText 
+                style={[
+                  styles.stepText,
+                  index === currentStepIndex && styles.activeStepText,
+                  step.completed && styles.completedStepText
+                ]}
+                numberOfLines={3}
               >
-                <ThemedText style={styles.closeButtonText}>✕</ThemedText>
+                {step.text}
+              </ThemedText>
               </TouchableOpacity>
+          ))}
             </View>
             
-            {testResults && (
-              <>
-                <View style={styles.summaryCard}>
-                  <View style={styles.summaryContent}>
-                    <View style={styles.summaryStats}>
-                      <ThemedText style={styles.summaryNumber}>
-                        {testResults.summary.passed}/{testResults.summary.total}
+        {/* MCQ Section or Code Summary Loading */}
+        {(!allStepsCompleted || isGeneratingSummary) && (
+          <View style={styles.mcqContainer}>
+            {!isGeneratingSummary && (
+              <View style={styles.currentStepHighlight}>
+                {/* Show code with nested structure */}
+                {(() => {
+                  const nextStep = currentStepIndex + 1 < pseudocodeSteps.length ? pseudocodeSteps[currentStepIndex + 1]?.text : undefined;
+                  const codeStructure = formatCodeWithNestedPseudocode(pseudocodeSteps[currentStepIndex]?.text || '', nextStep);
+                  
+                  if (codeStructure.hasNested) {
+                    return (
+                      <View style={styles.codeStructureContainer}>
+                        <ThemedText style={styles.currentStepTitle}>
+                          {codeStructure.mainCode}
                       </ThemedText>
-                      <ThemedText style={styles.summaryLabel}>Tests Passed</ThemedText>
+                                               <View style={styles.nestedCodeContainer}>
+                           <ThemedText style={styles.nestedCodeText}>{codeStructure.nestedCode}</ThemedText>
                     </View>
-                    <View style={styles.summaryDivider} />
-                    <View style={styles.summaryPercentage}>
-                      <ThemedText style={[
-                        styles.percentageText,
-                        testResults.summary.percentage === 100 ? styles.perfectScore : styles.partialScore
-                      ]}>
-                        {testResults.summary.percentage}%
+                        <ThemedText style={styles.closingBrace}>{'}'}</ThemedText>
+                      </View>
+                    );
+                  } else {
+                    return (
+                      <ThemedText style={styles.currentStepTitle}>
+                        {codeStructure.mainCode}
                       </ThemedText>
-                      <ThemedText style={styles.scoreLabel}>Score</ThemedText>
+                    );
+                  }
+                })()}
                     </View>
-                  </View>
-                </View>
+            )}
 
-                {/* Section Divider */}
-                <View style={styles.sectionDivider} />
-
-                <ScrollView style={styles.testResultsList} showsVerticalScrollIndicator={false}>
-                  {testResults.results.map((result: any, index: number) => (
-                    <View key={index} style={[
-                      styles.testCard,
-                      result.passed ? styles.testCardPassed : styles.testCardFailed
-                    ]}>
-                      <View style={styles.testCardHeader}>
-                        <View style={styles.testNumber}>
-                          <ThemedText style={styles.testNumberText}>{index + 1}</ThemedText>
+                        {isGeneratingSummary ? (
+              <View style={[styles.loadingContainer, { justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 100 }]}>
+                <ActivityIndicator size="large" color="#6564c7" />
+                <ThemedText style={styles.loadingText}>
+                  Code Summary Loading...
+                </ThemedText>
                         </View>
-                        <View style={styles.testStatus}>
+            ) : isLoadingMCQ || !currentMCQ ? (
+              <View style={styles.mcqLoadingContent}>
+                <ActivityIndicator size="large" color="#6564c7" />
+                <ThemedText style={styles.mcqLoadingText}>
+                  {loadedMCQCount === 0 
+                    ? `Loading question MCQ ${currentStepIndex + 1}/${pseudocodeSteps.length}`
+                    : `Loading questions... ${loadedMCQCount}/${pseudocodeSteps.length} ready`
+                  }
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.mcqContent}>
+                <View style={styles.optionsContainer}>
+                  {currentMCQ.options.map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[
+                        styles.optionButton,
+                        selectedOption === option.id && !showResult && styles.selectedOption,
+                        showResult && isCorrect && option.isCorrect && styles.correctOption,
+                        showResult && !isCorrect && selectedOption === option.id && styles.incorrectOption
+                      ]}
+                      onPress={() => handleOptionSelect(option.id)}
+                      disabled={showResult}
+                    >
+                      <View style={styles.optionContent}>
                           <View style={[
-                            styles.statusBadge,
-                            result.passed ? styles.passedBadge : styles.failedBadge
+                          styles.optionLetterBubble,
+                          selectedOption === option.id && !showResult && styles.selectedOptionLetterBubble,
+                          showResult && isCorrect && option.isCorrect && styles.correctOptionLetterBubble,
+                          showResult && !isCorrect && selectedOption === option.id && styles.incorrectOptionLetterBubble,
                           ]}>
                             <ThemedText style={[
-                              styles.statusText,
-                              result.passed ? styles.passedStatusText : styles.failedStatusText
-                            ]}>
-                              {result.passed ? 'PASSED' : 'FAILED'}
+                            styles.optionLetterText,
+                            selectedOption === option.id && !showResult && styles.selectedOptionLetterText,
+                            showResult && isCorrect && option.isCorrect && styles.correctOptionLetterText,
+                            showResult && !isCorrect && selectedOption === option.id && styles.incorrectOptionLetterText,
+                          ]}>
+                            {option.id}
                             </ThemedText>
                           </View>
+                        {renderOptionText(option.text, [
+                          styles.optionText,
+                          selectedOption === option.id && !showResult && styles.selectedOptionText,
+                          showResult && isCorrect && option.isCorrect && styles.correctOptionText,
+                          showResult && !isCorrect && selectedOption === option.id && styles.incorrectOptionText
+                        ])}
                         </View>
+                    </TouchableOpacity>
+                  ))}
                       </View>
                       
-                      <View style={styles.testCardContent}>
-                        <View style={styles.testDataRow}>
-                          <ThemedText style={styles.testDataLabel}>Input</ThemedText>
-                          <View style={styles.testDataValue}>
-                            <ThemedText style={styles.testDataText}>{result.input}</ThemedText>
+                {showResult && (
+                  <View style={styles.resultContainer}>
+                    <View style={[styles.resultBox, isCorrect ? styles.correctResult : styles.incorrectResult]}>
+                      <ThemedText style={styles.resultText}>
+                        {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+                      </ThemedText>
+                      {formatExplanationText(
+                        isCorrect 
+                          ? currentMCQ.explanation 
+                          : (currentMCQ.optionExplanations?.[selectedOption] || 
+                             `Option ${selectedOption} is incorrect. ${currentMCQ.explanation}`)
+                      )}
                           </View>
                         </View>
-                        
-                        <View style={styles.testDataRow}>
-                          <ThemedText style={styles.testDataLabel}>Expected</ThemedText>
-                          <View style={styles.testDataValue}>
-                            <ThemedText style={styles.testDataText}>{result.expected}</ThemedText>
-                          </View>
-                        </View>
-                        
-                        <View style={styles.testDataRow}>
-                          <ThemedText style={styles.testDataLabel}>Actual</ThemedText>
-                          <View style={[
-                            styles.testDataValue,
-                            !result.passed && styles.errorValue
-                          ]}>
-                            <ThemedText style={[
-                              styles.testDataText,
-                              !result.passed && styles.errorText
-                            ]}>
-                              {result.actual || 'No output'}
-                            </ThemedText>
-                          </View>
-                        </View>
-                        
-                        {result.error && (
-                          <View style={styles.errorContainer}>
-                            <ThemedText style={styles.errorLabel}>Error</ThemedText>
-                            <View style={styles.errorBox}>
-                              <ThemedText style={styles.errorMessage}>{result.error}</ThemedText>
-                            </View>
+                )}
+
+                <View style={styles.actionButtons}>
+                  {!showResult ? (
+                    <TouchableOpacity
+                      style={[styles.submitButton, !selectedOption && styles.disabledSubmitButton]}
+                      onPress={handleSubmit}
+                      disabled={!selectedOption}
+                    >
+                      <ThemedText style={styles.submitButtonText}>Submit</ThemedText>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.resultActions}>
+                      {isCorrect ? (
+                        currentStepIndex < pseudocodeSteps.length - 1 ? (
+                          <TouchableOpacity style={styles.nextButton} onPress={handleNextStep}>
+                            <ThemedText style={styles.nextButtonText}>Next Step</ThemedText>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity style={styles.finishButton} onPress={handleFinish}>
+                            <ThemedText style={styles.finishButtonText}>Complete!</ThemedText>
+                          </TouchableOpacity>
+                        )
+                      ) : (
+                        <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+                          <ThemedText style={styles.retryButtonText}>Try Again</ThemedText>
+                        </TouchableOpacity>
+                      )}
                           </View>
                         )}
                       </View>
                     </View>
-                  ))}
-                </ScrollView>
-              </>
             )}
           </View>
-        </View>
-      </Modal>
+        )}
+
+
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -1076,20 +884,24 @@ auto solution() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#f5f5f5',
   },
+  // Header styles (copied from question.tsx)
   header: {
     backgroundColor: '#6564c7',
     padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    position: 'relative',
   },
   backButton: {
+    position: 'absolute',
+    left: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    width: 80, // Increased to match toggle button area
-    justifyContent: 'flex-start',
+    width: 60,
+    zIndex: 1,
   },
   backIcon: {
     width: 24,
@@ -1098,24 +910,22 @@ const styles = StyleSheet.create({
     tintColor: '#fff',
   },
   headerCenter: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 10, // Add margin to ensure proper centering
   },
   headerTitleBubble: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
     elevation: 4,
-    minWidth: '60%',
-    maxWidth: '85%',
+    minWidth: '65%',
+    maxWidth: '80%',
   },
   difficultyDot: {
     width: 8,
@@ -1124,873 +934,683 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#fff',
     textAlign: 'center',
     flexShrink: 1,
+    lineHeight: 22,
   },
-  problemToggleButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    width: 80, // Fixed width to match back button area
+  infoButton: {
+    position: 'absolute',
+    right: 14,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 15,
+    zIndex: 1,
   },
-  problemToggleButtonActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)', // More opaque when active
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  problemToggleIcon: {
-    width: 20,
-    height: 20,
-    tintColor: 'rgba(255, 255, 255, 0.7)', // Semi-transparent when inactive
-    marginLeft: 6,
-  },
-  problemToggleIconActive: {
-    tintColor: '#fff', // Full white when active
-  },
-  problemToggleLabel: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  problemToggleLabelActive: {
+  infoButtonText: {
     color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   content: {
     flex: 1,
-  },
-  problemDetailsContainer: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    maxHeight: SCREEN_HEIGHT * 0.4,
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
-  },
-  activeTab: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 2,
-    borderBottomColor: '#6564c7',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  activeTabText: {
-    color: '#6564c7',
-  },
-  problemContent: {
-    flex: 1,
     padding: 16,
   },
-  descriptionContainer: {
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    height: 300,
-  },
-  htmlRenderer: {
-    flex: 1,
-  },
-  constraintsContainer: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-  },
-  constraintsTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    marginBottom: 8,
-  },
-  constraintText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  examplesContainer: {
-    flex: 1,
-  },
-      exampleNavButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#6564c7',
-    borderRadius: 6,
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  exampleNavButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  exampleCounter: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2d2d2d',
-  },
-  exampleContent: {
-    flex: 1,
-  },
-  exampleField: {
+  progressContainer: {
     marginBottom: 16,
   },
-  exampleLabel: {
+  progressBar: {
+    height: 8,
+    backgroundColor: '#e8e8e8',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#6564c7',
+    borderRadius: 4,
+  },
+  progressText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    marginBottom: 4,
-  },
-  exampleValueBox: {
-    backgroundColor: '#f8f8f8',
-    padding: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  exampleValue: {
-    fontSize: 13,
-    color: '#444',
-    fontFamily: 'monospace',
-  },
-  exampleImageContainer: {
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  exampleImage: {
-    width: 200,
-    height: 150,
-    borderRadius: 8,
-  },
-  noExamplesContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noExamplesText: {
-    fontSize: 16,
     color: '#666',
+    textAlign: 'center',
+    fontWeight: '500',
   },
-  mainContent: {
-    padding: 16,
-  },
-  // Pseudocode Container - Dynamic height with modern design
-  pseudocodeContainer: {
-    backgroundColor: '#FAFAFA', // Light gray background
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+  stepsHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  stepsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  languageDropdownContainer: {
+    position: 'relative',
+    zIndex: 1000,
+  },
+  languageDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  languageDropdownText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dropdownArrow: {
+    color: '#fff',
+    fontSize: 10,
+  },
+  dropdownArrowUp: {
+    transform: [{ rotate: '180deg' }],
+  },
+  languageDropdownMenu: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: 4,
+    minWidth: 80,
   },
-  pseudocodeHeader: {
-    backgroundColor: '#F5F5F5', // Light header
+  languageDropdownItem: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#f0f0f0',
   },
-  pseudocodeTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#2D2D2D',
+  selectedLanguageDropdownItem: {
+    backgroundColor: '#f8f7ff',
   },
-  pseudocodeContent: {
-    padding: 16,
+  languageDropdownItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
   },
-  pseudocodeCard: {
+  selectedLanguageDropdownItemText: {
+    color: '#6564c7',
+    fontWeight: '600',
+  },
+  stepsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 10,
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  stepCard: {
+    width: '31%',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 2,
+    borderColor: '#f0f0f0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
-    borderWidth: 1,
-    borderColor: '#F0F0F0',
+    minHeight: 60,
   },
-  pseudocodeNumberBubble: {
+  activeStepCard: {
+    borderColor: '#6564c7',
+    backgroundColor: '#f8f7ff',
+    transform: [{ scale: 1.02 }],
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  completedStepCard: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#f8fff8',
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  stepNumber: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  activeStepNumber: {
+    backgroundColor: '#6564c7',
+    color: '#fff',
+  },
+  completedStepNumber: {
+    backgroundColor: '#4CAF50',
+    color: '#fff',
+  },
+  checkIcon: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 6,
+    width: 12,
+    height: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkIconText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: 'bold',
+  },
+  stepText: {
+    fontSize: 10,
+    color: '#666',
+    lineHeight: 12,
+  },
+  activeStepText: {
+    color: '#6564c7',
+    fontWeight: '600',
+  },
+  completedStepText: {
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  mcqContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    flex: 1,
+    minHeight: SCREEN_HEIGHT * 0.55,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+  },
+  currentStepHighlight: {
+    backgroundColor: '#6564c7',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  currentStepTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  nestedPseudocodeContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  nestedPseudocodeLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFD700',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  nestedPseudocodeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#fff',
+    fontStyle: 'italic',
+    opacity: 0.9,
+  },
+  codeStructureContainer: {
+    width: '100%',
+  },
+  nestedCodeContainer: {
+    marginLeft: 20,
+    marginTop: 8,
+    marginBottom: 8,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: '#FFD700',
+  },
+  nestedCodeLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFD700',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  nestedCodeText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#fff',
+    fontStyle: 'italic',
+    opacity: 0.9,
+  },
+  closingBrace: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 4,
+  },
+  nestedPseudocodeHint: {
+    color: '#999',
+    fontSize: 14,
+    fontStyle: 'italic',
+    opacity: 0.7,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  mcqLoadingContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    minHeight: 200,
+  },
+  mcqLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+  },
+  mcqContent: {
+    gap: 16,
+  },
+  optionsContainer: {
+    gap: 12,
+  },
+  optionButton: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+  },
+  selectedOption: {
+    borderColor: '#6564c7',
+    backgroundColor: '#f8f7ff',
+  },
+  correctOption: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#f8fff8',
+  },
+  incorrectOption: {
+    borderColor: '#F44336',
+    backgroundColor: '#fff8f8',
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  optionLetterBubble: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0,
-  },
-  pseudocodeNumber: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  pseudocodeLineText: {
-    fontSize: 16,
-    color: '#2D2D2D',
-    lineHeight: 22,
-    fontWeight: '500',
-    flexWrap: 'wrap',
-  },
-  pseudocodeTextContainer: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  pseudocodeIconContainer: {
-    width: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  statusIndicator: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  statusIcon: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  noPseudocodeContainer: {
-    padding: 24,
+    backgroundColor: '#e9ecef',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  noPseudocodeText: {
-    fontSize: 16,
-    color: '#888',
-    fontStyle: 'italic',
-  },
-  // Code Editor Container - Fixed height with VS Code theme
-  codeEditorContainer: {
-    height: 300, // Fixed height instead of percentage
-    backgroundColor: '#1E1E1E', // VS Code dark background
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#3C3C3C',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    borderColor: '#dee2e6',
   },
-  codeEditorHeader: {
-    backgroundColor: '#2D2D30', // VS Code tab background
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#3C3C3C',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  selectedOptionLetterBubble: {
+    backgroundColor: '#6564c7',
+    borderColor: '#6564c7',
   },
-  codeEditorTitle: {
+  correctOptionLetterBubble: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  incorrectOptionLetterBubble: {
+    backgroundColor: '#F44336',
+    borderColor: '#F44336',
+  },
+  optionLetterText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#CCCCCC', // VS Code text color
+    color: '#666',
   },
-  languageSelector: {
-    flexDirection: 'row',
-    gap: 6,
+  selectedOptionLetterText: {
+    color: '#fff',
   },
-  languageButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#3C3C3C',
-    minWidth: 40,
-    alignItems: 'center',
+  correctOptionLetterText: {
+    color: '#fff',
   },
-  selectedLanguageButton: {
-    backgroundColor: '#007ACC', // VS Code blue
+  incorrectOptionLetterText: {
+    color: '#fff',
   },
-  languageButtonText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#CCCCCC',
-  },
-  selectedLanguageButtonText: {
-    color: '#FFFFFF',
-  },
-  codeInputContainer: {
+  optionText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
     flex: 1,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    overflow: 'hidden',
-    flexDirection: 'row',
+  },
+  selectedOptionText: {
+    color: '#6564c7',
+    fontWeight: '600',
+  },
+  correctOptionText: {
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  incorrectOptionText: {
+    color: '#F44336',
+    fontWeight: '600',
+  },
+  resultContainer: {
+    marginTop: 8,
+  },
+  resultBox: {
+    borderRadius: 12,
+    padding: 16,
+  },
+  correctResult: {
+    backgroundColor: '#f8fff8',
+    borderColor: '#4CAF50',
+    borderWidth: 1,
+  },
+  incorrectResult: {
+    backgroundColor: '#fff8f8',
+    borderColor: '#F44336',
+    borderWidth: 1,
+  },
+  resultText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  boldText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  actionButtons: {
+    marginTop: 8,
   },
   submitButton: {
-    flex: 1,
     backgroundColor: '#6564c7',
-    paddingVertical: 16,
     borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  submittingButton: {
-    backgroundColor: '#9896d4',
-  },
-  submittingContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  disabledSubmitButton: {
+    backgroundColor: '#ccc',
   },
   submitButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  section: {
-    marginBottom: 8,
-    marginHorizontal: 16, // Add horizontal margin to match main content
-    marginTop: 16, // Add top margin to push content below the fixed header
-  },
-  buttonContainer: {
-    flexDirection: 'row',
+  resultActions: {
     gap: 12,
-    marginBottom: 12,
   },
-  toggleButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  toggleButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  webviewContainer: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    padding: 16,
-  },
-  exampleScrollView: {
-    flex: 1,
-    padding: 20,
-  },
-  exampleContentFormatted: {
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-  exampleFieldContainer: {
-    marginBottom: 10,
-  },
-  exampleLabelRowContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 3,
-  },
-  exampleLabelContainer: {
-    marginBottom: 3,
-    flex: 1,
-  },
-  exampleLabelFormatted: {
-    fontWeight: '600',
-    color: '#6564c7',
-    fontSize: 15,
-  },
-  exampleValueContainer: {
-    paddingLeft: 6,
-  },
-  exampleTextFormatted: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#444',
-    backgroundColor: '#f8f9fa',
-    padding: 8,
-    borderRadius: 6,
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-  },
-  exampleImageContainerFormatted: {
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 6,
-  },
-  exampleImageFormatted: {
-    width: '100%',
-    maxWidth: 280,
-    height: 160,
-    borderRadius: 6,
-  },
-  imageIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    backgroundColor: '#e8e7ff',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#6564c7',
-  },
-  imageIconPlaceholder: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  imageIconText: {
-    fontSize: 10,
-  },
-  imageIndicatorText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6564c7',
-  },
-  exampleNavigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingTop: 8,
-  },
-  navArrowButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navArrowText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    paddingRight: "2%",
-  },
-  disabledNavButton: {
-    backgroundColor: '#e0e0e0',
-  },
-  disabledNavText: {
-    color: '#ccc',
-  },
-  exampleIndicatorsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  exampleIndicatorButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeExampleIndicatorButton: {
-    backgroundColor: '#6564c7',
-  },
-  exampleIndicatorNumber: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  activeExampleIndicatorNumber: {
-    color: '#fff',
-  },
-  hiddenPreloader: {
-    position: 'absolute',
-    top: -10000, // Move far off-screen
-    left: -10000,
-    opacity: 0,
-    pointerEvents: 'none',
-  },
-  editorLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1E1E1E',
-    gap: 8,
-  },
-  editorLoadingText: {
-    color: '#CCCCCC',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  codeEditorWrapper: {
-    flex: 1,
-  },
-  syntaxHighlighterContainer: {
-    flex: 1,
-  },
-  syntaxHighlighter: {
-    flex: 1,
-  },
-  lineNumbers: {
-    width: 50,
-    backgroundColor: '#252526',
-    paddingTop: 16,
-    paddingLeft: 8,
-    borderBottomLeftRadius: 12,
-  },
-  lineNumber: {
-    fontSize: 12,
-    color: '#858585',
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-    lineHeight: 20,
-    textAlign: 'right',
-    paddingRight: 8,
-  },
-  codeScrollView: {
-    flex: 1,
-  },
-  codeInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#D4D4D4',
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-    lineHeight: 20,
-    textAlignVertical: 'top',
-    padding: 16,
-    paddingLeft: 12,
-    minHeight: 200,
-    backgroundColor: '#1E1E1E',
-  },
-  codeEditor: {
-    flex: 1,
-  },
-  runTestsButton: {
-    flex: 1,
-    backgroundColor: '#FF8C00',
-    paddingVertical: 16,
+  nextButton: {
+    backgroundColor: '#4CAF50',
     borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#FF8C00',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
-  runningTestsButton: {
-    backgroundColor: '#FFAA44',
-  },
-  runTestsButtonText: {
+  nextButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    width: '95%',
-    height: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 15,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-  },
-  closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    fontSize: 18,
-    color: '#666',
-    fontWeight: 'bold',
-  },
-  
-  // Summary card styles
-  summaryCard: {
-    backgroundColor: '#f8f9ff',
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e8ebff',
-  },
-  summaryContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  summaryStats: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  summaryNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#6564c7',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  summaryDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: '#ddd',
-    marginHorizontal: 16,
-  },
-  summaryPercentage: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  percentageText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  perfectScore: {
-    color: '#4caf50',
-  },
-  partialScore: {
-    color: '#ff9800',
-  },
-  scoreLabel: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  
-  // Section divider
-  sectionDivider: {
-    height: 1,
-    backgroundColor: '#e0e0e0',
-    marginHorizontal: 20,
-    marginVertical: 16,
-  },
-  
-  // Test results list
-  testResultsList: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  
-  // Individual test card styles
-  testCard: {
-    backgroundColor: '#fff',
+  retryButton: {
+    backgroundColor: '#FF9800',
     borderRadius: 12,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    padding: 16,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  finishButton: {
+    backgroundColor: '#6564c7',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  finishButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  completionContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  testCardPassed: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#4caf50',
-  },
-  testCardFailed: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#f44336',
-  },
-  testCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  completionContent: {
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fafafa',
+    marginBottom: 20,
   },
-  testNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
+  completionTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
   },
-  testNumberText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  testStatus: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  passedBadge: {
-    backgroundColor: '#e8f5e8',
-  },
-  failedBadge: {
-    backgroundColor: '#ffeaea',
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  passedStatusText: {
-    color: '#4caf50',
-  },
-  failedStatusText: {
-    color: '#f44336',
-  },
-  
-  // Test card content
-  testCardContent: {
-    padding: 16,
-  },
-  testDataRow: {
-    marginBottom: 12,
-  },
-  testDataLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+  completionMessage: {
+    fontSize: 16,
     color: '#666',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  testDataValue: {
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  testDataText: {
-    fontSize: 14,
-    color: '#2d2d2d',
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-  },
-  errorValue: {
-    backgroundColor: '#fff5f5',
-    borderColor: '#ffcdd2',
-  },
-  errorText: {
-    color: '#d32f2f',
-  },
-  
-  // Error container
-  errorContainer: {
-    marginTop: 8,
-  },
-  errorLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#f44336',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  errorBox: {
-    backgroundColor: '#fff5f5',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#ffcdd2',
-  },
-  errorMessage: {
-    fontSize: 13,
-    color: '#d32f2f',
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-    lineHeight: 18,
-  },
-  
-  // Code editor title container styles
-  codeEditorTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  loadingSignatureContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  loadingSignatureText: {
-    fontSize: 12,
-    color: '#6564c7',
-    fontWeight: '500',
-  },
-  
-  // Code editor loading overlay
-  codeEditorLoadingOverlay: {
+  // Modal styles
+  modalOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(30, 30, 30, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
     justifyContent: 'center',
     alignItems: 'center',
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    margin: 20,
+    height: SCREEN_HEIGHT * 0.65,
+    maxWidth: 400,
+    width: '90%',
+    borderWidth: 2,
+    borderColor: '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalContent: {
+    padding: 20,
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeButtonText: {
+    fontSize: 18,
+    color: '#666',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: '#6564c7',
+  },
+  tabButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  activeTabButtonText: {
+    color: '#fff',
+  },
+  tabContent: {
+    flex: 1,
+    marginTop: 8,
+  },
+  problemContent: {
+    flex: 1,
+  },
+  exampleScrollContainer: {
+    flex: 1,
+  },
+  problemContentContainer: {
+    flexGrow: 1,
+  },
+  descriptionContainer: {
+    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    minHeight: 300,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  examplesContent: {
+    flex: 1,
+  },
+  exampleContainer: {
+    flex: 1,
+    padding: 10,
+  },
+  exampleNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  navButton: {
+    backgroundColor: '#6564c7',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  disabledNavButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  navButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  disabledNavText: {
+    color: '#999',
+  },
+  exampleCounter: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  exampleDetails: {
+    gap: 20,
+    padding: 16,
+  },
+  exampleField: {
+    gap: 4,
+  },
+  exampleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6564c7',
+  },
+  exampleValue: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 22,
+  },
+  noExamplesText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 40,
   },
 }); 
