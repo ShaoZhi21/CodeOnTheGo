@@ -36,14 +36,20 @@ async function getAllTopics() {
 // Get problems for a specific topic
 async function getTopicProblems(topic) {
   try {
+    console.log('getTopicProblems called with topic:', topic);
     const client = getSupabaseClient();
+    console.log('About to execute query: topic_problems where topic_name =', topic);
     const { data, error } = await client
       .from('topic_problems')
       .select('*')
-      .eq('topic', topic)
+      .eq('topic_name', topic)
       .order('leetcode_id');
     
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase error in getTopicProblems:', error);
+      throw error;
+    }
+    console.log('getTopicProblems success, found', data?.length || 0, 'problems');
     return data || [];
   } catch (error) {
     console.error('Error fetching topic problems:', error);
@@ -58,7 +64,7 @@ async function getTopicStats(topic) {
     const { data, error } = await client
       .from('topic_problems')
       .select('*')
-      .eq('topic', topic);
+      .eq('topic_name', topic);
     
     if (error) throw error;
     

@@ -1,7 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
 import React from 'react';
-import { Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface QuestionActionModalProps {
   visible: boolean;
@@ -14,6 +14,7 @@ interface QuestionActionModalProps {
   questionDifficulty: 'Easy' | 'Medium' | 'Hard';
   isLessonRequired: boolean;
   isQuestionSolved: boolean;
+  topicName: string;
 }
 
 export default function QuestionActionModal({
@@ -26,9 +27,18 @@ export default function QuestionActionModal({
   hasCompletedLesson,
   questionDifficulty,
   isLessonRequired,
-  isQuestionSolved
+  isQuestionSolved,
+  topicName
 }: QuestionActionModalProps) {
   const handleViewLesson = () => {
+    console.log('🎯 handleViewLesson called');
+    console.log('🎯 Navigation params:', {
+      questionId: questionId.toString(),
+      questionTitle: questionTitle,
+      questionDescription: questionDescription,
+      topicName: topicName,
+    });
+    
     // Navigate to lesson screen
     router.push({
       pathname: '/screens/lesson',
@@ -36,6 +46,7 @@ export default function QuestionActionModal({
         questionId: questionId.toString(),
         questionTitle: questionTitle,
         questionDescription: questionDescription,
+        topicName: topicName,
       },
     });
     onClose();
@@ -92,7 +103,15 @@ export default function QuestionActionModal({
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.button, attemptButtonStyle]} onPress={handleSolveProblem}>
-            <Text style={styles.textStyle}>{attemptButtonText}</Text>
+            <View style={styles.buttonContent}>
+              {(isLessonRequired && !hasCompletedLesson && !isQuestionSolved) && (
+                <Image 
+                  source={require('@/assets/images/icons/lock-icon.png')} 
+                  style={styles.lockIcon} 
+                />
+              )}
+              <Text style={styles.textStyle}>{attemptButtonText}</Text>
+            </View>
           </TouchableOpacity>
           
           <TouchableOpacity style={[styles.button, styles.buttonClose]} onPress={onClose}>
@@ -160,5 +179,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 8,
+    tintColor: '#fff',
   },
 }); 

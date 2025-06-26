@@ -17,9 +17,17 @@ interface LessonData {
   title: string;
   content: string;
   keyConcepts: string[];
-  example: string;
-  hint: string;
-  commonMistake: string;
+  examples: string[];
+  hints: string[];
+  pitfalls: string[];
+  visualAids: string[];
+  solutionApproaches?: {
+    name: string;
+    description: string;
+    timeComplexity: string;
+    spaceComplexity: string;
+    keyInsight: string;
+  }[];
 }
 
 interface QuizData {
@@ -131,6 +139,7 @@ export default function LessonScreen() {
               topicName: topicName,
               problemId: parseInt(questionId || '0'),
               lessonContent: lessonResult.content,
+              solutionApproaches: lessonResult.solutionApproaches,
             }),
           });
 
@@ -143,8 +152,6 @@ export default function LessonScreen() {
 
           const quizResult = await quizResponse.json();
           console.log('📝 Quiz data generated successfully:', quizResult);
-          console.log('📝 Quiz questions:', quizResult.questions);
-          console.log('📝 Quiz questions length:', quizResult.questions?.length);
           setQuizData(quizResult);
           
           // Format quiz questions with IDs
@@ -155,7 +162,6 @@ export default function LessonScreen() {
             correctAnswer: q.correctAnswer,
             explanation: q.explanation,
           }));
-          console.log('📝 Formatted questions:', formattedQuestions);
           setQuizQuestions(formattedQuestions);
         } catch (quizError) {
           console.error('⚠️ Quiz generation failed, but lesson will still be shown:', quizError);
@@ -177,9 +183,10 @@ export default function LessonScreen() {
           title: questionTitle || 'Lesson',
           content: 'Lesson content could not be loaded. Please try again later.',
           keyConcepts: ['Basic concepts'],
-          example: 'Example 1',
-          hint: 'Hint 1',
-          commonMistake: 'Common mistake 1',
+          examples: ['Example 1', 'Example 2'],
+          hints: ['Hint 1', 'Hint 2'],
+          pitfalls: ['Common mistake 1'],
+          visualAids: ['Visual aid 1'],
         });
         setCurrentPage('teaching');
       }
@@ -191,10 +198,6 @@ export default function LessonScreen() {
   }, [questionId, topicName]);
 
   const handleStartQuiz = () => {
-    console.log('🎯 Starting quiz...');
-    console.log('🎯 Quiz questions available:', quizQuestions);
-    console.log('🎯 Quiz questions length:', quizQuestions.length);
-    
     setCurrentPage('quiz');
     setCurrentQuestionIndex(0);
     setSelectedAnswers([]);
@@ -389,21 +392,13 @@ export default function LessonScreen() {
 
   const getOptionStyle = (optionIndex: number) => {
     const baseStyle = styles.optionButton;
-    
-    // Safety check for optionAnimations
-    const transformStyle = optionAnimations[optionIndex] 
-      ? { transform: [{ scale: optionAnimations[optionIndex] }] }
-      : {};
+    const transformStyle = { transform: [{ scale: optionAnimations[optionIndex] }] };
     
     if (!showFeedback) {
       return [baseStyle, transformStyle];
     }
     
     const currentQuestion = quizQuestions[currentQuestionIndex];
-    if (!currentQuestion) {
-      return [baseStyle, transformStyle];
-    }
-    
     const isSelected = selectedAnswers[currentQuestionIndex] === optionIndex;
     const isCorrect = optionIndex === currentQuestion.correctAnswer;
     
@@ -423,10 +418,6 @@ export default function LessonScreen() {
     }
     
     const currentQuestion = quizQuestions[currentQuestionIndex];
-    if (!currentQuestion) {
-      return styles.optionText;
-    }
-    
     const isSelected = selectedAnswers[currentQuestionIndex] === optionIndex;
     const isCorrect = optionIndex === currentQuestion.correctAnswer;
     
@@ -531,30 +522,82 @@ export default function LessonScreen() {
                 </>
               )}
 
-              {lessonData?.example && (
+              {lessonData?.examples && lessonData.examples.length > 0 && (
                 <>
-                  <ThemedText style={styles.sectionTitle}>Example</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    {lessonData.example}
-                  </ThemedText>
+                  <ThemedText style={styles.sectionTitle}>Examples</ThemedText>
+                  {lessonData.examples.map((example, index) => (
+                    <ThemedText key={index} style={styles.lessonText}>
+                      {index + 1}. {example}
+                      {index < lessonData.examples.length - 1 ? '\n\n' : ''}
+                    </ThemedText>
+                  ))}
                 </>
               )}
 
-              {lessonData?.hint && (
+              {lessonData?.hints && lessonData.hints.length > 0 && (
                 <>
-                  <ThemedText style={styles.sectionTitle}>Problem-Solving Hint</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    💡 {lessonData.hint}
-                  </ThemedText>
+                  <ThemedText style={styles.sectionTitle}>Problem-Solving Hints</ThemedText>
+                  {lessonData.hints.map((hint, index) => (
+                    <ThemedText key={index} style={styles.lessonText}>
+                      💡 {hint}
+                      {index < lessonData.hints.length - 1 ? '\n\n' : ''}
+                    </ThemedText>
+                  ))}
                 </>
               )}
 
-              {lessonData?.commonMistake && (
+              {lessonData?.pitfalls && lessonData.pitfalls.length > 0 && (
                 <>
-                  <ThemedText style={styles.sectionTitle}>Common Mistake</ThemedText>
+                  <ThemedText style={styles.sectionTitle}>Common Pitfalls</ThemedText>
+                  {lessonData.pitfalls.map((pitfall, index) => (
+                    <ThemedText key={index} style={styles.lessonText}>
+                      ⚠️ {pitfall}
+                      {index < lessonData.pitfalls.length - 1 ? '\n\n' : ''}
+                    </ThemedText>
+                  ))}
+                </>
+              )}
+
+              {lessonData?.visualAids && lessonData.visualAids.length > 0 && (
+                <>
+                  <ThemedText style={styles.sectionTitle}>Visual Aids</ThemedText>
+                  {lessonData.visualAids.map((aid, index) => (
+                    <ThemedText key={index} style={styles.lessonText}>
+                      🎯 {aid}
+                      {index < lessonData.visualAids.length - 1 ? '\n\n' : ''}
+                    </ThemedText>
+                  ))}
+                </>
+              )}
+
+              {lessonData?.solutionApproaches && lessonData.solutionApproaches.length > 0 && (
+                <>
+                  <ThemedText style={styles.sectionTitle}>Solution Approaches Overview</ThemedText>
                   <ThemedText style={styles.lessonText}>
-                    ⚠️ {lessonData.commonMistake}
+                    This problem can be solved using several different approaches. Understanding these will help you choose the best strategy:
                   </ThemedText>
+                  {lessonData.solutionApproaches.map((approach, index) => (
+                    <View key={index} style={styles.approachContainer}>
+                      <ThemedText style={styles.approachTitle}>
+                        {index + 1}. {approach.name}
+                      </ThemedText>
+                      <ThemedText style={styles.lessonText}>
+                        {approach.description}
+                      </ThemedText>
+                      <View style={styles.complexityContainer}>
+                        <ThemedText style={styles.complexityText}>
+                          ⏱️ Time: {approach.timeComplexity}
+                        </ThemedText>
+                        <ThemedText style={styles.complexityText}>
+                          💾 Space: {approach.spaceComplexity}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={styles.lessonText}>
+                        💡 Key Insight: {approach.keyInsight}
+                      </ThemedText>
+                      {index < (lessonData.solutionApproaches?.length || 0) - 1 ? '\n' : ''}
+                    </View>
+                  ))}
                 </>
               )}
             </View>
@@ -660,33 +703,6 @@ export default function LessonScreen() {
   // Quiz page
   const currentQuestion = quizQuestions[currentQuestionIndex];
   
-  // Add safety check for quiz questions
-  if (!currentQuestion || !quizQuestions || quizQuestions.length === 0) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentPage('teaching')} style={styles.backButton}>
-            <ThemedText>← Back to Lesson</ThemedText>
-          </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>Quiz</ThemedText>
-        </View>
-        
-        <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={[styles.lessonText, { marginTop: 20, textAlign: 'center' }]}>
-            Loading quiz questions...
-          </ThemedText>
-          <TouchableOpacity 
-            style={[styles.nextButton, { marginTop: 20 }]} 
-            onPress={() => setCurrentPage('teaching')}
-          >
-            <ThemedText style={styles.nextButtonText}>Back to Lesson</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -710,24 +726,17 @@ export default function LessonScreen() {
         <ThemedText style={styles.questionText}>{currentQuestion.question}</ThemedText>
         
         <View style={styles.optionsContainer}>
-          {currentQuestion.options.map((option, index) => {
-            // Safety check - only render if we have animations for this option
-            if (index >= optionAnimations.length) {
-              return null;
-            }
-            
-            return (
-              <TouchableOpacity
-                key={index}
-                style={getOptionStyle(index)}
-                onPress={() => handleOptionSelect(index)}
-                disabled={showFeedback}
-                activeOpacity={0.7}
-              >
-                <ThemedText style={getOptionTextStyle(index)}>{option}</ThemedText>
-              </TouchableOpacity>
-            );
-          })}
+          {currentQuestion.options.map((option, index) => (
+            <TouchableOpacity
+              key={index}
+              style={getOptionStyle(index)}
+              onPress={() => handleOptionSelect(index)}
+              disabled={showFeedback}
+              activeOpacity={0.7}
+            >
+              <ThemedText style={getOptionTextStyle(index)}>{option}</ThemedText>
+            </TouchableOpacity>
+          ))}
         </View>
       </Animated.View>
 

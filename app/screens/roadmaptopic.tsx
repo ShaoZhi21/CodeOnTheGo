@@ -538,6 +538,7 @@ export default function RoadmapTopic() {
           questionDescription={String(selectedQuestion.description || `Solve the problem: ${decodeHtmlEntities(String(selectedQuestion.title || 'Untitled Problem'))}`)}
           isLessonRequired={isLessonRequired(selectedQuestion)}
           isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
+          topicName={topicString || ''}
         />
       )}
     </SafeAreaView>

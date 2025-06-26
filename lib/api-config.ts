@@ -21,7 +21,7 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
   try {
     // Create AbortController for timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for lesson generation
     
     const response = await fetch(`${primaryUrl}${endpoint}`, {
       ...options,
@@ -41,7 +41,7 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
     
     try {
       const fallbackController = new AbortController();
-      const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 10000);
+      const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 60000);
       
       const fallbackResponse = await fetch(`${fallbackUrl}${endpoint}`, {
         ...options,
