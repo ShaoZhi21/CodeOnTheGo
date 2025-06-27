@@ -20,9 +20,17 @@ interface Topic {
   description: string;
 }
 
+interface TopicProgress {
+  topic_name: string;
+  completed_problems: number;
+  total_problems: number;
+  completion_percentage: number;
+}
+
 interface TopicCardProps {
   topic: Topic;
   index: number;
+  progress?: TopicProgress;
   onPress: () => void;
 }
 
@@ -56,18 +64,22 @@ const getTopicIcon = (topicName: string) => {
 // Topic color mapping for variety
 const getTopicColors = (index: number) => {
   const colorSchemes = [
-    { bg: '#F3F0FF', border: '#E0D7FF', accent: '#6564c7' },
-    { bg: '#F8F6FF', border: '#E6E0FF', accent: '#7C4DFF' },
-    { bg: '#F1EFFF', border: '#DDD5FF', accent: '#5E35B1' },
-    { bg: '#F5F3FF', border: '#E3DEFF', accent: '#673AB7' },
-    { bg: '#F9F7FF', border: '#E8E3FF', accent: '#9C27B0' },
-    { bg: '#F2F0FF', border: '#DED6FF', accent: '#8E24AA' },
+    { bg: '#F3F0FF', border: '#E0D7FF', accent: '#6564c7' }, // Purple
+    { bg: '#FFF3E0', border: '#FFE0B2', accent: '#FF9800' }, // Orange
+    { bg: '#E8F5E8', border: '#C8E6C9', accent: '#4CAF50' }, // Green
+    { bg: '#E3F2FD', border: '#BBDEFB', accent: '#2196F3' }, // Blue
+    { bg: '#FCE4EC', border: '#F8BBD9', accent: '#E91E63' }, // Pink
+    { bg: '#F3E5F5', border: '#E1BEE7', accent: '#9C27B0' }, // Purple variant
+    { bg: '#FFF8E1', border: '#FFECB3', accent: '#FFC107' }, // Amber
+    { bg: '#E0F2F1', border: '#B2DFDB', accent: '#009688' }, // Teal
+    { bg: '#FFEBEE', border: '#FFCDD2', accent: '#F44336' }, // Red
+    { bg: '#F1F8E9', border: '#DCEDC8', accent: '#8BC34A' }, // Light Green
   ];
   
   return colorSchemes[index % colorSchemes.length];
 };
 
-const TopicCard: React.FC<TopicCardProps> = ({ topic, index, onPress }) => {
+const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }) => {
   const colors = getTopicColors(index);
   
   return (
@@ -76,12 +88,22 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, onPress }) => {
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <View style={[styles.iconContainer, { backgroundColor: colors.accent }]}>
-        <Image 
-          source={getTopicIcon(topic.name)} 
-          style={styles.topicIcon}
-          tintColor="#FFFFFF"
-        />
+      <View style={styles.cardHeader}>
+        <View style={[styles.iconContainer, { backgroundColor: colors.accent }]}>
+          <Image 
+            source={getTopicIcon(topic.name)} 
+            style={styles.topicIcon}
+            tintColor="#FFFFFF"
+          />
+        </View>
+        
+        {progress && progress.total_problems > 0 && (
+          <View style={styles.progressBadge}>
+            <ThemedText style={styles.progressText}>
+              {progress.completed_problems}/{progress.total_problems}
+            </ThemedText>
+          </View>
+        )}
       </View>
       
       <View style={styles.cardContent}>
@@ -89,12 +111,33 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, onPress }) => {
           {topic.name}
         </ThemedText>
         
-        <ThemedText style={styles.topicDescription} numberOfLines={3}>
+        <ThemedText style={styles.topicDescription} numberOfLines={2}>
           {topic.description}
         </ThemedText>
         
+        {progress && progress.total_problems > 0 && (
+          <View style={styles.progressContainer}>
+            <View style={styles.progressBar}>
+              <View 
+                style={[
+                  styles.progressFill, 
+                  { 
+                    width: `${progress.completion_percentage}%`,
+                    backgroundColor: colors.accent 
+                  }
+                ]} 
+              />
+            </View>
+            <ThemedText style={styles.progressLabel}>
+              {Math.round(progress.completion_percentage)}% complete
+            </ThemedText>
+          </View>
+        )}
+        
         <View style={[styles.learnButton, { backgroundColor: colors.accent }]}>
-          <ThemedText style={styles.learnButtonText}>Learn →</ThemedText>
+          <ThemedText style={styles.learnButtonText}>
+            {progress && progress.completed_problems > 0 ? 'Continue →' : 'Start →'}
+          </ThemedText>
         </View>
       </View>
     </TouchableOpacity>
@@ -105,11 +148,19 @@ export default function LearnScreen() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [recentTopics, setRecentTopics] = useState<string[]>([]);
+  const [topicProgress, setTopicProgress] = useState<{ [key: string]: TopicProgress }>({});
 
   useEffect(() => {
     loadTopics();
     loadRecentTopics();
   }, []);
+
+  // Load progress when topics are available
+  useEffect(() => {
+    if (topics.length > 0) {
+      loadTopicProgress();
+    }
+  }, [topics]);
 
   const loadTopics = async () => {
     try {
@@ -131,6 +182,50 @@ export default function LearnScreen() {
       }
     } catch (error) {
       console.error('Error loading recent topics:', error);
+    }
+  };
+
+  const loadTopicProgress = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && topics.length > 0) {
+        // Calculate progress for each topic
+        const progressMap: { [key: string]: TopicProgress } = {};
+        
+        for (const topic of topics) {
+          // Get total problems for this topic
+          const { data: topicProblems } = await supabase
+            .from('topic_problems')
+            .select('leetcode_id')
+            .eq('topic_name', topic.name)
+            .eq('is_premium', false);
+
+          const totalProblems = topicProblems?.length || 0;
+
+          // Get completed problems for this topic
+          const { data: completedData } = await supabase
+            .from('user_problem_progress')
+            .select('problem_id')
+            .eq('user_id', user.id)
+            .eq('is_solved', true)
+            .in('problem_id', topicProblems?.map(p => p.leetcode_id) || []);
+
+          const completedProblems = completedData?.length || 0;
+
+          if (totalProblems > 0) {
+            progressMap[topic.name] = {
+              topic_name: topic.name,
+              completed_problems: completedProblems,
+              total_problems: totalProblems,
+              completion_percentage: (completedProblems / totalProblems) * 100,
+            };
+          }
+        }
+
+        setTopicProgress(progressMap);
+      }
+    } catch (error) {
+      console.error('Error loading topic progress:', error);
     }
   };
 
@@ -204,6 +299,7 @@ export default function LearnScreen() {
                   <TopicCard 
                     topic={topic} 
                     index={index} 
+                    progress={topicProgress[topic.name]}
                     onPress={() => handleTopicPress(topic)} 
                   />
                 </View>
@@ -232,6 +328,7 @@ export default function LearnScreen() {
                 key={topic.id} 
                 topic={topic} 
                 index={index} 
+                progress={topicProgress[topic.name]}
                 onPress={() => handleTopicPress(topic)} 
               />
             ))}
@@ -266,17 +363,17 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 32,
+    paddingTop: 16,
+    paddingBottom: 24,
     backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 4 },
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    marginBottom: 24,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 20,
   },
   mainTitle: {
     fontSize: 32,
@@ -351,6 +448,12 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
   iconContainer: {
     width: 48,
     height: 48,
@@ -358,11 +461,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
   },
   topicIcon: {
     width: 24,
     height: 24,
+  },
+  progressBadge: {
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
   },
   cardContent: {
     flex: 1,
@@ -379,7 +492,24 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 18,
     marginBottom: 12,
-    flex: 1,
+  },
+  progressContainer: {
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    borderRadius: 2,
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: '#666',
+    fontWeight: '500',
   },
   learnButton: {
     backgroundColor: '#6564c7',
