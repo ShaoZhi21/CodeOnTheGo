@@ -1161,7 +1161,7 @@ app.post('/api/generate-topic-lesson', async (req, res) => {
   }
 
   try {
-    const { topicName, problemId, userId } = req.body;
+    const { topicName, problemId, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
 
     if (!topicName || !problemId) {
       return res.status(400).json({ error: 'Topic name and problem ID are required.' });
@@ -1179,6 +1179,126 @@ app.post('/api/generate-topic-lesson', async (req, res) => {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
+    // Handle fast structured lesson generation (all parts in one call)
+    if (fastStructuredLesson) {
+      const fastPrompt = `You are an expert programming tutor. For the problem "${problemData.title}" in the topic "${topicName}", follow these steps:
+
+STEP 1: First, mentally solve the problem and identify the IDEAL solution approach.
+STEP 2: Identify the MOST IMPORTANT data structure or algorithm needed for this ideal solution.
+STEP 3: Create a lesson that teaches this key concept WITHOUT revealing the solution steps.
+
+TEACHING APPROACH:
+- Teach the concept/data structure in isolation
+- Explain why it's powerful and when to use it
+- Give examples that illustrate the concept but don't solve the target problem
+- DO NOT reveal the step-by-step solution to "${problemData.title}"
+- DO NOT show code that solves the specific problem
+
+IMPORTANT: For each MCQ, write actual questions and answers based on your content, not templates or placeholders. The questions should test LOGIC and UNDERSTANDING of concepts, NOT code syntax. Focus on testing conceptual understanding, when to use the concept, and why it works.
+
+CRITICAL: RANDOMIZE the correct answer position! Don't always put the correct answer as option A (index 0). Mix it up - sometimes use B (index 1), C (index 2), or D (index 3) as the correct answer.
+
+CRITICAL REQUIREMENTS:
+- Each part must be EXACTLY 3-4 sentences maximum
+- Be concise, direct, and educational
+- Focus ONLY on the most important concept/data structure for the IDEAL solution
+- Generate MCQs that test the SPECIFIC content you wrote in each part
+- MCQ questions must be directly related to what you explained in that section
+- Make wrong answers plausible but clearly incorrect
+- The last part "Relevance to this question" should explain WHY this concept is perfect for this type of problem WITHOUT revealing how to use it
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "title": "Lesson for ${problemData.title}",
+  "parts": [
+    {
+      "title": "Definition",
+      "content": "3-4 sentences max explaining what the key concept/data structure is",
+      "mcq": {
+        "id": 1,
+        "question": "Write a question testing UNDERSTANDING of the concept you defined (focus on logic, not syntax)",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
+        "explanation": "Write why the correct answer is right"
+      }
+    },
+    {
+      "title": "How to use",
+      "content": "3-4 sentences max explaining how to use this concept with basic examples",
+      "mcq": {
+        "id": 2,
+        "question": "Write a question about WHEN or WHY to use this concept (focus on logic, not code)",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
+        "explanation": "Write why the correct answer is right"
+      }
+    },
+    {
+      "title": "Operations and efficiency",
+      "content": "3-4 sentences max listing key operations with time/space complexity",
+      "mcq": {
+        "id": 3,
+        "question": "Write a question about WHY this concept has certain efficiency characteristics",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
+        "explanation": "Write why the correct answer is right"
+      }
+    },
+    {
+      "title": "Relevance to this question",
+      "content": "3-4 sentences max explaining WHY this is the most efficient solution for ${problemData.title}. This is the MOST IMPORTANT part.",
+      "mcq": {
+        "id": 4,
+        "question": "Write a question about WHY this concept is ideal for this type of problem (test logical reasoning)",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
+        "explanation": "Write why the correct answer is right"
+      }
+    }
+  ],
+  "keyConcepts": ["Key concept 1", "Key concept 2", "Key concept 3"],
+  "example": "Brief example",
+  "hint": "Brief hint",
+  "commonMistake": "Brief common mistake"
+}
+
+Generate ONLY the JSON object, no other text.`;
+
+      const result = await geminiModel.generateContent(fastPrompt);
+      const response = await result.response;
+      let text = response.text();
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const lessonData = JSON.parse(text);
+      
+      return res.json(lessonData);
+    }
+
+    // Handle structured lesson parts (legacy - individual parts)
+    if (structuredLesson && lessonPart && specificPrompt) {
+      const structuredPrompt = `You are an expert programming tutor. For the problem "${problemData.title}" in the topic "${topicName}", provide a brief response to this specific lesson section:
+
+LESSON SECTION: ${lessonPart}
+SPECIFIC REQUEST: ${specificPrompt}
+
+IMPORTANT GUIDELINES:
+1. Focus ONLY on the concept/data structure most relevant to solving "${problemData.title}"
+2. Be educational and beginner-friendly
+3. Use concrete examples and analogies
+4. For "Application to This Problem" section, explain WHY this concept is the most efficient solution
+5. Include time/space complexity when discussing operations
+6. Keep response VERY SHORT: exactly 5 sentences maximum total
+7. Be concise and direct - no fluff or unnecessary explanations
+
+Respond with ONLY the educational content, no JSON formatting needed.`;
+
+      const result = await geminiModel.generateContent(structuredPrompt);
+      const response = await result.response;
+      const content = response.text().trim();
+      
+      return res.json({ content });
+    }
+
+    // Original lesson generation for backward compatibility
     const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
 
 CONTEXT:
@@ -1277,21 +1397,24 @@ app.post('/api/generate-topic-quiz', async (req, res) => {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
-    const prompt = `You are an expert programming tutor creating a quiz to test understanding of the lesson content. Create 5 multiple-choice questions based on the lesson content provided.
+    const prompt = `You are an expert programming tutor creating a FINAL QUIZ to test understanding of the lesson content. This quiz should be DIFFERENT from any MCQs that were part of the lesson itself.
 
 CONTEXT:
 - Topic: ${topicName}
 - Target Problem: ${problemData.title}
 - Lesson Content: ${lessonContent}
 
-INSTRUCTIONS:
-1. Create 5 multiple-choice questions that test understanding of the concepts taught in the lesson
-2. Each question should have 4 options (A, B, C, D)
-3. Only one option should be correct
-4. Questions should be at a beginner level but test actual understanding
-5. Include explanations for why the correct answer is right
-6. DO NOT ask questions about the specific problem solution
-7. Focus on testing understanding of the underlying concepts and data structures
+CRITICAL INSTRUCTIONS:
+1. Create 5 NEW multiple-choice questions that test understanding of the concepts taught in the lesson
+2. These questions should be DIFFERENT from any MCQs embedded in the lesson content
+3. Focus on broader understanding and application of the concepts
+4. Each question should have 4 options (A, B, C, D)
+5. Only one option should be correct
+6. Questions should test deeper understanding and practical application
+7. Include explanations for why the correct answer is right
+8. DO NOT ask questions about the specific problem solution
+9. Focus on testing understanding of the underlying concepts, data structures, and when/why to use them
+10. RANDOMIZE correct answer positions - don't always use index 0! Mix between 0, 1, 2, and 3
 
 Respond with ONLY a JSON object in this exact format:
 {
@@ -1299,13 +1422,13 @@ Respond with ONLY a JSON object in this exact format:
     {
       "question": "Question text here?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 0,
+      "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3",
       "explanation": "Explanation of why this answer is correct"
     },
     {
       "question": "Question text here?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": 1,
+      "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3",
       "explanation": "Explanation of why this answer is correct"
     }
   ],

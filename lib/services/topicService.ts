@@ -35,6 +35,8 @@ export class TopicService {
         .select('*')
         .eq('topic_name', topicName)
         .eq('is_premium', false)
+        .not('title', 'is', null)
+        .not('title', 'eq', '')
         .order('difficulty_order', { ascending: true });
 
       if (error) {
@@ -47,7 +49,32 @@ export class TopicService {
         return [];
       }
       
-      return data;
+      // Additional client-side filtering for safety
+      const filteredData = data.filter(problem => {
+        // Ensure problem has valid structure
+        if (!problem || !problem.leetcode_id) return false;
+        
+        // Ensure title is valid
+        if (!problem.title || 
+            problem.title === null || 
+            problem.title === undefined ||
+            typeof problem.title !== 'string' ||
+            problem.title.trim() === '' ||
+            problem.title.trim() === 'null' ||
+            problem.title.trim() === 'undefined') {
+          return false;
+        }
+        
+        // Ensure not premium (double check)
+        if (problem.is_premium === true) return false;
+        
+        // Ensure difficulty is valid
+        if (!['Easy', 'Medium', 'Hard'].includes(problem.difficulty)) return false;
+        
+        return true;
+      });
+      
+      return filteredData;
     } catch (error) {
       console.error('Error in getTopicProblems:', error);
       throw error;

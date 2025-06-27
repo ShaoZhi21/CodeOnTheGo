@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { decodeHtmlEntities } from '@/lib/utils/textUtils';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface QuizQuestion {
@@ -155,6 +155,23 @@ export default function QuizScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.quizDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(String(questionTitle))}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
+        </View>
+        
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
           <ThemedText style={styles.loadingText}>Generating quiz...</ThemedText>
@@ -166,6 +183,23 @@ export default function QuizScreen() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.quizDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(String(questionTitle))}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
+        </View>
+        
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
           <TouchableOpacity style={styles.retryButton} onPress={generateQuiz}>
@@ -187,8 +221,18 @@ export default function QuizScreen() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-            <ThemedText>Back</ThemedText>
           </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.quizDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                Quiz Results
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.resultsContainer}>
@@ -244,17 +288,40 @@ export default function QuizScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          <ThemedText>Back</ThemedText>
         </TouchableOpacity>
-        <View style={styles.progressContainer}>
-          <ThemedText style={styles.progressText}>
-            {currentQuestionIndex + 1} of 3
-          </ThemedText>
+        
+        <View style={styles.headerCenter}>
+          <View style={styles.headerTitleBubble}>
+            <View style={styles.quizDot} />
+            <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+              {decodeHtmlEntities(String(questionTitle))}
+            </ThemedText>
+          </View>
         </View>
+        
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.questionContainer}>
+          {/* Progress Tracker */}
+          <View style={styles.progressTracker}>
+            <View style={styles.progressDots}>
+              {[0, 1, 2].map((index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.progressDot,
+                    index <= currentQuestionIndex ? styles.progressDotActive : styles.progressDotInactive
+                  ]}
+                />
+              ))}
+            </View>
+            <ThemedText style={styles.progressLabel}>
+              Question {currentQuestionIndex + 1} of 3
+            </ThemedText>
+          </View>
+
           <View style={styles.questionHeader}>
             <ThemedText style={styles.questionTitle}>
               {decodeHtmlEntities(String(questionTitle))}
@@ -335,7 +402,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
-    padding: 16,
+    backgroundColor: '#6564c7',
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -343,11 +411,51 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: 60,
   },
   backIcon: {
     width: 24,
     height: 24,
     marginRight: 8,
+    tintColor: '#fff',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleBubble: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8E6FF',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: '60%',
+    maxWidth: '85%',
+  },
+  quizDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#6564c7',
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#6564c7',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    width: 60,
   },
   progressContainer: {
     backgroundColor: '#e3f2fd',
@@ -359,6 +467,33 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#1976d2',
+  },
+  progressTracker: {
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingVertical: 16,
+  },
+  progressDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginHorizontal: 4,
+  },
+  progressDotActive: {
+    backgroundColor: '#6564c7',
+  },
+  progressDotInactive: {
+    backgroundColor: '#E0E0E0',
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6564c7',
   },
   loadingContainer: {
     flex: 1,

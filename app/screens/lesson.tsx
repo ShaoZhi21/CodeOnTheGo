@@ -49,6 +49,11 @@ const decodeHtmlEntities = (text: string): string => {
 };
 
 function renderLessonContent(content: string) {
+  // Ensure content is a string before splitting
+  if (!content || typeof content !== 'string') {
+    return [<ThemedText key={0} style={styles.lessonText}>No content available</ThemedText>];
+  }
+  
   // Split by lines
   const lines = content.split(/\r?\n/);
   const elements = [];
@@ -106,44 +111,68 @@ export default function LessonScreen() {
   const [lessonData, setLessonData] = useState<LessonData | null>(null);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   
   // Animation values
   const fadeAnim = new Animated.Value(1);
   const slideAnim = new Animated.Value(0);
   const optionAnimations = [new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)];
 
-  // Generate MCQ for each part
+  // Generate MCQ for each part - this is just a fallback, real MCQs come from the API
   const generateMCQForPart = (title: string, content: string, index: number): QuizQuestion => {
-    // This is a simplified MCQ generator - in a real app, you'd use AI to generate these
-    const questions = [
-      {
-        question: `What is the main concept covered in ${title}?`,
-        options: ["Basic syntax", "Algorithm complexity", "Data structures", "Problem solving"],
-        correctAnswer: index % 4,
-        explanation: "This section focuses on the fundamental concepts needed to understand the topic."
-      },
-      {
-        question: `Which approach is most suitable for this concept?`,
-        options: ["Iterative", "Recursive", "Dynamic Programming", "Greedy"],
-        correctAnswer: (index + 1) % 4,
-        explanation: "The approach depends on the specific problem requirements and constraints."
-      },
-      {
-        question: `What should you remember about ${title.toLowerCase()}?`,
-        options: ["Time complexity", "Space complexity", "Edge cases", "All of the above"],
-        correctAnswer: 3,
-        explanation: "All aspects are important when implementing algorithms and data structures."
-      }
-    ];
-    
+    // This should rarely be used since API provides real MCQs
     return {
       id: index + 1,
-      ...questions[index % questions.length]
+      question: `What is the key concept in ${title}?`,
+      options: ["Loading lesson content...", "Please wait...", "Generating question...", "Almost ready..."],
+      correctAnswer: 0,
+      explanation: "This question will be replaced with content from the lesson."
     };
   };
 
-  // Function to break lesson content into parts
+  // Function to create structured lesson parts
+  const createStructuredLessonParts = (): LessonPart[] => {
+    const parts: LessonPart[] = [];
+    
+    // Define the structured lesson outline - reduced to 4 essential parts
+    const lessonStructure = [
+      {
+        title: "Definition",
+        prompt: `For the problem "${questionTitle}", what is the most important concept/data structure needed? Provide a clear, concise definition in 2-3 sentences max.`
+      },
+      {
+        title: "How to use",
+        prompt: `Explain how to use this concept/data structure. Include basic usage and simple examples. Keep it brief - 2-3 sentences max.`
+      },
+      {
+        title: "Operations and efficiency",
+        prompt: `List the key operations with their time/space complexity. Be specific about efficiency. Keep it brief - 2-3 sentences max.`
+      },
+      {
+        title: "Relevance to this question",
+        prompt: `Specifically explain why this concept/data structure is the most efficient solution for "${questionTitle}". This is the most important part. Keep it brief - 2-3 sentences max.`
+      }
+    ];
+
+    // Create parts with structured content
+    lessonStructure.forEach((structure, index) => {
+      parts.push({
+        title: structure.title,
+        content: structure.prompt, // Use prompt as placeholder content
+        mcq: generateMCQForPart(structure.title, structure.prompt, index)
+      });
+    });
+
+    return parts;
+  };
+
+  // Function to break lesson content into parts (fallback)
   const breakContentIntoParts = (content: string): LessonPart[] => {
+    // Ensure content is a string before splitting
+    if (!content || typeof content !== 'string') {
+      return createStructuredLessonParts();
+    }
+    
     const sections = content.split(/(?=##\s)/);
     const parts: LessonPart[] = [];
     
@@ -163,21 +192,9 @@ export default function LessonScreen() {
       }
     });
     
-    // If no sections found, create parts from paragraphs
+    // If no sections found, create structured parts
     if (parts.length === 0) {
-      const paragraphs = content.split(/\n\s*\n/);
-      const chunkSize = Math.ceil(paragraphs.length / 3);
-      
-      for (let i = 0; i < paragraphs.length; i += chunkSize) {
-        const chunk = paragraphs.slice(i, i + chunkSize).join('\n\n');
-        if (chunk.trim()) {
-          parts.push({
-            title: `Part ${Math.floor(i / chunkSize) + 1}`,
-            content: chunk,
-            mcq: generateMCQForPart(`Part ${Math.floor(i / chunkSize) + 1}`, chunk, Math.floor(i / chunkSize))
-          });
-        }
-      }
+      return createStructuredLessonParts();
     }
     
     return parts;
@@ -190,7 +207,7 @@ export default function LessonScreen() {
     console.log('🔄 lessonData title:', lessonData?.title);
     
     // Break content into parts when lesson data is loaded
-    if (lessonData && lessonData.content && !lessonData.parts) {
+    if (lessonData && lessonData.content && !lessonData.parts && typeof lessonData.content === 'string') {
       const parts = breakContentIntoParts(lessonData.content);
       setLessonData(prev => prev ? { ...prev, parts } : null);
     }
@@ -213,7 +230,9 @@ export default function LessonScreen() {
           userId: user?.id,
         });
         
-        // Generate lesson content
+        // Generate all lesson content in ONE fast API call
+        console.log('📡 Generating complete lesson content in single call...');
+        
         const lessonResponse = await apiCall('/api/generate-topic-lesson', {
           method: 'POST',
           headers: {
@@ -224,79 +243,26 @@ export default function LessonScreen() {
             topicName: topicName,
             problemId: parseInt(questionId || '0'),
             userId: user?.id,
+            fastStructuredLesson: true,
           }),
         });
 
-        console.log('📡 Lesson API response status:', lessonResponse.status);
-        
         if (!lessonResponse.ok) {
-          const errorText = await lessonResponse.text();
-          console.error('❌ Lesson API error:', lessonResponse.status, errorText);
-          throw new Error(`Failed to generate lesson: ${lessonResponse.status} - ${errorText}`);
+          throw new Error('Failed to generate fast lesson');
         }
 
         const lessonResult = await lessonResponse.json();
-        console.log('📚 Lesson data received:', lessonResult);
-        console.log('📚 Lesson data type:', typeof lessonResult);
-        console.log('📚 Lesson data keys:', Object.keys(lessonResult || {}));
-        console.log('📚 Content field:', lessonResult?.content);
-        console.log('📚 Content length:', lessonResult?.content?.length);
+        console.log('✅ Fast lesson generated successfully');
+        console.log('📊 Lesson result structure:', JSON.stringify(lessonResult, null, 2));
+        console.log('📊 Lesson parts:', lessonResult.parts);
+        console.log('📊 First part MCQ:', lessonResult.parts?.[0]?.mcq);
         
-        // Set lesson data if we have any valid response
-        if (lessonResult) {
-          setLessonData(lessonResult);
-          console.log('✅ Lesson data set successfully');
-        } else {
-          console.warn('⚠️ No lesson data received, using fallback');
-          throw new Error('No lesson data received from API');
-        }
+        setLessonData(lessonResult);
+        setCurrentPartIndex(0);
+        
+        // Note: Quiz questions will be generated separately when "Start Quiz" is pressed
 
-        // Try to generate quiz, but don't fail the entire lesson if quiz fails
-        try {
-          console.log('📡 Making quiz API call...');
-          // Generate quiz questions based on lesson content
-          const quizResponse = await apiCall('/api/generate-topic-quiz', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-            },
-            body: JSON.stringify({
-              topicName: topicName,
-              problemId: parseInt(questionId || '0'),
-              lessonContent: lessonResult.content,
-            }),
-          });
-
-          console.log('📡 Quiz API response status:', quizResponse.status);
-          if (!quizResponse.ok) {
-            const errorText = await quizResponse.text();
-            console.error('❌ Quiz API error:', quizResponse.status, errorText);
-            throw new Error(`Failed to generate quiz: ${quizResponse.status} - ${errorText}`);
-          }
-
-          const quizResult = await quizResponse.json();
-          console.log('📝 Quiz data generated successfully:', quizResult);
-          console.log('📝 Quiz questions:', quizResult.questions);
-          console.log('📝 Quiz questions length:', quizResult.questions?.length);
-          setQuizData(quizResult);
-          
-          // Format quiz questions with IDs
-          const formattedQuestions = quizResult.questions.map((q: any, index: number) => ({
-            id: index + 1,
-            question: q.question,
-            options: q.options,
-            correctAnswer: q.correctAnswer,
-            explanation: q.explanation,
-          }));
-          console.log('📝 Formatted questions:', formattedQuestions);
-          setQuizQuestions(formattedQuestions);
-        } catch (quizError) {
-          console.error('⚠️ Quiz generation failed, but lesson will still be shown:', quizError);
-          // Don't throw here - just log the error and continue with lesson only
-        }
-
-        console.log('✅ All data loaded successfully, showing teaching page');
+        console.log('✅ Fast lesson loaded successfully, showing teaching page');
         setCurrentPage('teaching');
       } catch (error: any) {
         console.error('💥 Error loading lesson data:', error);
@@ -324,19 +290,64 @@ export default function LessonScreen() {
     }
   }, [questionId, topicName]);
 
-  const handleStartQuiz = () => {
-    console.log('🎯 Starting quiz...');
-    console.log('🎯 Quiz questions available:', quizQuestions);
-    console.log('🎯 Quiz questions length:', quizQuestions.length);
+  const handleStartQuiz = async () => {
+    console.log('🎯 Starting quiz generation...');
+    setIsGeneratingQuiz(true);
     
-    setCurrentPage('quiz');
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
-    setScore(0);
-    // Reset animations
-    fadeAnim.setValue(1);
-    slideAnim.setValue(0);
-    optionAnimations.forEach(anim => anim.setValue(1));
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        alert('You must be logged in to take the quiz.');
+        setIsGeneratingQuiz(false);
+        return;
+      }
+
+      console.log('📡 Generating separate quiz...');
+      
+      // Generate a separate quiz (different from lesson MCQs)
+      const quizResponse = await apiCall('/api/generate-topic-quiz', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          topicName: topicName,
+          problemId: parseInt(questionId || '0'),
+          lessonContent: lessonData?.parts ? 
+            lessonData.parts.map(part => `${part.title}: ${part.content}`).join('\n\n') : 
+            lessonData?.content || '',
+        }),
+      });
+
+      if (!quizResponse.ok) {
+        throw new Error('Failed to generate quiz');
+      }
+
+      const quizResult = await quizResponse.json();
+      console.log('✅ Separate quiz generated successfully');
+      
+      // Set the new quiz questions (separate from lesson MCQs)
+      setQuizQuestions(quizResult.questions || []);
+      
+      console.log('🎯 Starting quiz with new questions...');
+      setCurrentPage('quiz');
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers([]);
+      setScore(0);
+      // Reset animations
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      optionAnimations.forEach(anim => anim.setValue(1));
+      
+    } catch (error: any) {
+      console.error('💥 Error generating quiz:', error);
+      alert('Failed to generate quiz. Please try again.');
+    } finally {
+      setIsGeneratingQuiz(false);
+    }
   };
 
   const handleOptionSelect = (optionIndex: number) => {
@@ -650,9 +661,12 @@ export default function LessonScreen() {
 
   if (currentPage === 'teaching') {
     console.log('🎨 Rendering teaching page with lessonData:', lessonData);
-    console.log('🎨 lessonData?.title:', lessonData?.title);
-    console.log('🎨 lessonData?.content:', lessonData?.content);
-    console.log('🎨 questionTitle:', questionTitle);
+    console.log('🎨 lessonData?.parts:', lessonData?.parts);
+    console.log('🎨 currentPartIndex:', currentPartIndex);
+    
+    const lessonParts = lessonData?.parts || [];
+    const currentPart = lessonParts[currentPartIndex];
+    const isLastPart = currentPartIndex === lessonParts.length - 1;
     
     return (
       <SafeAreaView style={styles.container}>
@@ -673,106 +687,135 @@ export default function LessonScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
+        {/* Progress Indicator */}
+        {lessonParts.length > 0 && (
+          <View style={styles.progressContainer}>
+            <ThemedText style={styles.progressText}>
+              Part {currentPartIndex + 1} of {lessonParts.length}
+            </ThemedText>
+            <View style={styles.progressBar}>
+              <View 
+                style={[
+                  styles.progressFill, 
+                  { width: `${((currentPartIndex + 1) / lessonParts.length) * 100}%` }
+                ]} 
+              />
+            </View>
+          </View>
+        )}
+
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.lessonContainer}>
-            <ThemedText style={styles.lessonTitle}>
-              {lessonData?.title || questionTitle}
-            </ThemedText>
-            
-            <View style={styles.lessonContent}>
-              {/* Definition Box for Easy problems */}
-              {lessonData?.definitionBox && (
-                <View style={styles.definitionBox}>
-                  <ThemedText style={styles.definitionBoxTitle}>📚 Definition</ThemedText>
+            {currentPart ? (
+              <>
+                <ThemedText style={styles.lessonTitle}>
+                  {currentPart.title}
+                </ThemedText>
+                
+                <View style={styles.lessonContent}>
                   <Markdown
                     style={{
-                      body: styles.definitionBoxText,
+                      body: { color: '#444', fontSize: 16, lineHeight: 24 },
+                      heading1: { color: '#6564c7', fontWeight: 'bold', fontSize: 22, marginTop: 16 },
+                      heading2: { color: '#6564c7', fontWeight: 'bold', fontSize: 19, marginTop: 14 },
+                      heading3: { color: '#453d83', fontWeight: 'bold', fontSize: 17, marginTop: 12 },
                       strong: { fontWeight: 'bold', color: '#222' },
+                      bullet_list: { marginVertical: 8 },
+                      list_item: { marginVertical: 2 },
+                      paragraph: { marginVertical: 8 },
                     }}
                   >
-                    {lessonData.definitionBox}
+                    {(currentPart.content && typeof currentPart.content === 'string') ? currentPart.content : 'Loading content...'}
                   </Markdown>
                 </View>
-              )}
 
-              {/* Main Content with digestible chunks */}
-              <ThemedText style={styles.sectionTitle}>Main Content</ThemedText>
-              <Markdown
-                style={{
-                  body: { color: '#444', fontSize: 16 },
-                  heading1: { color: '#6564c7', fontWeight: 'bold', fontSize: 22, marginTop: 16 },
-                  heading2: { color: '#6564c7', fontWeight: 'bold', fontSize: 19, marginTop: 14 },
-                  heading3: { color: '#453d83', fontWeight: 'bold', fontSize: 17, marginTop: 12 },
-                  strong: { fontWeight: 'bold', color: '#222' },
-                  bullet_list: { marginVertical: 8 },
-                  list_item: { marginVertical: 2 },
-                  // Add more custom styles as needed
-                }}
-              >
-                {lessonData?.content || 'Lesson content is loading...'}
-              </Markdown>
-
-              {lessonData?.keyConcepts && lessonData.keyConcepts.length > 0 && (
-                <>
-                  <ThemedText style={styles.sectionTitle}>Key Concepts</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    {lessonData.keyConcepts.map((concept, index) => 
-                      `• ${concept}${index < lessonData.keyConcepts.length - 1 ? '\n' : ''}`
-                    )}
-                  </ThemedText>
-                </>
-              )}
-
-              {lessonData?.example && (
-                <>
-                  <ThemedText style={styles.sectionTitle}>Example</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    {lessonData.example}
-                  </ThemedText>
-                </>
-              )}
-
-              {lessonData?.hint && (
-                <>
-                  <ThemedText style={styles.sectionTitle}>Problem-Solving Hint</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    💡 {lessonData.hint}
-                  </ThemedText>
-                </>
-              )}
-
-              {lessonData?.commonMistake && (
-                <>
-                  <ThemedText style={styles.sectionTitle}>Common Mistake</ThemedText>
-                  <ThemedText style={styles.lessonText}>
-                    ⚠️ {lessonData.commonMistake}
-                  </ThemedText>
-                </>
-              )}
-
-              {/* Fun Fact Section */}
-              {lessonData?.funFact && (
-                <>
-                  <ThemedText style={styles.sectionTitle}>Fun Fact</ThemedText>
-                  <View style={styles.funFactBox}>
-                    <ThemedText style={styles.funFactText}>
-                      🎉 {lessonData.funFact}
+                {/* Optional MCQ for each part */}
+                {currentPart.mcq && (
+                  <View style={styles.partMcqContainer}>
+                    <ThemedText style={styles.partMcqTitle}>Quick Check</ThemedText>
+                    <ThemedText style={styles.partMcqQuestion}>
+                      {currentPart.mcq.question}
                     </ThemedText>
+                    
+                    {currentPart.mcq.options.map((option, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.partMcqOption,
+                          partMcqAnswers[currentPartIndex] === index && styles.partMcqOptionSelected,
+                                                     showPartMcqFeedback[currentPartIndex] && 
+                           index === currentPart.mcq?.correctAnswer && styles.partMcqOptionCorrect,
+                           showPartMcqFeedback[currentPartIndex] && 
+                           partMcqAnswers[currentPartIndex] === index &&
+                           index !== currentPart.mcq?.correctAnswer && styles.partMcqOptionWrong
+                        ]}
+                        onPress={() => {
+                          if (!showPartMcqFeedback[currentPartIndex]) {
+                            setPartMcqAnswers(prev => ({ ...prev, [currentPartIndex]: index }));
+                            setShowPartMcqFeedback(prev => ({ ...prev, [currentPartIndex]: true }));
+                          }
+                        }}
+                        disabled={showPartMcqFeedback[currentPartIndex]}
+                      >
+                        <ThemedText style={styles.partMcqOptionText}>
+                          {option}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    ))}
+                    
+                    {showPartMcqFeedback[currentPartIndex] && currentPart.mcq.explanation && (
+                      <View style={styles.partMcqExplanation}>
+                        <ThemedText style={styles.partMcqExplanationText}>
+                          {currentPart.mcq.explanation}
+                        </ThemedText>
+                      </View>
+                    )}
                   </View>
-                </>
-              )}
-            </View>
+                )}
+              </>
+            ) : (
+              <View style={styles.lessonContainer}>
+                <ThemedText style={styles.lessonTitle}>
+                  {lessonData?.title || questionTitle}
+                </ThemedText>
+                <ThemedText style={styles.lessonText}>
+                  Loading structured lesson content...
+                </ThemedText>
+              </View>
+            )}
           </View>
         </ScrollView>
 
         <View style={styles.footer}>
-          <TouchableOpacity 
-            style={[styles.nextButton, !lessonData && styles.nextButtonDisabled]} 
-            onPress={handleStartQuiz}
-            disabled={!lessonData}
-          >
-            <ThemedText style={styles.nextButtonText}>Start Quiz →</ThemedText>
-          </TouchableOpacity>
+          <View style={styles.navigationButtons}>
+            {currentPartIndex > 0 && (
+              <TouchableOpacity 
+                style={styles.prevButton} 
+                onPress={() => setCurrentPartIndex(currentPartIndex - 1)}
+              >
+                <ThemedText style={styles.prevButtonText}>← Previous</ThemedText>
+              </TouchableOpacity>
+            )}
+            
+            {!isLastPart ? (
+              <TouchableOpacity 
+                style={styles.nextButton} 
+                onPress={() => setCurrentPartIndex(currentPartIndex + 1)}
+              >
+                <ThemedText style={styles.nextButtonText}>Next →</ThemedText>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={[styles.nextButton, (!lessonData || isGeneratingQuiz) && styles.nextButtonDisabled]} 
+                onPress={handleStartQuiz}
+                disabled={!lessonData || isGeneratingQuiz}
+              >
+                <ThemedText style={styles.nextButtonText}>
+                  {isGeneratingQuiz ? 'Generating Quiz...' : 'Start Quiz →'}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -870,9 +913,19 @@ export default function LessonScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentPage('teaching')} style={styles.backButton}>
-            <ThemedText>← Back to Lesson</ThemedText>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>Quiz</ThemedText>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.lessonDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(questionTitle || topicName || 'Quiz')}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
         </View>
         
         <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -895,11 +948,19 @@ export default function LessonScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => setCurrentPage('teaching')} style={styles.backButton}>
-          <ThemedText>← Back to Lesson</ThemedText>
+          <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>
-          Question {currentQuestionIndex + 1} of {quizQuestions.length}
-        </ThemedText>
+        
+        <View style={styles.headerCenter}>
+                      <View style={styles.headerTitleBubble}>
+              <View style={styles.lessonDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(questionTitle || topicName || 'Quiz')}
+              </ThemedText>
+            </View>
+        </View>
+        
+        <View style={styles.headerSpacer} />
       </View>
 
       <Animated.View 
@@ -911,6 +972,24 @@ export default function LessonScreen() {
           }
         ]}
       >
+        {/* Progress Tracker */}
+        <View style={styles.progressTracker}>
+          <View style={styles.progressDots}>
+            {quizQuestions.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressDot,
+                  index <= currentQuestionIndex ? styles.progressDotActive : styles.progressDotInactive
+                ]}
+              />
+            ))}
+          </View>
+          <ThemedText style={styles.progressLabel}>
+            Question {currentQuestionIndex + 1} of {quizQuestions.length}
+          </ThemedText>
+        </View>
+
         <ThemedText style={styles.questionText}>{currentQuestion.question}</ThemedText>
         
         <View style={styles.optionsContainer}>
@@ -1071,6 +1150,33 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  progressTracker: {
+    alignItems: 'center',
+    marginBottom: 30,
+    paddingVertical: 16,
+  },
+  progressDots: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginHorizontal: 4,
+  },
+  progressDotActive: {
+    backgroundColor: '#6564c7',
+  },
+  progressDotInactive: {
+    backgroundColor: '#E0E0E0',
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6564c7',
   },
   questionText: {
     fontSize: 20,
@@ -1241,5 +1347,105 @@ const styles = StyleSheet.create({
     color: '#6564c7',
     marginTop: 18,
     marginBottom: 8,
+  },
+  progressContainer: {
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6564c7',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#6564c7',
+    borderRadius: 2,
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  prevButton: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#6564c7',
+  },
+  prevButtonText: {
+    color: '#6564c7',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  partMcqContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  partMcqTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6564c7',
+    marginBottom: 8,
+  },
+  partMcqQuestion: {
+    fontSize: 15,
+    color: '#333',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  partMcqOption: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  partMcqOptionSelected: {
+    borderColor: '#6564c7',
+    backgroundColor: '#f3f0ff',
+  },
+  partMcqOptionCorrect: {
+    borderColor: '#28a745',
+    backgroundColor: '#d4edda',
+  },
+  partMcqOptionWrong: {
+    borderColor: '#dc3545',
+    backgroundColor: '#f8d7da',
+  },
+  partMcqOptionText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  partMcqExplanation: {
+    backgroundColor: '#e8f5e8',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#28a745',
+  },
+  partMcqExplanationText: {
+    fontSize: 14,
+    color: '#155724',
+    lineHeight: 20,
   },
 }); 
