@@ -1,397 +1,193 @@
 import { ThemedText } from '@/components/ThemedText';
-import { apiCall } from '@/lib/api-config';
-import { decodeHtmlEntities } from '@/lib/utils/textUtils';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-interface QuizQuestion {
-  question: string;
-  options: string[];
-  correctAnswer: number;
-  explanation: string;
+interface TopicQuiz {
+  id: string;
+  name: string;
+  description: string;
+  questionCount: number;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  color: string;
+  icon: any;
 }
 
-interface QuizData {
-  questions: QuizQuestion[];
-  lessonContent: string;
-}
+const getTopicIcon = (topicName: string) => {
+  const iconMap: { [key: string]: any } = {
+    'Array': require('@/assets/images/icons/list-icon.png'),
+    'String': require('@/assets/images/icons/code-icon.png'),
+    'LinkedList': require('@/assets/images/icons/list-icon.png'),
+    'Stack': require('@/assets/images/icons/list-icon.png'),
+    'Tree': require('@/assets/images/icons/book-icon.png'),
+    'Graph': require('@/assets/images/icons/shuffle-icon.png'),
+    'Hash': require('@/assets/images/icons/magnifying-glass-icon.png'),
+    'DP': require('@/assets/images/icons/fire-icon.png'),
+    'Greedy': require('@/assets/images/icons/star-icon.png'),
+    'Two Pointers': require('@/assets/images/icons/duel-icon.png'),
+  };
+  
+  return iconMap[topicName] || require('@/assets/images/icons/code-icon.png');
+};
 
 export default function QuizScreen() {
-  const params = useLocalSearchParams();
-  const { questionId, questionTitle, questionDescription } = params;
   const router = useRouter();
-  
-  const [quizData, setQuizData] = useState<QuizData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
-  const [showResults, setShowResults] = useState(false);
-  const [showExplanation, setShowExplanation] = useState(false);
 
-  useEffect(() => {
-    generateQuiz();
-  }, []);
+  // Hardcoded topical quizzes
+  const topicalQuizzes: TopicQuiz[] = [
+    {
+      id: 'array',
+      name: 'Array',
+      description: 'Test your array manipulation skills',
+      questionCount: 10,
+      difficulty: 'Easy',
+      color: '#8B5CF6',
+      icon: getTopicIcon('Array')
+    },
+    {
+      id: 'string',
+      name: 'String',
+      description: 'String processing and algorithms',
+      questionCount: 8,
+      difficulty: 'Medium',
+      color: '#F59E0B',
+      icon: getTopicIcon('String')
+    },
+    {
+      id: 'linkedlist',
+      name: 'LinkedList',
+      description: 'Linked list operations and patterns',
+      questionCount: 7,
+      difficulty: 'Medium',
+      color: '#10B981',
+      icon: getTopicIcon('LinkedList')
+    },
+    {
+      id: 'tree',
+      name: 'Tree',
+      description: 'Binary trees and tree traversals',
+      questionCount: 12,
+      difficulty: 'Hard',
+      color: '#3B82F6',
+      icon: getTopicIcon('Tree')
+    },
+    {
+      id: 'dp',
+      name: 'DP',
+      description: 'Dynamic programming challenges',
+      questionCount: 15,
+      difficulty: 'Hard',
+      color: '#EF4444',
+      icon: getTopicIcon('DP')
+    },
+    {
+      id: 'graph',
+      name: 'Graph',
+      description: 'Graph algorithms and traversals',
+      questionCount: 9,
+      difficulty: 'Hard',
+      color: '#8B5CF6',
+      icon: getTopicIcon('Graph')
+    }
+  ];
 
-  const generateQuiz = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const handleTopicQuiz = (topic: TopicQuiz) => {
+    // Navigate to actual quiz with topic
+    console.log(`Starting ${topic.name} quiz`);
+    // router.push(`/screens/topicquiz?topic=${topic.id}`);
+  };
 
-      const response = await apiCall('/generate-quiz', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: questionTitle,
-          description: questionDescription,
-        }),
-      });
+  const handlePastMistakesQuiz = () => {
+    // Navigate to past mistakes quiz
+    console.log('Starting past mistakes quiz');
+    // router.push('/screens/mistakesquiz');
+  };
 
-      if (response.ok) {
-        const data = await response.json();
-        setQuizData(data);
-      } else {
-        setError('Failed to generate quiz');
-      }
-    } catch (error) {
-      setError('Failed to connect to server');
-    } finally {
-      setLoading(false);
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy': return '#10B981';
+      case 'Medium': return '#F59E0B';
+      case 'Hard': return '#EF4444';
+      default: return '#6B7280';
     }
   };
-
-  const handleAnswerSelect = (answerIndex: number) => {
-    if (showResults) return; // Don't allow changes after submission
-    
-    const newAnswers = [...selectedAnswers];
-    newAnswers[currentQuestionIndex] = answerIndex;
-    setSelectedAnswers(newAnswers);
-  };
-
-  const handleNextQuestion = () => {
-    if (selectedAnswers[currentQuestionIndex] === undefined) {
-      Alert.alert('Please select an answer', 'Choose one of the options before proceeding.');
-      return;
-    }
-
-    if (currentQuestionIndex < 2) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setShowExplanation(false);
-    } else {
-      setShowResults(true);
-    }
-  };
-
-  const handleShowExplanation = () => {
-    setShowExplanation(true);
-  };
-
-  const handleFinishQuiz = () => {
-    // Calculate score
-    const correctAnswers = selectedAnswers.reduce((count, answer, index) => {
-      return count + (answer === quizData?.questions[index].correctAnswer ? 1 : 0);
-    }, 0);
-    
-    const score = Math.round((correctAnswers / 3) * 100);
-    
-    // Save quiz completion to database
-    saveQuizCompletion(score);
-    
-    // Navigate back to roadmap
-    router.back();
-  };
-
-  const saveQuizCompletion = async (score: number) => {
-    try {
-      const response = await apiCall(`/api/quiz-completion`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          questionId,
-          score,
-          completed: true,
-        }),
-      });
-
-      if (response.ok) {
-        console.log('Quiz completion saved successfully');
-      }
-    } catch (error) {
-      console.error('Failed to save quiz completion:', error);
-    }
-  };
-
-  const getCurrentQuestion = () => {
-    return quizData?.questions[currentQuestionIndex];
-  };
-
-  const isAnswerCorrect = (answerIndex: number) => {
-    if (!showResults) return false;
-    return answerIndex === getCurrentQuestion()?.correctAnswer;
-  };
-
-  const isAnswerSelected = (answerIndex: number) => {
-    return selectedAnswers[currentQuestionIndex] === answerIndex;
-  };
-
-  const getAnswerStyle = (answerIndex: number) => {
-    if (!showResults) {
-      return isAnswerSelected(answerIndex) ? styles.selectedAnswer : styles.answerOption;
-    }
-    
-    if (isAnswerCorrect(answerIndex)) {
-      return styles.correctAnswer;
-    } else if (isAnswerSelected(answerIndex) && !isAnswerCorrect(answerIndex)) {
-      return styles.wrongAnswer;
-    }
-    return styles.answerOption;
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.quizDot} />
-              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                {decodeHtmlEntities(String(questionTitle))}
-              </ThemedText>
-            </View>
-          </View>
-          
-          <View style={styles.headerSpacer} />
-        </View>
-        
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Generating quiz...</ThemedText>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (error) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.quizDot} />
-              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                {decodeHtmlEntities(String(questionTitle))}
-              </ThemedText>
-            </View>
-          </View>
-          
-          <View style={styles.headerSpacer} />
-        </View>
-        
-        <View style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={generateQuiz}>
-            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (showResults) {
-    const correctAnswers = selectedAnswers.reduce((count, answer, index) => {
-      return count + (answer === quizData?.questions[index].correctAnswer ? 1 : 0);
-    }, 0);
-    const score = Math.round((correctAnswers / 3) * 100);
-
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.quizDot} />
-              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                Quiz Results
-              </ThemedText>
-            </View>
-          </View>
-          
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <View style={styles.resultsContainer}>
-          <View style={styles.resultsHeader}>
-            <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.resultsIcon} />
-            <ThemedText style={styles.resultsTitle}>Quiz Complete!</ThemedText>
-          </View>
-
-          <View style={styles.scoreContainer}>
-            <ThemedText style={styles.scoreText}>{score}%</ThemedText>
-            <ThemedText style={styles.scoreLabel}>
-              You got {correctAnswers} out of 3 questions correct
-            </ThemedText>
-          </View>
-
-          <View style={styles.questionsReview}>
-            {quizData?.questions.map((question, index) => (
-              <View key={index} style={styles.questionReview}>
-                <View style={styles.reviewQuestionHeader}>
-                  <ThemedText style={styles.questionNumber}>Question {index + 1}</ThemedText>
-                  <View style={[
-                    styles.resultBadge,
-                    selectedAnswers[index] === question.correctAnswer 
-                      ? styles.correctBadge 
-                      : styles.wrongBadge
-                  ]}>
-                    <Image 
-                      source={
-                        selectedAnswers[index] === question.correctAnswer
-                          ? require('@/assets/images/icons/correct-icon.png')
-                          : require('@/assets/images/icons/wrong-icon.png')
-                      } 
-                      style={styles.resultIcon}
-                    />
-                  </View>
-                </View>
-                <ThemedText style={styles.reviewQuestionText}>{question.question}</ThemedText>
-                <ThemedText style={styles.reviewExplanationText}>{question.explanation}</ThemedText>
-              </View>
-            ))}
-          </View>
-
-          <TouchableOpacity style={styles.finishButton} onPress={handleFinishQuiz}>
-            <ThemedText style={styles.finishButtonText}>Finish</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
-        
-        <View style={styles.headerCenter}>
-          <View style={styles.headerTitleBubble}>
-            <View style={styles.quizDot} />
-            <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-              {decodeHtmlEntities(String(questionTitle))}
-            </ThemedText>
-          </View>
+        <View style={styles.headerContent}>
+          <ThemedText style={styles.mainTitle}>Quiz Center</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            Test your knowledge with topic-based quizzes or review past mistakes
+          </ThemedText>
         </View>
-        
-        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.questionContainer}>
-          {/* Progress Tracker */}
-          <View style={styles.progressTracker}>
-            <View style={styles.progressDots}>
-              {[0, 1, 2].map((index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.progressDot,
-                    index <= currentQuestionIndex ? styles.progressDotActive : styles.progressDotInactive
-                  ]}
-                />
-              ))}
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Past Mistakes Quiz */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Review Your Mistakes</ThemedText>
+          <TouchableOpacity style={styles.mistakesCard} onPress={handlePastMistakesQuiz}>
+            <View style={styles.mistakesIconContainer}>
+              <Image 
+                source={require('@/assets/images/icons/retry-icon.png')} 
+                style={styles.mistakesIcon}
+              />
             </View>
-            <ThemedText style={styles.progressLabel}>
-              Question {currentQuestionIndex + 1} of 3
-            </ThemedText>
-          </View>
-
-          <View style={styles.questionHeader}>
-            <ThemedText style={styles.questionTitle}>
-              {decodeHtmlEntities(String(questionTitle))}
-            </ThemedText>
-            <View style={styles.quizBadge}>
-              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
-              <ThemedText style={styles.quizBadgeText}>Quiz</ThemedText>
-            </View>
-          </View>
-
-          <View style={styles.questionSection}>
-            <ThemedText style={styles.questionText}>
-              {getCurrentQuestion()?.question}
-            </ThemedText>
-
-            <View style={styles.optionsContainer}>
-              {getCurrentQuestion()?.options.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={getAnswerStyle(index)}
-                  onPress={() => handleAnswerSelect(index)}
-                  disabled={showResults}
-                >
-                  <View style={styles.optionContent}>
-                    <View style={styles.optionLetter}>
-                      <ThemedText style={styles.optionLetterText}>
-                        {String.fromCharCode(65 + index)}
-                      </ThemedText>
-                    </View>
-                    <ThemedText style={styles.optionText}>{option}</ThemedText>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {showExplanation && (
-              <View style={styles.explanationContainer}>
-                <ThemedText style={styles.explanationTitle}>Explanation:</ThemedText>
-                <ThemedText style={styles.explanationText}>
-                  {getCurrentQuestion()?.explanation}
-                </ThemedText>
+            <View style={styles.mistakesContent}>
+              <ThemedText style={styles.mistakesTitle}>Past Mistakes Quiz</ThemedText>
+              <ThemedText style={styles.mistakesDescription}>
+                Practice problems you have gotten wrong before
+              </ThemedText>
+              <View style={styles.mistakesBadge}>
+                <ThemedText style={styles.mistakesBadgeText}>12 Questions Available</ThemedText>
               </View>
-            )}
+            </View>
+            <View style={styles.mistakesArrow}>
+              <Image 
+                source={require('@/assets/images/icons/up-arrow.png')} 
+                style={styles.arrowIcon}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Topical Quizzes */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Topic-Based Quizzes</ThemedText>
+          <View style={styles.topicsGrid}>
+            {topicalQuizzes.map((topic) => (
+              <TouchableOpacity 
+                key={topic.id} 
+                style={styles.topicCard}
+                onPress={() => handleTopicQuiz(topic)}
+              >
+                <View style={[styles.topicIconContainer, { backgroundColor: topic.color }]}>
+                  <Image source={topic.icon} style={styles.topicIcon} />
+                </View>
+                <View style={styles.topicContent}>
+                  <ThemedText style={styles.topicName}>{topic.name}</ThemedText>
+                  <ThemedText style={styles.topicDescription}>{topic.description}</ThemedText>
+                  <View style={styles.topicMeta}>
+                    <View style={styles.questionCount}>
+                      <ThemedText style={styles.questionCountText}>{topic.questionCount} Questions</ThemedText>
+                    </View>
+                    <View style={[styles.difficultyBadge, { backgroundColor: getDifficultyColor(topic.difficulty) }]}>
+                      <ThemedText style={styles.difficultyText}>{topic.difficulty}</ThemedText>
+                    </View>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
-      </ScrollView>
 
-      <View style={styles.footer}>
-        {!showExplanation ? (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              selectedAnswers[currentQuestionIndex] === undefined && styles.disabledButton
-            ]}
-            onPress={handleShowExplanation}
-            disabled={selectedAnswers[currentQuestionIndex] === undefined}
-          >
-            <ThemedText style={styles.actionButtonText}>Show Answer</ThemedText>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={handleNextQuestion}
-          >
-            <ThemedText style={styles.actionButtonText}>
-              {currentQuestionIndex === 2 ? 'Finish Quiz' : 'Next Question'}
-            </ThemedText>
-          </TouchableOpacity>
-        )}
-      </View>
+        {/* Bottom Spacing */}
+        <View style={styles.bottomSpacing} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -399,378 +195,218 @@ export default function QuizScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F8F6FF',
   },
+  scrollView: {
+    flex: 1,
+  },
+
+  // Header
   header: {
-    backgroundColor: '#6564c7',
-    padding: 14,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 60,
-  },
-  backIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
-    tintColor: '#fff',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleBubble: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#E8E6FF',
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-    minWidth: '60%',
-    maxWidth: '85%',
-  },
-  quizDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#6564c7',
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#6564c7',
-    textAlign: 'center',
-    flexShrink: 1,
-  },
-  headerSpacer: {
-    width: 60,
-  },
-  progressContainer: {
-    backgroundColor: '#e3f2fd',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  progressText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1976d2',
-  },
-  progressTracker: {
-    alignItems: 'center',
-    marginBottom: 20,
-    paddingVertical: 16,
-  },
-  progressDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginHorizontal: 4,
-  },
-  progressDotActive: {
-    backgroundColor: '#6564c7',
-  },
-  progressDotInactive: {
-    backgroundColor: '#E0E0E0',
-  },
-  progressLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6564c7',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#F44336',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  retryButton: {
-    backgroundColor: '#6564c7',
+    alignItems: 'flex-start',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  questionContainer: {
-    flex: 1,
-  },
-  questionHeader: {
-    marginBottom: 24,
-  },
-  questionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    marginBottom: 12,
-  },
-  quizBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff3e0',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    alignSelf: 'flex-start',
-  },
-  quizIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 6,
-  },
-  quizBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#f57c00',
-  },
-  questionSection: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 12,
+    paddingTop: 16,
+    paddingBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 20,
   },
-  questionText: {
-    fontSize: 18,
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+    marginTop: 4,
+  },
+  backIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#8B5CF6',
+  },
+  headerContent: {
+    flex: 1,
+  },
+  mainTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#6564c7',
+    marginBottom: 8,
+    lineHeight: 40,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 22,
+  },
+
+  // Sections
+  section: {
+    paddingHorizontal: 20,
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 20,
     fontWeight: '600',
-    color: '#2d2d2d',
-    marginBottom: 24,
-    lineHeight: 26,
+    color: '#1F2937',
+    marginBottom: 16,
   },
-  optionsContainer: {
-    marginBottom: 24,
-  },
-  answerOption: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  selectedAnswer: {
-    backgroundColor: '#e3f2fd',
-    borderWidth: 2,
-    borderColor: '#1976d2',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  correctAnswer: {
-    backgroundColor: '#e8f5e8',
-    borderWidth: 2,
-    borderColor: '#4caf50',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  wrongAnswer: {
-    backgroundColor: '#ffebee',
-    borderWidth: 2,
-    borderColor: '#f44336',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  optionContent: {
+
+  // Past Mistakes Card
+  mistakesCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
   },
-  optionLetter: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#6564c7',
+  mistakesIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
   },
-  optionLetterText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  mistakesIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#EF4444',
   },
-  optionText: {
+  mistakesContent: {
     flex: 1,
-    fontSize: 16,
-    color: '#2d2d2d',
-    lineHeight: 22,
   },
-  explanationContainer: {
-    backgroundColor: '#f5f5f5',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  explanationTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    marginBottom: 8,
-  },
-  explanationText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#2d2d2d',
-  },
-  footer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  actionButton: {
-    backgroundColor: '#6564c7',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#ccc',
-  },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  mistakesTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
   },
-  resultsContainer: {
-    flex: 1,
-    padding: 16,
+  mistakesDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+    lineHeight: 20,
   },
-  resultsHeader: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  resultsIcon: {
-    width: 48,
-    height: 48,
-    marginBottom: 16,
-  },
-  resultsTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-  },
-  scoreContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  scoreText: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#6564c7',
-  },
-  scoreLabel: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 8,
-  },
-  questionsReview: {
-    marginBottom: 32,
-  },
-  questionReview: {
-    backgroundColor: '#fff',
-    padding: 16,
+  mistakesBadge: {
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 12,
-    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  mistakesBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+  mistakesArrow: {
+    marginLeft: 12,
+  },
+  arrowIcon: {
+    width: 16,
+    height: 16,
+    tintColor: '#8B5CF6',
+    transform: [{ rotate: '90deg' }],
+  },
+
+  // Topics Grid
+  topicsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topicCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  topicIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
-  reviewQuestionHeader: {
+  topicIcon: {
+    width: 20,
+    height: 20,
+  },
+  topicContent: {
+    flex: 1,
+  },
+  topicName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 3,
+  },
+  topicDescription: {
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 14,
+    marginBottom: 10,
+  },
+  topicMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  questionNumber: {
-    fontSize: 14,
+  questionCount: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  questionCountText: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#666',
+    color: '#6B7280',
   },
-  resultBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+  difficultyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  correctBadge: {
-    backgroundColor: '#e8f5e8',
-  },
-  wrongBadge: {
-    backgroundColor: '#ffebee',
-  },
-  resultIcon: {
-    width: 16,
-    height: 16,
-  },
-  reviewQuestionText: {
-    fontSize: 16,
+  difficultyText: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#2d2d2d',
-    marginBottom: 8,
-    lineHeight: 22,
+    color: '#FFFFFF',
   },
-  reviewExplanationText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#666',
-  },
-  finishButton: {
-    backgroundColor: '#6564c7',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  finishButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+
+  bottomSpacing: {
+    height: 20,
   },
 }); 
