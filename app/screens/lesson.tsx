@@ -1,6 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { ThemedText } from '../../components/ThemedText';
 import { apiCall } from '../../lib/api-config';
 import { supabase } from '../../lib/supabase';
@@ -16,15 +17,50 @@ interface QuizQuestion {
 interface LessonData {
   title: string;
   content: string;
+  definitionBox?: string;
   keyConcepts: string[];
   example: string;
   hint: string;
   commonMistake: string;
+  funFact?: string;
 }
 
 interface QuizData {
   questions: QuizQuestion[];
   lessonSummary: string;
+}
+
+function renderLessonContent(content: string) {
+  // Split by lines
+  const lines = content.split(/\r?\n/);
+  const elements = [];
+  let key = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('## ')) {
+      elements.push(
+        <ThemedText key={key++} style={styles.lessonHeader}>
+          {line.replace(/^## /, '')}
+        </ThemedText>
+      );
+    } else if (line.startsWith('### ')) {
+      elements.push(
+        <ThemedText key={key++} style={[styles.lessonHeader, { fontSize: 17, color: '#453d83' }]}> {/* Slightly smaller */}
+          {line.replace(/^### /, '')}
+        </ThemedText>
+      );
+    } else if (line.length > 0) {
+      elements.push(
+        <ThemedText key={key++} style={styles.lessonText}>
+          {line}
+        </ThemedText>
+      );
+    } else {
+      // Add spacing for empty lines
+      elements.push(<ThemedText key={key++} style={{ marginBottom: 8 }}>{' '}</ThemedText>);
+    }
+  }
+  return elements;
 }
 
 export default function LessonScreen() {
@@ -364,6 +400,11 @@ export default function LessonScreen() {
       console.log('🔑 Session found:', !!session);
       console.log('🔑 Token available:', !!session?.access_token);
       
+      if (!session?.access_token) {
+        alert('You must be logged in to save your progress.');
+        return;
+      }
+      
       const response = await apiCall('/api/quiz-completion', {
         method: 'POST',
         headers: {
@@ -384,9 +425,11 @@ export default function LessonScreen() {
         console.log('✅ Quiz completion saved successfully:', responseData);
       } else {
         const errorData = await response.text();
+        alert('Failed to save quiz completion. Please check your connection and try again.');
         console.error('❌ Failed to save quiz completion:', response.status, errorData);
       }
     } catch (error) {
+      alert('An unexpected error occurred while saving your quiz completion.');
       console.error('💥 Error saving quiz completion:', error);
     }
   };
@@ -519,10 +562,37 @@ export default function LessonScreen() {
             </ThemedText>
             
             <View style={styles.lessonContent}>
+              {/* Definition Box for Easy problems */}
+              {lessonData?.definitionBox && (
+                <View style={styles.definitionBox}>
+                  <ThemedText style={styles.definitionBoxTitle}>📚 Definition</ThemedText>
+                  <Markdown
+                    style={{
+                      body: styles.definitionBoxText,
+                      strong: { fontWeight: 'bold', color: '#222' },
+                    }}
+                  >
+                    {lessonData.definitionBox}
+                  </Markdown>
+                </View>
+              )}
+
+              {/* Main Content with digestible chunks */}
               <ThemedText style={styles.sectionTitle}>Main Content</ThemedText>
-              <ThemedText style={styles.lessonText}>
+              <Markdown
+                style={{
+                  body: { color: '#444', fontSize: 16 },
+                  heading1: { color: '#6564c7', fontWeight: 'bold', fontSize: 22, marginTop: 16 },
+                  heading2: { color: '#6564c7', fontWeight: 'bold', fontSize: 19, marginTop: 14 },
+                  heading3: { color: '#453d83', fontWeight: 'bold', fontSize: 17, marginTop: 12 },
+                  strong: { fontWeight: 'bold', color: '#222' },
+                  bullet_list: { marginVertical: 8 },
+                  list_item: { marginVertical: 2 },
+                  // Add more custom styles as needed
+                }}
+              >
                 {lessonData?.content || 'Lesson content is loading...'}
-              </ThemedText>
+              </Markdown>
 
               {lessonData?.keyConcepts && lessonData.keyConcepts.length > 0 && (
                 <>
@@ -559,6 +629,18 @@ export default function LessonScreen() {
                   <ThemedText style={styles.lessonText}>
                     ⚠️ {lessonData.commonMistake}
                   </ThemedText>
+                </>
+              )}
+
+              {/* Fun Fact Section */}
+              {lessonData?.funFact && (
+                <>
+                  <ThemedText style={styles.sectionTitle}>Fun Fact</ThemedText>
+                  <View style={styles.funFactBox}>
+                    <ThemedText style={styles.funFactText}>
+                      🎉 {lessonData.funFact}
+                    </ThemedText>
+                  </View>
                 </>
               )}
             </View>
@@ -759,21 +841,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     padding: 16,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    position: 'relative',
   },
   backButton: {
+    position: 'absolute',
+    left: 16,
     padding: 8,
+    zIndex: 1,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    flex: 1,
     textAlign: 'center',
-    marginRight: 40, // Compensate for back button width
   },
   content: {
     flex: 1,
@@ -964,5 +1048,45 @@ const styles = StyleSheet.create({
   complexityText: {
     fontSize: 16,
     color: '#666',
+  },
+  definitionBox: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6564c7',
+  },
+  definitionBoxTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#6564c7',
+  },
+  definitionBoxText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#333',
+  },
+  funFactBox: {
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  funFactText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#856404',
+    fontStyle: 'italic',
+  },
+  lessonHeader: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#6564c7',
+    marginTop: 18,
+    marginBottom: 8,
   },
 }); 

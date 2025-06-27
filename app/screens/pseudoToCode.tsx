@@ -2,7 +2,7 @@ import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,

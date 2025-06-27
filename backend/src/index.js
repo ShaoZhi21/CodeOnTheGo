@@ -1190,6 +1190,8 @@ INSTRUCTIONS:
 2. **DO** teach the fundamental concepts and data structures that would be useful
 3. **DO** provide examples that illustrate the concepts without solving the target problem
 4. **DO** make the content beginner-friendly but comprehensive
+5. **DO** break content into digestible chunks with clear sections
+6. **DO** include a fun fact at the end
 
 For example, if the problem involves hash maps:
 - Teach WHAT a hash map is and how it works
@@ -1200,27 +1202,37 @@ For example, if the problem involves hash maps:
 
 Your lesson should be structured and include:
 
-1. **Main Content**: A clear, step-by-step explanation of the key concepts and algorithms needed. Focus on the problem-solving approach and the underlying data structures or algorithms that would be useful.
+1. **Definition Box** (for Easy problems only): A concise definition of the main data structure or concept, formatted as a highlighted box.
 
-2. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
+2. **Main Content**: Break this into 3-4 digestible sections with clear headings:
+   - **What is [Concept]?** - Basic introduction
+   - **How does it work?** - Step-by-step explanation
+   - **Why is it useful?** - Real-world applications
+   - **Key Operations** - Common operations and their complexity
 
-3. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
+3. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
 
-4. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
+4. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
 
-5. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
+5. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
 
-6. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
+6. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
+
+7. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
+
+8. **Fun Fact**: Include an interesting, relevant fact about the concept, its history, or real-world applications.
 
 Respond with ONLY a JSON object in this exact format:
 {
   "title": "Specific Lesson Title for ${problemData.title}",
-  "content": "Detailed explanation of the concepts, step-by-step approach, and problem-solving strategy...",
+  "definitionBox": "For Easy problems: A concise definition of the main concept",
+  "content": "Detailed explanation broken into digestible sections with clear headings like 'What is [Concept]?', 'How does it work?', 'Why is it useful?', 'Key Operations'",
   "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
   "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
   "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
   "pitfalls": ["Common mistake 1", "Common mistake 2"],
-  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"]
+  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"],
+  "funFact": "An interesting, relevant fact about the concept, its history, or real-world applications"
 }
 
 Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
