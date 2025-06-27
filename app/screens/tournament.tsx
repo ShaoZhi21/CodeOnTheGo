@@ -36,11 +36,7 @@ export default function TournamentScreen() {
   const tournamentType = TOURNAMENT_TYPES.find(t => t.type === selectedType);
 
   const handleBack = () => {
-    if (pathname === '/screens/tournament') {
-      router.replace('/');
-    } else {
-      router.replace('/screens/tournament');
-    }
+    router.back();
   };
 
   return (
