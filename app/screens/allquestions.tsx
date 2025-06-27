@@ -1,8 +1,8 @@
 import { ThemedText } from '@/components/ThemedText';
 import { decodeHtmlEntities } from '@/lib/utils/textUtils';
 import { createClient } from '@supabase/supabase-js';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -18,6 +18,12 @@ interface Problem {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
   is_premium: boolean;
+}
+
+interface ProblemWithStatus extends Problem {
+  status: 'Solved' | 'Unsolved';
+  score?: number;
+  stars?: number;
 }
 
 const PROBLEMS_PER_PAGE = 8;
@@ -39,8 +45,6 @@ const getStatusColor = (status: string) => {
   switch (status) {
     case 'Solved':
       return '#00B8A3';
-    case 'Attempted':
-      return '#FFA116';
     case 'Unsolved':
       return '#b4aaf4';
     default:
@@ -49,7 +53,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function AllQuestionsScreen() {
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<ProblemWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalProblems, setTotalProblems] = useState(0);
@@ -61,6 +65,8 @@ export default function AllQuestionsScreen() {
   const [allProblems, setAllProblems] = useState<Problem[]>([]);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
+  const [refreshingStatus, setRefreshingStatus] = useState(false);
 
   const totalPages = Math.ceil(totalProblems / PROBLEMS_PER_PAGE);
 
@@ -100,7 +106,47 @@ export default function AllQuestionsScreen() {
         throw error;
       }
 
-      setProblems(data || []);
+      const problemsData = data || [];
+
+      // Get user progress for these problems
+      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const problemIds = problemsData.map(p => p.leetcode_id);
+      
+      console.log('🔍 FETCH PROBLEMS - Getting progress for problem IDs:', problemIds);
+      
+      const progressMap = await getUserProgressForProblems(problemIds);
+
+      console.log('🔍 FETCH PROBLEMS - Raw progress map:', JSON.stringify(progressMap, null, 2));
+
+      // Combine problems with their status
+      const problemsWithStatus: ProblemWithStatus[] = problemsData.map(problem => {
+        const progress = progressMap[problem.leetcode_id];
+        
+        console.log(`🔍 FETCH PROBLEMS - Problem ${problem.leetcode_id}:`, {
+          progress,
+          score: progress?.score,
+          stars: progress?.stars,
+          scoreType: typeof progress?.score,
+          starsType: typeof progress?.stars
+        });
+
+        return {
+          ...problem,
+          status: progress?.is_solved ? 'Solved' : 'Unsolved',
+          score: progress?.score,
+          stars: progress?.stars
+        };
+      });
+
+      console.log('🔍 FETCH PROBLEMS - Final problems with status:', problemsWithStatus.map(p => ({
+        id: p.leetcode_id,
+        title: p.title,
+        status: p.status,
+        score: p.score,
+        stars: p.stars
+      })));
+
+      setProblems(problemsWithStatus);
     } catch (err) {
       console.error('Error fetching problems:', err);
       setError('Failed to load problems. Please try again.');
@@ -112,6 +158,69 @@ export default function AllQuestionsScreen() {
   useEffect(() => {
     fetchProblems(currentPage);
   }, [currentPage]);
+
+  // Refresh problems when the screen comes into focus (e.g., returning from question screen)
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we have problems loaded and should refresh
+      if (problems.length > 0 && shouldRefreshStatus) {
+        refreshProblemsStatus();
+        setShouldRefreshStatus(false);
+      }
+    }, [problems.length, shouldRefreshStatus])
+  );
+
+  // Function to refresh only the status of current problems without full reload
+  const refreshProblemsStatus = async () => {
+    try {
+      if (problems.length === 0) return;
+
+      setRefreshingStatus(true);
+
+      // Get user progress for current problems
+      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const problemIds = problems.map(p => p.leetcode_id);
+      
+      console.log('🔍 ALL QUESTIONS - Fetching progress for problem IDs:', problemIds);
+      
+      const progressMap = await getUserProgressForProblems(problemIds);
+
+      console.log('🔍 ALL QUESTIONS - Raw progress map from database:', JSON.stringify(progressMap, null, 2));
+
+      // Update problems with latest status
+      const updatedProblems: ProblemWithStatus[] = problems.map(problem => {
+        const progress = progressMap[problem.leetcode_id];
+        
+        console.log(`🔍 ALL QUESTIONS - Problem ${problem.leetcode_id} (${problem.title}):`);
+        console.log(`🔍 ALL QUESTIONS - Progress data:`, progress);
+        console.log(`🔍 ALL QUESTIONS - Is solved:`, progress?.is_solved);
+        console.log(`🔍 ALL QUESTIONS - Score:`, progress?.score, 'Type:', typeof progress?.score);
+        console.log(`🔍 ALL QUESTIONS - Stars:`, progress?.stars, 'Type:', typeof progress?.stars);
+
+        return {
+          ...problem,
+          status: progress?.is_solved ? 'Solved' : 'Unsolved',
+          score: progress?.score,
+          stars: progress?.stars
+        };
+      });
+
+      console.log('🔍 ALL QUESTIONS - Updated problems with status:', updatedProblems.map(p => ({
+        id: p.leetcode_id,
+        title: p.title,
+        status: p.status,
+        score: p.score,
+        stars: p.stars
+      })));
+
+      setProblems(updatedProblems);
+    } catch (err) {
+      console.error('Error refreshing problem status:', err);
+      // Don't show error to user for status refresh, just log it
+    } finally {
+      setRefreshingStatus(false);
+    }
+  };
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
@@ -178,7 +287,7 @@ export default function AllQuestionsScreen() {
     handleProblemPress(problem);
   };
 
-  const sortProblems = (problems: Problem[], column: string, direction: 'asc' | 'desc'): Problem[] => {
+  const sortProblems = (problems: ProblemWithStatus[], column: string, direction: 'asc' | 'desc'): ProblemWithStatus[] => {
     return [...problems].sort((a, b) => {
       let aValue: any;
       let bValue: any;
@@ -198,9 +307,9 @@ export default function AllQuestionsScreen() {
           bValue = difficultyOrder[b.difficulty];
           break;
         case 'status':
-          const statusOrder = { 'Unsolved': 1, 'Progress': 2, 'Completed': 3 };
-          aValue = statusOrder['Unsolved' as keyof typeof statusOrder];
-          bValue = statusOrder['Unsolved' as keyof typeof statusOrder];
+          const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
+          aValue = statusOrder[a.status as keyof typeof statusOrder];
+          bValue = statusOrder[b.status as keyof typeof statusOrder];
           break;
         default:
           return 0;
@@ -248,6 +357,9 @@ export default function AllQuestionsScreen() {
   };
 
   const handleProblemPress = (problem: Problem) => {
+    // Set flag to refresh status when returning from question
+    setShouldRefreshStatus(true);
+    
     router.push({
       pathname: '/screens/question',
       params: {
@@ -265,7 +377,19 @@ export default function AllQuestionsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.title}>Problems</ThemedText>
+          <View style={styles.titleContainer}>
+            <ThemedText style={styles.title}>Problems</ThemedText>
+            {refreshingStatus && (
+              <ActivityIndicator 
+                size="small" 
+                color="#6564c7" 
+                style={styles.refreshIndicator} 
+              />
+            )}
+          </View>
+          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
+            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
+          </TouchableOpacity>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
@@ -282,7 +406,19 @@ export default function AllQuestionsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.title}>Problems</ThemedText>
+          <View style={styles.titleContainer}>
+            <ThemedText style={styles.title}>Problems</ThemedText>
+            {refreshingStatus && (
+              <ActivityIndicator 
+                size="small" 
+                color="#6564c7" 
+                style={styles.refreshIndicator} 
+              />
+            )}
+          </View>
+          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
+            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
+          </TouchableOpacity>
         </View>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
@@ -302,7 +438,16 @@ export default function AllQuestionsScreen() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
               <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
             </TouchableOpacity>
-            <ThemedText style={styles.title}>Problems</ThemedText>
+            <View style={styles.titleContainer}>
+              <ThemedText style={styles.title}>Problems</ThemedText>
+              {refreshingStatus && (
+                <ActivityIndicator 
+                  size="small" 
+                  color="#6564c7" 
+                  style={styles.refreshIndicator} 
+                />
+              )}
+            </View>
             <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
               <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
             </TouchableOpacity>
@@ -412,8 +557,8 @@ export default function AllQuestionsScreen() {
               </ThemedText>
             </View>
             <View style={[styles.statusCell, { flex: 2.5 }]}>
-              <View style={[styles.statusBadge, { backgroundColor: getStatusColor('Unsolved') }]}>
-                <ThemedText style={styles.statusText}>Unsolved</ThemedText>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(problem.status) }]}>
+                <ThemedText style={styles.statusText}>{problem.status}</ThemedText>
               </View>
             </View>
           </TouchableOpacity>
@@ -531,6 +676,10 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 8,
     tintColor: '#fff',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   title: {
     fontSize: 24,
@@ -728,6 +877,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: 'center',
+    minWidth: 75,
   },
   statusText: {
     color: '#fff',
@@ -851,5 +1001,8 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 12,
+  },
+  refreshIndicator: {
+    marginLeft: 8,
   },
 });

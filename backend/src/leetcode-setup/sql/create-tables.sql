@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS user_problem_progress (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   problem_id INTEGER REFERENCES leetcode_problems(leetcode_id) ON DELETE CASCADE,
   is_solved BOOLEAN DEFAULT FALSE,
+  score INTEGER DEFAULT 0 CHECK (score >= 0 AND score <= 100),
+  stars INTEGER DEFAULT 0 CHECK (stars >= 0 AND stars <= 5),
   attempts INTEGER DEFAULT 0 CHECK (attempts >= 0),
   hints_used INTEGER DEFAULT 0 CHECK (hints_used >= 0),
   time_spent_minutes INTEGER DEFAULT 0 CHECK (time_spent_minutes >= 0),
@@ -96,6 +98,7 @@ CREATE TABLE IF NOT EXISTS user_problem_progress (
   best_score INTEGER DEFAULT 0 CHECK (best_score >= 0),
   first_solved_at TIMESTAMP WITH TIME ZONE,
   last_attempt_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, problem_id)
