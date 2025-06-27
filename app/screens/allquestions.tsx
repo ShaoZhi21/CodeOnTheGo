@@ -1,4 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
+import { decodeHtmlEntities } from '@/lib/utils/textUtils';
 import { createClient } from '@supabase/supabase-js';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -481,7 +482,7 @@ export default function AllQuestionsScreen() {
                 <View style={styles.suggestionContent}>
                   <ThemedText style={styles.suggestionId}>#{problem.leetcode_id}</ThemedText>
                   <ThemedText style={styles.suggestionTitle} numberOfLines={1}>
-                    {problem.title}
+                    {decodeHtmlEntities(problem.title)}
                   </ThemedText>
                   <View style={[styles.suggestionDifficulty, { backgroundColor: getDifficultyColor(problem.difficulty) }]}>
                     <ThemedText style={styles.suggestionDifficultyText}>
@@ -540,7 +541,7 @@ export default function AllQuestionsScreen() {
             <ThemedText style={[styles.cell, { flex: 1.3 }]}>{problem.leetcode_id}</ThemedText>
             <View style={[styles.cell, styles.titleCell, { flex: 4 }]}>
               <ThemedText style={styles.titleText} numberOfLines={2} ellipsizeMode="tail">
-                {problem.title}
+                {decodeHtmlEntities(problem.title)}
               </ThemedText>
             </View>
             <View style={[

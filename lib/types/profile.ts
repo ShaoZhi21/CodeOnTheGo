@@ -4,7 +4,7 @@ export interface UserProfile {
   name: string;
   level: number;
   total_xp: number;
-  skill_level: 'Beginner' | 'Intermediate' | 'Professional';
+  skill_level: 'Beginner' | 'Intermediate' | 'Advanced';
   total_questions: number;
   easy_solved: number;
   medium_solved: number;
@@ -41,7 +41,7 @@ export interface UserProfileStats extends UserProfile {
 
 export interface ProfileUpdateData {
   name?: string;
-  skill_level?: 'Beginner' | 'Intermediate' | 'Professional';
+  skill_level?: 'Beginner' | 'Intermediate' | 'Advanced';
   level?: number;
   total_xp?: number;
   trophy_count?: number;

@@ -3,6 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { createClient } = require('@supabase/supabase-js');
+const { getTopicProblems, getTopicStats, getAllTopics, recordTopicNavigation, getRecentTopicNavigation, getProblemSolution } = require('./services/topicService');
+const { getUserProfile, updateUserProfile, getUserProfileStats } = require('./services/profileService');
+const bodyParser = require('body-parser');
 
 // To use Judge0 API for code execution, you need to:
 // 1. Sign up at https://rapidapi.com/judge0-official/api/judge0-ce/
@@ -10,11 +14,37 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // 3. Set your API key: export JUDGE0_API_KEY="your-rapidapi-key-here"
 // 4. Or add to your .env file: JUDGE0_API_KEY=your-rapidapi-key-here
 
+// Debug logging for environment variables
+console.log('🔍 Environment Variables Debug:');
+console.log('GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
+console.log('GEMINI_API_KEY length:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0);
+console.log('GEMINI_API_KEY first 10 chars:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 10) + '...' : 'undefined');
+console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+console.log('SUPABASE_SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+console.log('Current working directory:', process.cwd());
+console.log('========================');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const API_KEY = process.env.GEMINI_API_KEY;
+if (!API_KEY) {
+  console.warn('GEMINI_API_KEY is not set. Quiz and analysis features will not work.');
+}
+let geminiModel;
+if (API_KEY) {
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    console.log('✅ Gemini model initialized successfully');
+} else {
+    console.log('❌ Gemini model NOT initialized - API key missing');
+}
+
+// --- USER PROGRESS ENDPOINTS ---
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Middleware
 app.use(cors({
@@ -23,6 +53,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type']
 }));
 app.use(express.json());
+app.use(bodyParser.json());
 app.use(morgan('dev'));
 
 // Error handling middleware
@@ -43,6 +74,9 @@ app.get('/health', (req, res) => {
 
 // Code analysis endpoint
 app.post('/api/analyze', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Analysis feature is not configured on the server.' });
+  }
   try {
     const { code, question } = req.body;
     
@@ -50,25 +84,17 @@ app.post('/api/analyze', async (req, res) => {
       return res.status(400).json({ error: 'Code and question are required' });
     }
 
-    // Format the code with line numbers
     let numberedCode = '';
     if (Array.isArray(code)) {
-      // Filter out empty blocks - frontend already numbers them
       const nonEmptyBlocks = code.filter(block => block.trim() !== '');
       numberedCode = nonEmptyBlocks.join('\n');
     } else {
-      // If code is a string, use it as is if already numbered
       numberedCode = code;
     }
 
     console.log('PARSED SOLUTION FROM FRONTEND:');
     console.log(numberedCode);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a helpful and precise assistant. Your job is to evaluate the logic of pseudocode when given a question and a block of pseudocode. Explain whether the logic correctly answers the question, and point out any logical errors or missing steps. Use clear reasoning and suggest improvements if needed. Do not write actual code unless asked.",
-    });
-    
     const prompt = 
     `You are a concise and critical code reviewer. 
     When given a question and a piece of code (or pseudocode), your job is to 
@@ -183,10 +209,13 @@ Score: [number]/100
 Stars: [number]
 `;
 
-    const result = await model.generateContent(prompt);
+    console.log('🔍 Calling Gemini API for analysis...');
+    const result = await geminiModel.generateContent(prompt);
+    console.log('✅ Gemini API call successful');
     const response = await result.response;
     const text = response.text();
 
+    console.log('📝 Gemini response received:', text.substring(0, 100) + '...');
     console.log('Raw Gemini response:', text);
 
     // Parse the response into structured format
@@ -368,10 +397,7 @@ app.post('/api/simplify-question', async (req, res) => {
       return res.status(400).json({ error: 'Question description is required' });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a helpful assistant that simplifies technical questions for beginners. Make complex concepts easy to understand using simple language and everyday analogies.",
-    });
+    const model = geminiModel;
     
     const prompt = `Please simplify this coding question for a beginner programmer with both a serious and fun version.
 
@@ -444,7 +470,6 @@ Return only the two-line response as shown above, nothing else.`;
   }
 });
 
-
 // Code execution endpoint using Gemini AI
 app.post('/api/execute-code', async (req, res) => {
   try {
@@ -507,7 +532,7 @@ Respond in this JSON format:
   "error": null or "error message if any"
 }`;
 
-        const result = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(prompt);
+        const result = await geminiModel.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
         
@@ -581,7 +606,7 @@ USER'S ACTUAL CODE:
 ${code}
 \`\`\`
 
-For each pseudocode step, analyze if it has been implemented in the actual code:
+For each pseudocode step, analyze if it's implemented correctly in the actual code:
 
 INSTRUCTIONS:
 1. Split the pseudocode into individual logical steps
@@ -600,7 +625,7 @@ Respond in this JSON format:
   ]
 }`;
 
-        const progressResult = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(progressPrompt);
+        const progressResult = await geminiModel.generateContent(progressPrompt);
         const progressResponse = await progressResult.response;
         const progressText = progressResponse.text();
         
@@ -658,10 +683,7 @@ app.post('/api/generate-mcq', async (req, res) => {
     console.log('Generating MCQ for pseudocode line:', pseudocodeLine);
     console.log('Language:', language);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a coding education expert. Create multiple choice questions to help users learn how to convert pseudocode to actual code.",
-    });
+    const model = geminiModel;
     
     const prompt = `You are a coding education expert creating MCQ questions that map pseudocode to real code solutions.
 
@@ -913,10 +935,7 @@ app.post('/api/generate-code-summary', async (req, res) => {
     console.log('Language:', language);
     console.log('MCQ Answers provided:', mcqAnswers?.length || 0);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a coding education expert. Create comprehensive code summaries that help users understand the complete solution and algorithm.",
-    });
+    const model = geminiModel;
     
     const prompt = `Generate a comprehensive code summary that implements the user's exact pseudocode approach:
 
@@ -1045,6 +1064,348 @@ Return only valid JSON, no additional text.`;
     console.error('Error generating code summary:', error);
     res.status(500).json({ error: 'Failed to generate code summary' });
   }
+});
+
+// Test endpoint to check database connection and table existence
+app.get('/api/test-db', async (req, res) => {
+  try {
+    console.log('Testing database connection...');
+    console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Not set');
+    console.log('Supabase Key:', supabaseKey ? 'Set' : 'Not set');
+    
+    // Test basic connection
+    const { data, error } = await supabase
+      .from('user_lesson_completion')
+      .select('*')
+      .limit(1);
+    
+    if (error) {
+      console.error('Database test error:', error);
+      return res.status(500).json({ 
+        error: 'Database connection failed', 
+        details: error.message,
+        code: error.code 
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Database connection successful',
+      tableExists: true,
+      sampleData: data 
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: 'Test failed', details: error.message });
+  }
+});
+
+// Quiz Completion Endpoint
+app.post('/api/quiz-completion', async (req, res) => {
+  try {
+    const { questionId, score, completed } = req.body;
+    
+    if (!questionId || score === undefined || completed === undefined) {
+      return res.status(400).json({ error: 'Question ID, score, and completion status are required' });
+    }
+
+    // Get the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    // Verify the token and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('Authentication error:', authError);
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Save quiz completion to database
+    const { error } = await supabase
+      .from('user_lesson_completion')
+      .upsert({
+        user_id: user.id,
+        problem_id: questionId,
+        quiz_completed: completed,
+        quiz_score: score,
+        completed_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Error saving quiz completion:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return res.status(500).json({ error: 'Failed to save quiz completion', details: error.message });
+    }
+
+    res.json({ success: true, message: 'Quiz completion saved successfully' });
+  } catch (error) {
+    console.error('Error in quiz completion endpoint:', error);
+    res.status(500).json({ error: 'Failed to save quiz completion' });
+  }
+});
+
+// Generate Topic Lesson Endpoint
+app.post('/api/generate-topic-lesson', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
+  }
+
+  try {
+    const { topicName, problemId, userId } = req.body;
+
+    if (!topicName || !problemId) {
+      return res.status(400).json({ error: 'Topic name and problem ID are required.' });
+    }
+
+    // Get problem details from database
+    const { data: problemData, error: problemError } = await supabase
+      .from('topic_problems')
+      .select('title')
+      .eq('leetcode_id', problemId)
+      .single();
+
+    if (problemError || !problemData) {
+      console.error('Error fetching problem:', problemError);
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
+
+CONTEXT:
+- Topic: ${topicName}
+- Target Problem: ${problemData.title}
+
+INSTRUCTIONS:
+1. **DO NOT** explain how to solve the specific problem
+2. **DO** teach the fundamental concepts and data structures that would be useful
+3. **DO** provide examples that illustrate the concepts without solving the target problem
+4. **DO** make the content beginner-friendly but comprehensive
+
+For example, if the problem involves hash maps:
+- Teach WHAT a hash map is and how it works
+- Explain why hash map lookups are O(1)
+- Show simple examples of hash map usage
+- Explain collision resolution concepts
+- DO NOT show how to use hash maps to solve the specific problem
+
+Your lesson should be structured and include:
+
+1. **Main Content**: A clear, step-by-step explanation of the key concepts and algorithms needed. Focus on the problem-solving approach and the underlying data structures or algorithms that would be useful.
+
+2. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
+
+3. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
+
+4. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
+
+5. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
+
+6. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "title": "Specific Lesson Title for ${problemData.title}",
+  "content": "Detailed explanation of the concepts, step-by-step approach, and problem-solving strategy...",
+  "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
+  "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
+  "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
+  "pitfalls": ["Common mistake 1", "Common mistake 2"],
+  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"]
+}
+
+Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    console.log('RAW Gemini lesson output:', text); // Log raw Gemini output
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const lessonData = JSON.parse(text);
+    
+    console.log('Generated lesson data:', lessonData);
+    res.json(lessonData);
+  } catch (error) {
+    console.error('Error generating lesson with Gemini:', error);
+    res.status(500).json({ error: 'Failed to generate lesson.' });
+  }
+});
+
+// Generate Topic Quiz Endpoint
+app.post('/api/generate-topic-quiz', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Quiz generation is not configured on the server.' });
+  }
+
+  try {
+    const { topicName, problemId, lessonContent } = req.body;
+
+    if (!topicName || !problemId || !lessonContent) {
+      return res.status(400).json({ error: 'Topic name, problem ID, and lesson content are required.' });
+    }
+
+    // Get problem details from database
+    const { data: problemData, error: problemError } = await supabase
+      .from('topic_problems')
+      .select('title')
+      .eq('leetcode_id', problemId)
+      .single();
+
+    if (problemError || !problemData) {
+      console.error('Error fetching problem:', problemError);
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    const prompt = `You are an expert programming tutor creating a quiz to test understanding of the lesson content. Create 5 multiple-choice questions based on the lesson content provided.
+
+CONTEXT:
+- Topic: ${topicName}
+- Target Problem: ${problemData.title}
+- Lesson Content: ${lessonContent}
+
+INSTRUCTIONS:
+1. Create 5 multiple-choice questions that test understanding of the concepts taught in the lesson
+2. Each question should have 4 options (A, B, C, D)
+3. Only one option should be correct
+4. Questions should be at a beginner level but test actual understanding
+5. Include explanations for why the correct answer is right
+6. DO NOT ask questions about the specific problem solution
+7. Focus on testing understanding of the underlying concepts and data structures
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "questions": [
+    {
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Explanation of why this answer is correct"
+    },
+    {
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 1,
+      "explanation": "Explanation of why this answer is correct"
+    }
+  ],
+  "lessonSummary": "A brief 2-3 sentence summary of what was learned in this lesson"
+}
+
+Create exactly 5 questions. Do not include any other text, only the JSON object.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const quizData = JSON.parse(text);
+    
+    console.log('Generated quiz data:', quizData);
+    res.json(quizData);
+  } catch (error) {
+    console.error('Error generating quiz with Gemini:', error);
+    res.status(500).json({ error: 'Failed to generate quiz.' });
+  }
+});
+
+// Test Lesson Generation Endpoint (for development)
+app.post('/api/test-lesson-generation', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
+  }
+
+  const { topicName, problemTitle, problemDescription } = req.body;
+
+  if (!topicName || !problemTitle || !problemDescription) {
+    return res.status(400).json({ error: 'Topic name, problem title, and problem description are required.' });
+  }
+
+  try {
+    const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
+
+CONTEXT:
+- Topic: ${topicName}
+- Target Problem: ${problemTitle}
+- Problem Description: ${problemDescription}
+
+INSTRUCTIONS:
+1. **DO NOT** explain how to solve the specific problem
+2. **DO** teach the fundamental concepts and data structures that would be useful
+3. **DO** provide examples that illustrate the concepts without solving the target problem
+4. **DO** make the content beginner-friendly but comprehensive
+
+For example, if the problem involves hash maps:
+- Teach WHAT a hash map is and how it works
+- Explain why hash map lookups are O(1)
+- Show simple examples of hash map usage
+- Explain collision resolution concepts
+- DO NOT show how to use hash maps to solve the specific problem
+
+Your lesson should be structured and include:
+
+1. **Main Content**: A clear, step-by-step explanation of the key concepts and algorithms needed. Focus on the problem-solving approach and the underlying data structures or algorithms that would be useful.
+
+2. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
+
+3. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
+
+4. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
+
+5. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
+
+6. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "title": "Specific Lesson Title for ${problemTitle}",
+  "content": "Detailed explanation of the concepts, step-by-step approach, and problem-solving strategy...",
+  "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
+  "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
+  "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
+  "pitfalls": ["Common mistake 1", "Common mistake 2"],
+  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"]
+}
+
+Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const lessonData = JSON.parse(text);
+    res.json(lessonData);
+  } catch (error) {
+    console.error('Error generating test lesson with Gemini:', error);
+    res.status(500).json({ error: 'Failed to generate lesson.' });
+  }
+});
+
+// --- Existing Service Endpoints ---
+app.get('/topics', async (req, res) => {
+    try {
+      const topics = await getAllTopics();
+      res.json(topics);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch topics' });
+    }
+  });
+  
+app.get('/topic-problems', async (req, res) => {
+try {
+    const { topic } = req.query;
+    const problems = await getTopicProblems(topic);
+    res.json(problems);
+} catch (error) {
+    res.status(500).json({ error: 'Failed to fetch topic problems' });
+}
 });
 
 // Start server

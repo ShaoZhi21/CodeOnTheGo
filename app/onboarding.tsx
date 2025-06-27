@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
+type SkillLevel = 'Beginner' | 'Intermediate' | 'Advanced';
+
 const questions = [
   // Very Simple Logic Questions (1-2)
   {
@@ -97,13 +99,25 @@ export default function OnboardingScreen() {
   const questionScrollRef = useRef<ScrollView>(null);
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState([]);
-  const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [suggestedLevel, setSuggestedLevel] = useState('Beginner');
-  const [selectedLevel, setSelectedLevel] = useState('Beginner');
+  const [suggestedLevel, setSuggestedLevel] = useState<SkillLevel>('Beginner');
+  const [selectedLevel, setSelectedLevel] = useState<SkillLevel>('Beginner');
   const [showLevelSelection, setShowLevelSelection] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const levelDescriptions: Record<SkillLevel, string> = {
+    Beginner: 'Little to no programming knowledge, new to coding challenges.',
+    Intermediate: 'Some programming experience, can solve basic to moderate problems.',
+    Advanced: 'Strong programming background, comfortable with complex algorithms.'
+  };
+
+  const levelColors: Record<SkillLevel, string> = {
+    Beginner: '#4CAF50',
+    Intermediate: '#FF9800',
+    Advanced: '#F44336'
+  };
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -148,13 +162,13 @@ export default function OnboardingScreen() {
         return count + (answer === questions[index].correctAnswer ? 1 : 0);
       }, 0);
 
-      let level;
+      let level: SkillLevel;
       if (correctAnswers <= 3) {
         level = 'Beginner';
       } else if (correctAnswers <= 5) {
         level = 'Intermediate';
       } else {
-        level = 'Professional';
+        level = 'Advanced';
       }
 
       setSuggestedLevel(level);
@@ -355,18 +369,6 @@ export default function OnboardingScreen() {
   };
 
   const renderLevelSelection = () => {
-    const levelDescriptions = {
-      Beginner: 'Little to no programming knowledge, new to coding challenges.',
-      Intermediate: 'Some programming experience, can solve basic to moderate problems.',
-      Professional: 'Strong programming background, comfortable with complex algorithms.'
-    };
-
-    const levelColors = {
-      Beginner: '#4CAF50',
-      Intermediate: '#FF9800',
-      Professional: '#F44336'
-    };
-
     const correctAnswers = answers.reduce((count, answer, index) => 
       count + (answer === questions[index].correctAnswer ? 1 : 0), 0
     );
@@ -393,7 +395,7 @@ export default function OnboardingScreen() {
         </ThemedText>
 
         <View style={styles.levelOptions}>
-          {['Beginner', 'Intermediate', 'Professional'].map((level) => (
+          {['Beginner', 'Intermediate', 'Advanced'].map((level) => (
             <TouchableOpacity
               key={level}
               style={[
@@ -401,7 +403,7 @@ export default function OnboardingScreen() {
                 selectedLevel === level && [styles.selectedLevel, { borderColor: levelColors[level], borderWidth: 3 }],
                 { borderColor: selectedLevel === level ? levelColors[level] : '#E0E0E0' }
               ]}
-              onPress={() => setSelectedLevel(level)}
+              onPress={() => setSelectedLevel(level as SkillLevel)}
             >
               <ThemedText style={[
                 styles.levelOptionTitle,
@@ -413,7 +415,7 @@ export default function OnboardingScreen() {
                 styles.levelOptionDescription,
                 selectedLevel === level && { color: '#333' }
               ]}>
-                {levelDescriptions[level]}
+                {levelDescriptions[level as SkillLevel]}
               </ThemedText>
             </TouchableOpacity>
           ))}

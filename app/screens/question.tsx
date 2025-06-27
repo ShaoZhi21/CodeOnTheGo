@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
@@ -19,6 +19,17 @@ import { AnalysisModal } from '../components/AnalysisModal';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Helper function to decode HTML entities
+const decodeHtmlEntities = (text: string): string => {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+};
 
 interface Analysis {
   lineByLineAnalysis: {
@@ -557,33 +568,32 @@ export default function QuestionScreen() {
   };
   
   async function handleSolveProblem() {
-    if (!problem) return;
-    
-    const combinedSolution = descriptionBoxes.map(block => {
-      if (block.type === 'text') return block.value;
-      if (block.type === 'if') return `if ${block.condition}:\n   ${block.body}`;
-      if (block.type === 'elseif') return `else if ${block.condition}:\n   ${block.body}`;
-      if (block.type === 'else') return `else\n   ${block.body}`;
-      if (block.type === 'while') return `while (${block.condition}):\n   ${block.body}`;
-      if (block.type === 'for') return `for (${block.condition}):\n   ${block.body}`;
-      return '';
-    }).join('\n');
-    
-    if (!combinedSolution.trim()) {
+    if (descriptionBoxes.length === 0) {
+      Alert.alert('Error', 'Please add at least one code block before solving.');
       return;
     }
-    
-    // Add line numbers to the solution
-    const numberedSolution = combinedSolution
-      .split('\n')
-      .filter(line => line.trim() !== '') // Remove empty lines
-      .map((line, index) => `${index + 1}) ${line.trim()}`)
-      .join('\n');
-    
-    setSolution(numberedSolution);
+
     setIsAnalyzing(true);
     setAnalysisError(null);
-    console.log('\n' + numberedSolution);
+
+    // Convert blocks to numbered solution
+    const numberedSolution = descriptionBoxes.map((block, index) => {
+      if (block.type === 'text') {
+        return `${index + 1}. ${block.value}`;
+      } else if (block.type === 'if') {
+        return `${index + 1}. if ${block.condition}:\n   ${block.body}`;
+      } else if (block.type === 'elseif') {
+        return `${index + 1}. elif ${block.condition}:\n   ${block.body}`;
+      } else if (block.type === 'else') {
+        return `${index + 1}. else:\n   ${block.body}`;
+      } else if (block.type === 'while') {
+        return `${index + 1}. while ${block.condition}:\n   ${block.body}`;
+      } else if (block.type === 'for') {
+        return `${index + 1}. for ${block.condition}:\n   ${block.body}`;
+      }
+      return '';
+    }).join('\n');
+
     try {
       const response = await apiCall('/api/analyze', {
         method: 'POST',
@@ -592,7 +602,7 @@ export default function QuestionScreen() {
         },
         body: JSON.stringify({
           code: numberedSolution,
-          question: problem.description
+          question: problem?.description || 'Solve the problem'
         }),
       });
 
@@ -613,6 +623,9 @@ export default function QuestionScreen() {
         console.log(data.rawResponse);
         console.log('=====================\n');
         setAnalysis(data.analysis);
+        
+        // Save progress to database
+        await saveProgress(data.analysis);
         
         // Verify analysis was set correctly
         setTimeout(() => {
@@ -638,6 +651,57 @@ export default function QuestionScreen() {
       setAnalysisError('Both live and local servers failed, try again');
     } finally {
       setIsAnalyzing(false);
+    }
+  }
+
+  async function saveProgress(analysis: Analysis) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('User not authenticated');
+        return;
+      }
+
+      // Determine if the solution is completed based on score
+      const isCompleted = analysis.score >= 50; // Consider completed if score >= 50
+      const stars = analysis.stars || 0;
+
+      console.log('Saving progress:', {
+        userId: user.id,
+        problemId: id,
+        score: analysis.score,
+        stars: stars,
+        completed: isCompleted
+      });
+
+      const response = await apiCall(`/api/user-progress/${user.id}/general/${id}/answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: descriptionBoxes.map(block => {
+            if (block.type === 'text') return block.value;
+            if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
+            if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
+            if (block.type === 'else') return `else:\n${block.body}`;
+            if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
+            if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
+            return '';
+          }).join('\n'),
+          result: analysis.correctness,
+          completed: isCompleted,
+          stars: stars
+        }),
+      });
+
+      if (response.ok) {
+        console.log('Progress saved successfully');
+      } else {
+        console.error('Failed to save progress:', response.status);
+      }
+    } catch (error) {
+      console.error('Error saving progress:', error);
     }
   }
 
@@ -1000,7 +1064,7 @@ export default function QuestionScreen() {
           ]}>
             <View style={[styles.difficultyDot, { backgroundColor: getDifficultyAccentColor(problem?.difficulty || 'Easy') }]} />
             <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-              {name || problem?.title}
+              {decodeHtmlEntities((Array.isArray(name) ? name[0] : name) || problem?.title || '')}
             </ThemedText>
           </View>
         </View>

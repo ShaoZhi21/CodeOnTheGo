@@ -1,106 +1,139 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import CircularProgress from '@/components/CircularProgress';
-import { ThemedText } from '@/components/ThemedText';
-import { ProfileService } from '@/lib/services/profileService';
-import { supabase } from '@/lib/supabase';
-import type { UserProfileStats } from '@/lib/types/profile';
 import { router } from 'expo-router';
+import CircularProgress from '../../components/CircularProgress';
+import { ThemedText } from '../../components/ThemedText';
+import { ProfileService } from '../../lib/services/profileService';
+import { RecentTopicsService } from '../../lib/services/recentTopicsService';
+import { TopicService } from '../../lib/services/topicService';
+import { supabase } from '../../lib/supabase';
+import type { UserProfileStats } from '../../lib/types/profile';
+
+interface TopicProgress {
+  name: string;
+  percentage: number;
+  lastEdited: string;
+}
 
 export default function HomeScreen() {
+  console.log('HomeScreen component loaded');
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const [roadmapTopics] = useState([
-    'Array',
-    'Binary',
-    'Recursion',
-    'Linked List',
-    'AVL Tree',
-    'Hash table',
-    '2 pointer',
-    'Sliding Window',
-    'String',
-    'DP',
-    'Greedy',
-    'Deque',
-  ]);
-
-  const [topicsInProgress] = useState([
-    { name: 'Array', percentage: 85 },
-    { name: 'Deque', percentage: 70 },
-    { name: 'Recursion', percentage: 35 },
-  ]);
+  const [topicsInProgress, setTopicsInProgress] = useState<TopicProgress[]>([]);
+  const [roadmapTopics, setRoadmapTopics] = useState<{ name: string; color: string }[]>([]);
 
   useEffect(() => {
     loadProfile();
+    loadTopicsProgress();
+    loadAllTopics();
   }, []);
+
+  const loadAllTopics = async () => {
+    try {
+      const topics = await TopicService.getAllTopics();
+      setRoadmapTopics(topics.map(topic => ({
+        name: topic.name,
+        color: '#6564c7'
+      })));
+    } catch (error) {
+      console.error('Error loading topics:', error);
+    }
+  };
 
   const loadProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        // User not logged in, use default values
-        setProfile({
-          id: '',
-          user_id: '',
-          name: 'Guest User',
-          level: 1,
-          total_xp: 0,
-          skill_level: 'Beginner',
-          total_questions: 0,
-          easy_solved: 0,
-          medium_solved: 0,
-          hard_solved: 0,
-          completion_percentage: 0,
-          trophy_count: 0,
-          current_streak: 0,
-          longest_streak: 0,
-          hints_used: 0,
-          available_hints: 5,
-          last_activity_date: new Date().toISOString().split('T')[0],
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          total_solved: 0,
-          calculated_skill_level: 'Beginner'
-        } as UserProfileStats & { available_hints: number });
-        setLoading(false);
-        return;
-      }
+      if (!user) return;
 
       const profileData = await ProfileService.getUserProfileStats(user.id);
-      if (profileData) {
-        setProfile(profileData as UserProfileStats & { available_hints: number });
-      }
+      setProfile(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
-      // Set default values on error
-      setProfile({
-        id: '',
-        user_id: '',
-        name: 'User',
-        level: 1,
-        total_xp: 0,
-        skill_level: 'Beginner',
-        total_questions: 0,
-        easy_solved: 0,
-        medium_solved: 0,
-        hard_solved: 0,
-        completion_percentage: 0,
-        trophy_count: 0,
-        current_streak: 0,
-        longest_streak: 0,
-        hints_used: 0,
-        available_hints: 5,
-        last_activity_date: new Date().toISOString().split('T')[0],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        total_solved: 0,
-        calculated_skill_level: 'Beginner'
-      } as UserProfileStats & { available_hints: number });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTopicsProgress = useCallback(async () => {
+    try {
+      console.log('Loading recent topics');
+
+      // Get recent topics from the new service
+      const recentTopics = await RecentTopicsService.getRecentTopics();
+      console.log('Recent topics:', recentTopics);
+
+      // Get progress for each recent topic
+      const progressPromises = recentTopics.map(async (topicName) => {
+        console.log('Loading progress for topic:', topicName);
+        
+        // Get all problems for this topic
+        const problems = await TopicService.getTopicProblems(topicName);
+        console.log(`Found ${problems.length} problems for topic ${topicName}`);
+        
+        // Get user's progress for these problems
+        const { data: { user } } = await supabase.auth.getUser();
+        let percentage = 0;
+        
+        if (user) {
+          const { data: progressData } = await supabase
+            .from('user_problem_progress')
+            .select('problem_id, is_solved')
+            .eq('user_id', user.id)
+            .in('problem_id', problems.map(p => p.leetcode_id));
+
+          // Calculate completion percentage
+          const completedProblems = progressData?.filter(p => p.is_solved) || [];
+          const totalProblems = problems.length;
+          percentage = totalProblems > 0 
+            ? Math.round((completedProblems.length / totalProblems) * 100)
+            : 0;
+
+          console.log(`Topic ${topicName}: ${completedProblems.length}/${totalProblems} completed (${percentage}%)`);
+        } else {
+          console.log(`Topic ${topicName}: No user found, showing 0% progress`);
+        }
+
+        return {
+          name: topicName,
+          percentage,
+          lastEdited: new Date().toISOString() // We'll update this when we have actual visit timestamps
+        };
+      });
+
+      const allProgress = await Promise.all(progressPromises);
+      console.log('All progress:', allProgress);
+      setTopicsInProgress(allProgress);
+    } catch (error) {
+      console.error('Error loading topics progress:', error);
+      // Fallback to default topics
+      const defaultTopics = ['Array', 'String', 'LinkedList'].map(topic => ({
+        name: topic,
+        percentage: 0,
+        lastEdited: new Date().toISOString()
+      }));
+      setTopicsInProgress(defaultTopics);
+    }
+  }, []);
+
+  const handleTopicClick = async (topicName: string) => {
+    console.log('handleTopicClick called with:', topicName);
+    try {
+      // Update recent topics using the new service
+      console.log('Updating recent topics for:', topicName);
+      await RecentTopicsService.updateRecentTopics(topicName);
+      console.log('Recent topics updated successfully');
+      
+      // Refresh the recent topics to show the new order
+      await loadTopicsProgress();
+      
+      // Navigate to the topic
+      console.log('Navigating to topic:', topicName);
+      router.push(`/screens/roadmaptopic?topic=${topicName}`);
+    } catch (error) {
+      console.error('Error handling topic click:', error);
+      // Still navigate even if updating fails
+      router.push(`/screens/roadmaptopic?topic=${topicName}`);
     }
   };
 
@@ -109,7 +142,6 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
         </View>
       </SafeAreaView>
     );
@@ -119,49 +151,58 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.profileContainer}>
         <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/(tabs)/profile')}>
-          <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
+          <Image source={require('../../assets/images/icons/profile-icon.png')} style={styles.avatar} />
           <ThemedText style={styles.profileName} numberOfLines={1} ellipsizeMode="tail">{profile?.name || 'User'}</ThemedText>
         </TouchableOpacity>
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.current_streak || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.trophy_count || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.available_hints || 5}</ThemedText>
           </View>
         </View>
       </View>
 
       <View style={styles.topicRoadMapContainer}>
-        <ThemedText type="subtitle" style={styles.sectionTitle}>Topic roadmap</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Topic Roadmap</ThemedText>
         <ScrollView 
-          horizontal 
+          horizontal
           showsHorizontalScrollIndicator={false} 
           style={styles.topicsScrollView}
+          contentContainerStyle={styles.topicsScrollContent}
         >
           <View style={styles.topicsGrid}>
             {roadmapTopics.map((topic, index) => (
-              <TouchableOpacity key={index} style={styles.topicPill} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic}`)}>
-                <ThemedText>{topic}</ThemedText>
+              <TouchableOpacity 
+                key={index} 
+                style={[styles.topicBubble, { backgroundColor: topic.color }]} 
+                onPress={() => handleTopicClick(topic.name)}
+              >
+                <ThemedText style={styles.topicName}>{topic.name}</ThemedText>
               </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
         
-        <ThemedText type="subtitle" style={styles.sectionTitle}>Topics in progress</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>Recent Topics</ThemedText>
         <View style={styles.progressCircles}>
           {topicsInProgress.map((topic) => (
-            <TouchableOpacity key={topic.name} style={styles.progressItem} onPress={() => router.push(`/screens/roadmaptopic?topic=${topic.name}`)}>
+            <TouchableOpacity 
+              key={topic.name} 
+              style={styles.progressItem} 
+              onPress={() => handleTopicClick(topic.name)}
+            >
               <CircularProgress percentage={topic.percentage}>
                 <ThemedText>{topic.percentage}%</ThemedText>
               </CircularProgress>
-              <ThemedText>{topic.name}</ThemedText>
+              <ThemedText style={styles.topicProgressName}>{topic.name}</ThemedText>
             </TouchableOpacity>
           ))}
         </View>
@@ -171,11 +212,11 @@ export default function HomeScreen() {
         <ThemedText type="subtitle" style={styles.sectionTitle}>Practice questions</ThemedText>
         <View style={styles.practiceButtonsContainer}>
           <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/randomquestion')}>
-            <Image source={require('@/assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
+            <Image source={require('../../assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>Random</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/allquestions')}>
-            <Image source={require('@/assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
+            <Image source={require('../../assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>See All</ThemedText>
           </TouchableOpacity>
         </View>
@@ -186,21 +227,21 @@ export default function HomeScreen() {
         <View style={styles.gameModeButtonsContainer}>
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]} onPress={() => router.push('/screens/tournament')}>
-              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.tournamentIcon} />
+              <Image source={require('../../assets/images/icons/tournament-icon.png')} style={styles.tournamentIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Tournament</ThemedText>
             </TouchableOpacity>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/screens/duel')}>
-              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.duelIcon} />
+              <Image source={require('../../assets/images/icons/duel-icon.png')} style={styles.duelIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Duel</ThemedText>
             </TouchableOpacity>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]} onPress={() => router.push('/screens/quizselection')}>
-              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
+              <Image source={require('../../assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Quiz</ThemedText>
             </TouchableOpacity>
           </View>
@@ -284,6 +325,7 @@ const styles = StyleSheet.create({
   topicRoadMapContainer: {
     padding: 16,
     backgroundColor: '#F4EEFF',
+    marginBottom: 16,
   },
   sectionTitle: {
     marginBottom: 16,
@@ -293,36 +335,51 @@ const styles = StyleSheet.create({
   },
   topicsScrollView: {
     flexGrow: 0,
+    height: 140,
+  },
+  topicsScrollContent: {
+    paddingHorizontal: 16,
   },
   topicsGrid: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     flexWrap: 'wrap',
-    width: 650,
-    gap: 8,
-    paddingHorizontal: 4,
-    marginBottom: 24,
+    height: 120,
+    width: '100%',
+    gap: 12,
+    columnGap: 16,
   },
-  topicPill: {
-    backgroundColor: '#b4aaf4',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+  topicBubble: {
+    height: 40,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    elevation: 2,
-    borderWidth: 3,
-    borderColor: '#897fef',
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 120,
+    maxWidth: 180,
+  },
+  topicName: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   progressCircles: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     marginTop: 4,
+    paddingHorizontal: 16,
   },
   progressItem: {
     alignItems: 'center',
     gap: 8,
+    flex: 1,
+    maxWidth: '33%',
+    paddingHorizontal: 4,
   },
   practiceQuestionsContainer: {
     paddingVertical: 4,
@@ -413,5 +470,21 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#6564c7',
+  },
+  topicProgressName: {
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    color: '#333',
   },
 });
