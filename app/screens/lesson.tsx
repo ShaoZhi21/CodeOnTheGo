@@ -1,9 +1,9 @@
-import { ThemedText } from '@/components/ThemedText';
-import { apiCall } from '@/lib/api-config';
-import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ThemedText } from '../../components/ThemedText';
+import { apiCall } from '../../lib/api-config';
+import { supabase } from '../../lib/supabase';
 
 interface QuizQuestion {
   id: number;

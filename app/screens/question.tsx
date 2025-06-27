@@ -10,7 +10,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
@@ -19,6 +19,17 @@ import { AnalysisModal } from '../components/AnalysisModal';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Helper function to decode HTML entities
+const decodeHtmlEntities = (text: string): string => {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+};
 
 interface Analysis {
   lineByLineAnalysis: {

@@ -397,10 +397,7 @@ app.post('/api/simplify-question', async (req, res) => {
       return res.status(400).json({ error: 'Question description is required' });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a helpful assistant that simplifies technical questions for beginners. Make complex concepts easy to understand using simple language and everyday analogies.",
-    });
+    const model = geminiModel;
     
     const prompt = `Please simplify this coding question for a beginner programmer with both a serious and fun version.
 
@@ -535,7 +532,7 @@ Respond in this JSON format:
   "error": null or "error message if any"
 }`;
 
-        const result = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(prompt);
+        const result = await geminiModel.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
         
@@ -628,7 +625,7 @@ Respond in this JSON format:
   ]
 }`;
 
-        const progressResult = await genAI.getGenerativeModel({ model: "gemini-2.0-flash" }).generateContent(progressPrompt);
+        const progressResult = await geminiModel.generateContent(progressPrompt);
         const progressResponse = await progressResult.response;
         const progressText = progressResponse.text();
         
@@ -686,10 +683,7 @@ app.post('/api/generate-mcq', async (req, res) => {
     console.log('Generating MCQ for pseudocode line:', pseudocodeLine);
     console.log('Language:', language);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a coding education expert. Create multiple choice questions to help users learn how to convert pseudocode to actual code.",
-    });
+    const model = geminiModel;
     
     const prompt = `You are a coding education expert creating MCQ questions that map pseudocode to real code solutions.
 
@@ -941,10 +935,7 @@ app.post('/api/generate-code-summary', async (req, res) => {
     console.log('Language:', language);
     console.log('MCQ Answers provided:', mcqAnswers?.length || 0);
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: "You are a coding education expert. Create comprehensive code summaries that help users understand the complete solution and algorithm.",
-    });
+    const model = geminiModel;
     
     const prompt = `Generate a comprehensive code summary that implements the user's exact pseudocode approach:
 
@@ -1160,6 +1151,168 @@ app.post('/api/quiz-completion', async (req, res) => {
   } catch (error) {
     console.error('Error in quiz completion endpoint:', error);
     res.status(500).json({ error: 'Failed to save quiz completion' });
+  }
+});
+
+// Generate Topic Lesson Endpoint
+app.post('/api/generate-topic-lesson', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
+  }
+
+  try {
+    const { topicName, problemId, userId } = req.body;
+
+    if (!topicName || !problemId) {
+      return res.status(400).json({ error: 'Topic name and problem ID are required.' });
+    }
+
+    // Get problem details from database
+    const { data: problemData, error: problemError } = await supabase
+      .from('topic_problems')
+      .select('title')
+      .eq('leetcode_id', problemId)
+      .single();
+
+    if (problemError || !problemData) {
+      console.error('Error fetching problem:', problemError);
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
+
+CONTEXT:
+- Topic: ${topicName}
+- Target Problem: ${problemData.title}
+
+INSTRUCTIONS:
+1. **DO NOT** explain how to solve the specific problem
+2. **DO** teach the fundamental concepts and data structures that would be useful
+3. **DO** provide examples that illustrate the concepts without solving the target problem
+4. **DO** make the content beginner-friendly but comprehensive
+
+For example, if the problem involves hash maps:
+- Teach WHAT a hash map is and how it works
+- Explain why hash map lookups are O(1)
+- Show simple examples of hash map usage
+- Explain collision resolution concepts
+- DO NOT show how to use hash maps to solve the specific problem
+
+Your lesson should be structured and include:
+
+1. **Main Content**: A clear, step-by-step explanation of the key concepts and algorithms needed. Focus on the problem-solving approach and the underlying data structures or algorithms that would be useful.
+
+2. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
+
+3. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
+
+4. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
+
+5. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
+
+6. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "title": "Specific Lesson Title for ${problemData.title}",
+  "content": "Detailed explanation of the concepts, step-by-step approach, and problem-solving strategy...",
+  "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
+  "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
+  "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
+  "pitfalls": ["Common mistake 1", "Common mistake 2"],
+  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"]
+}
+
+Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    console.log('RAW Gemini lesson output:', text); // Log raw Gemini output
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const lessonData = JSON.parse(text);
+    
+    console.log('Generated lesson data:', lessonData);
+    res.json(lessonData);
+  } catch (error) {
+    console.error('Error generating lesson with Gemini:', error);
+    res.status(500).json({ error: 'Failed to generate lesson.' });
+  }
+});
+
+// Generate Topic Quiz Endpoint
+app.post('/api/generate-topic-quiz', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Quiz generation is not configured on the server.' });
+  }
+
+  try {
+    const { topicName, problemId, lessonContent } = req.body;
+
+    if (!topicName || !problemId || !lessonContent) {
+      return res.status(400).json({ error: 'Topic name, problem ID, and lesson content are required.' });
+    }
+
+    // Get problem details from database
+    const { data: problemData, error: problemError } = await supabase
+      .from('topic_problems')
+      .select('title')
+      .eq('leetcode_id', problemId)
+      .single();
+
+    if (problemError || !problemData) {
+      console.error('Error fetching problem:', problemError);
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    const prompt = `You are an expert programming tutor creating a quiz to test understanding of the lesson content. Create 5 multiple-choice questions based on the lesson content provided.
+
+CONTEXT:
+- Topic: ${topicName}
+- Target Problem: ${problemData.title}
+- Lesson Content: ${lessonContent}
+
+INSTRUCTIONS:
+1. Create 5 multiple-choice questions that test understanding of the concepts taught in the lesson
+2. Each question should have 4 options (A, B, C, D)
+3. Only one option should be correct
+4. Questions should be at a beginner level but test actual understanding
+5. Include explanations for why the correct answer is right
+6. DO NOT ask questions about the specific problem solution
+7. Focus on testing understanding of the underlying concepts and data structures
+
+Respond with ONLY a JSON object in this exact format:
+{
+  "questions": [
+    {
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Explanation of why this answer is correct"
+    },
+    {
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 1,
+      "explanation": "Explanation of why this answer is correct"
+    }
+  ],
+  "lessonSummary": "A brief 2-3 sentence summary of what was learned in this lesson"
+}
+
+Create exactly 5 questions. Do not include any other text, only the JSON object.`;
+
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const quizData = JSON.parse(text);
+    
+    console.log('Generated quiz data:', quizData);
+    res.json(quizData);
+  } catch (error) {
+    console.error('Error generating quiz with Gemini:', error);
+    res.status(500).json({ error: 'Failed to generate quiz.' });
   }
 });
 

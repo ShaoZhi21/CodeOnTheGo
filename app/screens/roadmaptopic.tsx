@@ -1,12 +1,12 @@
-import QuestionActionModal from '@/components/QuestionActionModal';
-import { ThemedText } from '@/components/ThemedText';
-import { TopicProblem, TopicService } from '@/lib/services/topicService';
-import { supabase } from '@/lib/supabase';
-import { decodeHtmlEntities } from '@/lib/utils/textUtils';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Path, Svg } from 'react-native-svg';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
+import QuestionActionModal from '../../components/QuestionActionModal';
+import { ThemedText } from '../../components/ThemedText';
+import { TopicProblem, TopicService } from '../../lib/services/topicService';
+import { supabase } from '../../lib/supabase';
 
 interface TopicProblemWithProgress extends TopicProblem {
   completed?: boolean;
@@ -19,14 +19,15 @@ interface UserProgress {
   stars: number;
 }
 
-// Pre-load star icons
-const starIcon = require('@/assets/images/icons/star-icon.png');
-const emptyStarIcon = require('@/assets/images/icons/empty-star.png');
-
+// Icons
+const coinIcon = require('../../assets/images/icons/code-icon.png');
+const starIcon = require('../../assets/images/icons/star-icon.png');
+const emptyStarIcon = require('../../assets/images/icons/empty-star.png');
 const mascotIcon = require('../../assets/images/icons/codeonthego-bird-icon.png');
-const coinIcon = require('../../assets/images/icons/codeonthego-icon.png'); // Placeholder for coin
-const bookIcon = require('@/assets/images/icons/book-icon.png');
-const chestIcon = require('@/assets/images/icons/checklist-icon.png'); // Placeholder for chest
+
+// Roadmap icons
+const bookIcon = require('../../assets/images/icons/book-icon.png');
+const chestIcon = require('../../assets/images/icons/checklist-icon.png'); // Placeholder for chest
 
 const PURPLE = '#6564c7';
 const LIGHT_PURPLE = 'rgba(101, 100, 199, 0.12)';
@@ -36,6 +37,24 @@ const STAR_SIZE_LARGE = 48;
 const STAR_SIZE_SMALL = 32;
 const ROADMAP_WIDTH = 340; // or any value wider than BUBBLE_SIZE*2
 const BUBBLE_VERTICAL_GAP = 8; // Reduced from 24
+
+// Local decodeHtmlEntities function to avoid import issues
+const decodeHtmlEntities = (text: string): string => {
+  if (!text || typeof text !== 'string') return '';
+  
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&copy;/g, '©')
+    .replace(/&reg;/g, '®')
+    .replace(/&trade;/g, '™')
+    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
+};
 
 function StarSVG({ size, filled }: { size: number; filled: boolean }) {
   return (
@@ -445,7 +464,7 @@ export default function RoadmapTopic() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+            <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
             <ThemedText>Back</ThemedText>
           </TouchableOpacity>
         </View>
@@ -463,7 +482,7 @@ export default function RoadmapTopic() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+          <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
           <ThemedText>Back</ThemedText>
         </TouchableOpacity>
       </View>

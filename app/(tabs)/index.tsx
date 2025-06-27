@@ -1,14 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import CircularProgress from '@/components/CircularProgress';
-import { ThemedText } from '@/components/ThemedText';
-import { ProfileService } from '@/lib/services/profileService';
-import { RecentTopicsService } from '@/lib/services/recentTopicsService';
-import { TopicService } from '@/lib/services/topicService';
-import { supabase } from '@/lib/supabase';
-import type { UserProfileStats } from '@/lib/types/profile';
 import { router } from 'expo-router';
+import CircularProgress from '../../components/CircularProgress';
+import { ThemedText } from '../../components/ThemedText';
+import { ProfileService } from '../../lib/services/profileService';
+import { RecentTopicsService } from '../../lib/services/recentTopicsService';
+import { TopicService } from '../../lib/services/topicService';
+import { supabase } from '../../lib/supabase';
+import type { UserProfileStats } from '../../lib/types/profile';
 
 interface TopicProgress {
   name: string;
@@ -151,20 +151,20 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.profileContainer}>
         <TouchableOpacity style={styles.avatarNameContainer} onPress={() => router.push('/(tabs)/profile')}>
-          <Image source={require('@/assets/images/icons/profile-icon.png')} style={styles.avatar} />
+          <Image source={require('../../assets/images/icons/profile-icon.png')} style={styles.avatar} />
           <ThemedText style={styles.profileName} numberOfLines={1} ellipsizeMode="tail">{profile?.name || 'User'}</ThemedText>
         </TouchableOpacity>
         <View style={styles.statsRow}>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/fire-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.current_streak || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.trophy_count || 0}</ThemedText>
           </View>
           <View style={styles.statChip}>
-            <Image source={require('@/assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
+            <Image source={require('../../assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statText}>{profile?.available_hints || 5}</ThemedText>
           </View>
         </View>
@@ -212,11 +212,11 @@ export default function HomeScreen() {
         <ThemedText type="subtitle" style={styles.sectionTitle}>Practice questions</ThemedText>
         <View style={styles.practiceButtonsContainer}>
           <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/randomquestion')}>
-            <Image source={require('@/assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
+            <Image source={require('../../assets/images/icons/shuffle-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>Random</ThemedText>
           </TouchableOpacity>
           <TouchableOpacity style={styles.practiceButton} onPress={() => router.push('/screens/allquestions')}>
-            <Image source={require('@/assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
+            <Image source={require('../../assets/images/icons/list-icon.png')} style={styles.practiceButtonIcon} />
             <ThemedText>See All</ThemedText>
           </TouchableOpacity>
         </View>
@@ -227,21 +227,21 @@ export default function HomeScreen() {
         <View style={styles.gameModeButtonsContainer}>
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#453d83' }]} onPress={() => router.push('/screens/tournament')}>
-              <Image source={require('@/assets/images/icons/tournament-icon.png')} style={styles.tournamentIcon} />
+              <Image source={require('../../assets/images/icons/tournament-icon.png')} style={styles.tournamentIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Tournament</ThemedText>
             </TouchableOpacity>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FF4D4D' }]} onPress={() => router.push('/screens/duel')}>
-              <Image source={require('@/assets/images/icons/duel-icon.png')} style={styles.duelIcon} />
+              <Image source={require('../../assets/images/icons/duel-icon.png')} style={styles.duelIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Duel</ThemedText>
             </TouchableOpacity>
           </View>
           
           <View style={styles.gameModeItem}>
             <TouchableOpacity style={[styles.gameModeButton, { backgroundColor: '#FFA500' }]} onPress={() => router.push('/screens/quizselection')}>
-              <Image source={require('@/assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
+              <Image source={require('../../assets/images/icons/quiz-icon.png')} style={styles.quizIcon} />
               <ThemedText style={[styles.gameModeText, { color: '#fff' }]}>Quiz</ThemedText>
             </TouchableOpacity>
           </View>

@@ -1,7 +1,6 @@
-import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
-import React from 'react';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ThemedText } from './ThemedText';
 
 interface QuestionActionModalProps {
   visible: boolean;
