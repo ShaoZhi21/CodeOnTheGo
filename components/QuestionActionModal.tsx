@@ -106,7 +106,7 @@ export default function QuestionActionModal({
             <View style={styles.buttonContent}>
               {(isLessonRequired && !hasCompletedLesson && !isQuestionSolved) && (
                 <Image 
-                  source={require('@/assets/images/icons/lock-icon.png')} 
+                  source={require('../assets/images/icons/lock-icon.png')} 
                   style={styles.lockIcon} 
                 />
               )}

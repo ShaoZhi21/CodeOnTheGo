@@ -23,8 +23,8 @@ interface UserProgress {
 const starIcon = require('@/assets/images/icons/star-icon.png');
 const emptyStarIcon = require('@/assets/images/icons/empty-star.png');
 
-const mascotIcon = require('@/assets/images/icons/codeonthego-bird-icon.png');
-const coinIcon = require('@/assets/images/icons/codeonthego-icon.png'); // Placeholder for coin
+const mascotIcon = require('../../assets/images/icons/codeonthego-bird-icon.png');
+const coinIcon = require('../../assets/images/icons/codeonthego-icon.png'); // Placeholder for coin
 const bookIcon = require('@/assets/images/icons/book-icon.png');
 const chestIcon = require('@/assets/images/icons/checklist-icon.png'); // Placeholder for chest
 
@@ -365,7 +365,7 @@ export default function RoadmapTopic() {
             >
               {isLocked ? (
                 <Image 
-                  source={require('@/assets/images/icons/lock-icon.png')} 
+                  source={require('../../assets/images/icons/lock-icon.png')} 
                   style={[styles.lockIcon, { tintColor: '#fff' }]} 
                 />
               ) : isCurrent ? (

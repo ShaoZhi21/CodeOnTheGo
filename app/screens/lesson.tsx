@@ -346,8 +346,12 @@ export default function LessonScreen() {
     });
   };
 
-  const handleBackToRoadmap = () => {
-    router.back();
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/screens/tournament');
+    }
   };
 
   const handleSaveQuizCompletion = async () => {
@@ -610,7 +614,7 @@ export default function LessonScreen() {
         </View>
 
         <View style={styles.footer}>
-          <TouchableOpacity style={styles.nextButton} onPress={handleBackToRoadmap}>
+          <TouchableOpacity style={styles.nextButton} onPress={handleBack}>
             <ThemedText style={styles.nextButtonText}>Back to Roadmap</ThemedText>
           </TouchableOpacity>
         </View>
