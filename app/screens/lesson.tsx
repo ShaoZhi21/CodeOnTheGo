@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { ThemedText } from '../../components/ThemedText';
 import { apiCall } from '../../lib/api-config';
@@ -14,6 +14,12 @@ interface QuizQuestion {
   explanation: string;
 }
 
+interface LessonPart {
+  title: string;
+  content: string;
+  mcq?: QuizQuestion;
+}
+
 interface LessonData {
   title: string;
   content: string;
@@ -23,12 +29,24 @@ interface LessonData {
   hint: string;
   commonMistake: string;
   funFact?: string;
+  parts?: LessonPart[];
 }
 
 interface QuizData {
   questions: QuizQuestion[];
   lessonSummary: string;
 }
+
+// Helper function to decode HTML entities
+const decodeHtmlEntities = (text: string): string => {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ');
+};
 
 function renderLessonContent(content: string) {
   // Split by lines
@@ -75,8 +93,11 @@ export default function LessonScreen() {
   
   const router = useRouter();
   const [currentPage, setCurrentPage] = useState<'loading' | 'teaching' | 'quiz' | 'completion' | 'retry'>('loading');
+  const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
+  const [partMcqAnswers, setPartMcqAnswers] = useState<{[key: number]: number}>({});
+  const [showPartMcqFeedback, setShowPartMcqFeedback] = useState<{[key: number]: boolean}>({});
   const [score, setScore] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
@@ -91,11 +112,88 @@ export default function LessonScreen() {
   const slideAnim = new Animated.Value(0);
   const optionAnimations = [new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)];
 
+  // Generate MCQ for each part
+  const generateMCQForPart = (title: string, content: string, index: number): QuizQuestion => {
+    // This is a simplified MCQ generator - in a real app, you'd use AI to generate these
+    const questions = [
+      {
+        question: `What is the main concept covered in ${title}?`,
+        options: ["Basic syntax", "Algorithm complexity", "Data structures", "Problem solving"],
+        correctAnswer: index % 4,
+        explanation: "This section focuses on the fundamental concepts needed to understand the topic."
+      },
+      {
+        question: `Which approach is most suitable for this concept?`,
+        options: ["Iterative", "Recursive", "Dynamic Programming", "Greedy"],
+        correctAnswer: (index + 1) % 4,
+        explanation: "The approach depends on the specific problem requirements and constraints."
+      },
+      {
+        question: `What should you remember about ${title.toLowerCase()}?`,
+        options: ["Time complexity", "Space complexity", "Edge cases", "All of the above"],
+        correctAnswer: 3,
+        explanation: "All aspects are important when implementing algorithms and data structures."
+      }
+    ];
+    
+    return {
+      id: index + 1,
+      ...questions[index % questions.length]
+    };
+  };
+
+  // Function to break lesson content into parts
+  const breakContentIntoParts = (content: string): LessonPart[] => {
+    const sections = content.split(/(?=##\s)/);
+    const parts: LessonPart[] = [];
+    
+    sections.forEach((section, index) => {
+      if (section.trim()) {
+        const lines = section.trim().split('\n');
+        const title = lines[0].replace(/^##\s*/, '') || `Part ${index + 1}`;
+        const content = lines.slice(1).join('\n').trim();
+        
+        if (content) {
+          parts.push({
+            title,
+            content,
+            mcq: generateMCQForPart(title, content, index)
+          });
+        }
+      }
+    });
+    
+    // If no sections found, create parts from paragraphs
+    if (parts.length === 0) {
+      const paragraphs = content.split(/\n\s*\n/);
+      const chunkSize = Math.ceil(paragraphs.length / 3);
+      
+      for (let i = 0; i < paragraphs.length; i += chunkSize) {
+        const chunk = paragraphs.slice(i, i + chunkSize).join('\n\n');
+        if (chunk.trim()) {
+          parts.push({
+            title: `Part ${Math.floor(i / chunkSize) + 1}`,
+            content: chunk,
+            mcq: generateMCQForPart(`Part ${Math.floor(i / chunkSize) + 1}`, chunk, Math.floor(i / chunkSize))
+          });
+        }
+      }
+    }
+    
+    return parts;
+  };
+
   // Debug lessonData changes
   useEffect(() => {
     console.log('🔄 lessonData state changed:', lessonData);
     console.log('🔄 lessonData content:', lessonData?.content);
     console.log('🔄 lessonData title:', lessonData?.title);
+    
+    // Break content into parts when lesson data is loaded
+    if (lessonData && lessonData.content && !lessonData.parts) {
+      const parts = breakContentIntoParts(lessonData.content);
+      setLessonData(prev => prev ? { ...prev, parts } : null);
+    }
   }, [lessonData]);
 
   // Load lesson and quiz data
@@ -525,9 +623,19 @@ export default function LessonScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ThemedText>← Back</ThemedText>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>Lesson</ThemedText>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.lessonDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(questionTitle || topicName || 'Lesson')}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
         </View>
         
         <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -550,9 +658,19 @@ export default function LessonScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ThemedText>← Back</ThemedText>
+            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
-          <ThemedText style={styles.headerTitle}>Lesson</ThemedText>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.lessonDot} />
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {decodeHtmlEntities(questionTitle || topicName || 'Lesson')}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -839,25 +957,60 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
+    backgroundColor: '#6564c7',
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    position: 'relative',
+    justifyContent: 'space-between',
   },
   backButton: {
-    position: 'absolute',
-    left: 16,
-    padding: 8,
-    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 60,
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    tintColor: '#fff',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleBubble: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8E6FF',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: '60%',
+    maxWidth: '85%',
+  },
+  lessonDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#6564c7',
+    marginRight: 8,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#6564c7',
     textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    width: 60,
   },
   content: {
     flex: 1,

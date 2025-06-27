@@ -34,6 +34,7 @@ export class TopicService {
         .from('topic_problems')
         .select('*')
         .eq('topic_name', topicName)
+        .eq('is_premium', false)
         .order('difficulty_order', { ascending: true });
 
       if (error) {

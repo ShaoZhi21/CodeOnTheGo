@@ -358,7 +358,7 @@ export default function PseudoToCode() {
             preGeneratedSummary: JSON.stringify(summaryData)
           }
         });
-      } else {
+    } else {
         throw new Error('Failed to generate summary');
       }
     } catch (error) {
@@ -830,7 +830,7 @@ export default function PseudoToCode() {
                     <View style={[styles.resultBox, isCorrect ? styles.correctResult : styles.incorrectResult]}>
                       <ThemedText style={styles.resultText}>
                         {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
-                      </ThemedText>
+                            </ThemedText>
                       {formatExplanationText(
                         isCorrect 
                           ? currentMCQ.explanation 

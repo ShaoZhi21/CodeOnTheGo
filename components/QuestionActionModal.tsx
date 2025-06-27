@@ -1,6 +1,5 @@
 import { router } from 'expo-router';
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ThemedText } from './ThemedText';
 
 interface QuestionActionModalProps {
   visible: boolean;
@@ -14,6 +13,8 @@ interface QuestionActionModalProps {
   isLessonRequired: boolean;
   isQuestionSolved: boolean;
   topicName: string;
+  isQuestionOnLeft?: boolean;
+  bubblePosition?: { x: number; y: number };
 }
 
 export default function QuestionActionModal({
@@ -27,7 +28,9 @@ export default function QuestionActionModal({
   questionDifficulty,
   isLessonRequired,
   isQuestionSolved,
-  topicName
+  topicName,
+  isQuestionOnLeft = false,
+  bubblePosition = { x: 0, y: 0 }
 }: QuestionActionModalProps) {
   const handleViewLesson = () => {
     console.log('🎯 handleViewLesson called');
@@ -72,50 +75,48 @@ export default function QuestionActionModal({
     onClose();
   };
 
-  const lessonButtonText = hasCompletedLesson ? 'Lesson Completed ✓' : 'Learn skills!';
-  const lessonButtonStyle = hasCompletedLesson ? styles.buttonCompleted : styles.buttonLesson;
-  
-  // If question is solved (3+ stars), both buttons should be unlocked
-  const attemptButtonText = (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) 
-    ? 'Attempt Question! (Locked)' 
-    : 'Attempt Question!';
-  const attemptButtonStyle = (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) 
-    ? styles.buttonLocked 
-    : styles.buttonSolve;
+  // Determine if the pseudocode button should be locked
+  const isPseudocodeLocked = isLessonRequired && !hasCompletedLesson && !isQuestionSolved;
 
   return (
     <Modal
-      animationType="slide"
+      animationType="fade"
       transparent={true}
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={styles.centeredView}>
-        <View style={styles.modalView}>
-          <ThemedText style={styles.modalTitle}>{questionTitle}</ThemedText>
-          
-          <TouchableOpacity 
-            style={[styles.button, lessonButtonStyle]} 
-            onPress={handleViewLesson}
-          >
-            <Text style={styles.textStyle}>{lessonButtonText}</Text>
+      <View style={styles.overlay}>
+        <View style={styles.modalContainer}>
+          {/* Close button in top right */}
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Text style={styles.closeButtonText}>×</Text>
           </TouchableOpacity>
+          
+          <View style={styles.modalContent}>
+            {/* Lesson Button */}
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.lessonButton]} 
+              onPress={handleViewLesson}
+            >
+              <Text style={styles.modalButtonText}>Lesson</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.button, attemptButtonStyle]} onPress={handleSolveProblem}>
-            <View style={styles.buttonContent}>
-              {(isLessonRequired && !hasCompletedLesson && !isQuestionSolved) && (
-                <Image 
-                  source={require('../assets/images/icons/lock-icon.png')} 
-                  style={styles.lockIcon} 
-                />
-              )}
-              <Text style={styles.textStyle}>{attemptButtonText}</Text>
-            </View>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={[styles.button, styles.buttonClose]} onPress={onClose}>
-            <Text style={styles.textStyle}>Cancel</Text>
-          </TouchableOpacity>
+            {/* Pseudocode Button */}
+            <TouchableOpacity 
+              style={[styles.modalButton, styles.pseudocodeButton]} 
+              onPress={handleSolveProblem}
+            >
+              <View style={styles.buttonContent}>
+                {(isLessonRequired && !hasCompletedLesson && !isQuestionSolved) && (
+                  <Image 
+                    source={require('../assets/images/icons/lock-icon.png')} 
+                    style={styles.lockIcon} 
+                  />
+                )}
+                <Text style={styles.modalButtonText}>Pseudocode</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </Modal>
@@ -123,18 +124,17 @@ export default function QuestionActionModal({
 }
 
 const styles = StyleSheet.create({
-  centeredView: {
+  overlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
-  modalView: {
-    margin: 20,
+  modalContainer: {
     backgroundColor: 'white',
     borderRadius: 20,
-    padding: 35,
-    alignItems: 'center',
+    padding: 20,
+    margin: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -143,41 +143,61 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 5,
-    width: '80%',
+    position: 'relative',
+    minWidth: 280,
   },
-  modalTitle: {
+  closeButton: {
+    position: 'absolute',
+    top: -15,
+    right: -15,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#FF4757',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    shadowColor: '#FF4757',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-    textAlign: 'center',
+    fontWeight: '700',
+    lineHeight: 20,
   },
-  button: {
-    borderRadius: 10,
-    padding: 10,
-    elevation: 2,
-    marginBottom: 10,
+  modalContent: {
+    alignItems: 'center',
+    paddingTop: 5,
+    gap: 15,
+  },
+  modalButton: {
+    borderRadius: 12,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
     width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
   },
-  buttonLesson: {
-    backgroundColor: '#2196F3',
+  lessonButton: {
+    backgroundColor: '#7C4DFF',
   },
-  buttonCompleted: {
-    backgroundColor: '#4CAF50',
+  pseudocodeButton: {
+    backgroundColor: '#2979FF',
   },
-  buttonLocked: {
-    backgroundColor: '#9E9E9E', // Grey color for locked state
-  },
-  buttonSolve: {
-    backgroundColor: '#FFC107',
-  },
-  buttonClose: {
-    backgroundColor: '#f44336',
-    marginTop: 10,
-  },
-  textStyle: {
-    color: 'white',
-    fontWeight: 'bold',
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   buttonContent: {
     flexDirection: 'row',
@@ -185,9 +205,149 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   lockIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 8,
+    width: 16,
+    height: 16,
+    marginRight: 6,
     tintColor: '#fff',
+  },
+  rowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 15,
+  },
+  lessonBubble: {
+    backgroundColor: '#7C4DFF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    position: 'relative',
+    shadowColor: '#7C4DFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+  },
+  lessonBubbleLeft: {
+    marginRight: 10,
+  },
+  lessonBubbleRight: {
+    marginLeft: 10,
+  },
+  lessonTail: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    top: '50%',
+    marginTop: -6,
+  },
+  lessonTailLeft: {
+    right: -12,
+    borderLeftWidth: 12,
+    borderLeftColor: '#FFFFFF',
+    borderTopWidth: 6,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 6,
+    borderBottomColor: 'transparent',
+  },
+  lessonTailRight: {
+    left: -12,
+    borderRightWidth: 12,
+    borderRightColor: '#FFFFFF',
+    borderTopWidth: 6,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 6,
+    borderBottomColor: 'transparent',
+  },
+  popupBubble: {
+    backgroundColor: '#2979FF',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    shadowColor: '#2979FF',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 0,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+    flexDirection: 'row',
+  },
+  lessonButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  popupContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  pseudocodeButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  bubbleTail: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    top: '50%',
+    marginTop: -8,
+  },
+  bubbleTailLeft: {
+    right: -15,
+    borderLeftWidth: 15,
+    borderLeftColor: '#FFFFFF',
+    borderTopWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 8,
+    borderBottomColor: 'transparent',
+  },
+  bubbleTailRight: {
+    left: -15,
+    borderRightWidth: 15,
+    borderRightColor: '#FFFFFF',
+    borderTopWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomWidth: 8,
+    borderBottomColor: 'transparent',
+  },
+  bubbleContent: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  bubbleButton: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  bubbleButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
 }); 

@@ -89,6 +89,7 @@ export default function RoadmapTopic() {
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
@@ -190,11 +191,35 @@ export default function RoadmapTopic() {
       
       // Combine problems with progress
       const problemsWithProgress: TopicProblemWithProgress[] = problems
-        .filter(problem => problem && problem.leetcode_id) // Filter out undefined/null problems
+        .filter(problem => {
+          // Filter out undefined/null problems
+          if (!problem || !problem.leetcode_id) return false;
+          
+          // Filter out problems with invalid titles that cause text rendering errors
+          if (!problem.title || problem.title === null || problem.title === undefined) {
+            console.warn('RoadmapTopic: Filtering out problem with invalid title:', problem);
+            return false;
+          }
+          
+          // Check if title is a valid string or number
+          if (typeof problem.title !== 'string' && typeof problem.title !== 'number') {
+            console.warn('RoadmapTopic: Filtering out problem with non-string/non-number title:', problem);
+            return false;
+          }
+          
+          // Check if title is empty or just whitespace
+          const titleString = String(problem.title).trim();
+          if (!titleString || titleString === 'null' || titleString === 'undefined') {
+            console.warn('RoadmapTopic: Filtering out problem with empty/invalid title string:', problem);
+            return false;
+          }
+          
+          return true;
+        })
         .map(problem => {
-          const safeTitle = problem.title || 'Untitled Problem';
+          const safeTitle = String(problem.title).trim();
           console.log(`RoadmapTopic: Processing problem - ID: ${problem.leetcode_id}, Title: "${safeTitle}"`);
-          console.log(`RoadmapTopic: Raw title: "${safeTitle}"`);
+          console.log(`RoadmapTopic: Raw title: "${problem.title}"`);
           console.log(`RoadmapTopic: Decoded title: "${decodeHtmlEntities(safeTitle)}"`);
           return {
             ...problem,
@@ -244,6 +269,7 @@ export default function RoadmapTopic() {
     
     // Show the action modal instead of directly navigating
     setSelectedQuestion(q);
+    setSelectedQuestionIndex(idx);
     setModalVisible(true);
   };
 
@@ -322,6 +348,20 @@ export default function RoadmapTopic() {
       console.warn('RoadmapTopic: Skipping invalid question:', question);
       return null;
     }
+
+    // Additional safety check for text rendering issues
+    if (!question.title || question.title === null || question.title === undefined || 
+        typeof question.title !== 'string' && typeof question.title !== 'number') {
+      console.warn('RoadmapTopic: Skipping question with invalid title:', question);
+      return null;
+    }
+
+    // Check if title is empty or just whitespace
+    const titleString = String(question.title).trim();
+    if (!titleString || titleString === 'null' || titleString === 'undefined') {
+      console.warn('RoadmapTopic: Skipping question with empty/invalid title:', question);
+      return null;
+    }
     
     const actualIndex = (questions?.length || 0) - 1 - index;
     const isLeft = index % 2 === 0;
@@ -330,7 +370,7 @@ export default function RoadmapTopic() {
     const isCompleted = question.stars && question.stars > 0;
     
     // Safety checks for all properties with proper string conversion
-    const safeTitle = String(question.title || 'Untitled Problem');
+    const safeTitle = titleString;
     const safeDifficulty = String(question.difficulty || 'Easy');
     const safeLeetcodeId = question.leetcode_id || 0;
     
@@ -357,7 +397,14 @@ export default function RoadmapTopic() {
               numberOfLines={2}
               ellipsizeMode="tail"
             >
-              {decodeHtmlEntities(safeTitle)}
+              {(() => {
+                try {
+                  return decodeHtmlEntities(safeTitle);
+                } catch (error) {
+                  console.warn('Error decoding title:', error, 'Original title:', safeTitle);
+                  return 'Problem Title';
+                }
+              })()}
             </ThemedText>
             {/* Difficulty indicator */}
             <View style={[
@@ -429,7 +476,14 @@ export default function RoadmapTopic() {
               numberOfLines={2}
               ellipsizeMode="tail"
             >
-              {decodeHtmlEntities(safeTitle)}
+              {(() => {
+                try {
+                  return decodeHtmlEntities(safeTitle);
+                } catch (error) {
+                  console.warn('Error decoding title:', error, 'Original title:', safeTitle);
+                  return 'Problem Title';
+                }
+              })()}
             </ThemedText>
             {/* Difficulty indicator */}
             <View style={[
@@ -446,11 +500,48 @@ export default function RoadmapTopic() {
     );
   };
 
+  // Topic-specific puns for loading screen
+  const getTopicPun = (topic: string): string => {
+    const topicLower = topic.toLowerCase();
+    
+    if (topicLower.includes('array')) return "Array-ing your path to success! 📊";
+    if (topicLower.includes('string')) return "String-ing along your coding journey! 🧵";
+    if (topicLower.includes('tree')) return "Branch-ing out into new algorithms! 🌳";
+    if (topicLower.includes('graph')) return "Graph-ing your way to mastery! 📈";
+    if (topicLower.includes('hash')) return "Hash-tag coding excellence! #️⃣";
+    if (topicLower.includes('stack')) return "Stack-ing up your skills! 📚";
+    if (topicLower.includes('queue')) return "Queue-ing up some amazing problems! 🚶‍♂️";
+    if (topicLower.includes('sort')) return "Sort-ing out the best challenges! 🔄";
+    if (topicLower.includes('search')) return "Search-ing for the perfect solution! 🔍";
+    if (topicLower.includes('dynamic')) return "Dynamic-ally building your expertise! ⚡";
+    if (topicLower.includes('greedy')) return "Greedy for more coding knowledge! 🤤";
+    if (topicLower.includes('backtrack')) return "Back-track-ing to find the best path! 🔄";
+    if (topicLower.includes('recursion')) return "Recursion: See recursion! 🔁";
+    if (topicLower.includes('binary')) return "Binary thinking for optimal solutions! 1️⃣0️⃣";
+    if (topicLower.includes('linked')) return "Link-ed and ready to code! 🔗";
+    if (topicLower.includes('heap')) return "Heap-ing on the coding challenges! ⛰️";
+    if (topicLower.includes('trie')) return "Trie-ing your best at every problem! 🌲";
+    if (topicLower.includes('sliding')) return "Sliding into coding greatness! 🛝";
+    if (topicLower.includes('two')) return "Two pointers, infinite possibilities! 👉👈";
+    if (topicLower.includes('bit')) return "Bit by bit, mastering algorithms! 🔢";
+    
+    return "Code-ing your way to greatness! 🚀";
+  };
+
   if (loading || !topicString) {
     console.log('RoadmapTopic: Rendering loading state');
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#6564c7" />
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingLogoContainer}>
+            <Image source={mascotIcon} style={styles.loadingLogo} />
+          </View>
+          <ThemedText style={styles.loadingPun}>
+            {getTopicPun(topicString || '')}
+          </ThemedText>
+          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
+          <ActivityIndicator size="large" color="#6564c7" style={styles.loadingSpinner} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -465,11 +556,17 @@ export default function RoadmapTopic() {
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
-            <ThemedText>Back</ThemedText>
           </TouchableOpacity>
-        </View>
-        <View style={styles.topicHeader}>
-          <ThemedText style={styles.topicTitle}>{topicString}</ThemedText>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                {topicString}
+              </ThemedText>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
         </View>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ThemedText>No problems found for this topic.</ThemedText>
@@ -483,12 +580,21 @@ export default function RoadmapTopic() {
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          <ThemedText>Back</ThemedText>
         </TouchableOpacity>
+        
+        <View style={styles.headerCenter}>
+          <View style={styles.headerTitleBubble}>
+            <View style={styles.topicDot} />
+            <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+              {topicString}
+            </ThemedText>
+          </View>
+        </View>
+        
+        <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.topicHeader}>
-        <ThemedText style={styles.topicTitle}>{topicString}</ThemedText>
+      <View style={styles.contentWrapper}>
         {topicStats && (
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
@@ -504,36 +610,91 @@ export default function RoadmapTopic() {
             </View>
           </View>
         )}
-      </View>
 
-      <ScrollView
+        <ScrollView
         ref={scrollViewRef}
         style={styles.roadmapContainer}
-        contentContainerStyle={[styles.roadmapContent, { minHeight: (questions?.length || 0) * (BUBBLE_SIZE + BUBBLE_VERTICAL_GAP * 2) }]}
+        contentContainerStyle={[styles.roadmapContent, { 
+          paddingBottom: 0
+        }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.verticalPathContainer}>
           {/* Background Path */}
           <View style={styles.backgroundPath}>
             <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+              {/* Regular path segments between bubbles */}
               {(questions || []).map((_, index) => {
-                if (index === (questions?.length || 0) - 1) return null;
-                const startY = (index + 0.5) * (BUBBLE_SIZE + 48); // 48 is the adjusted vertical gap
-                const endY = (index + 1.5) * (BUBBLE_SIZE + 48);
+                if (index === (questions?.length || 0) - 1) return null; // Skip the last item (which is the first question after reverse)
+                const MILESTONE_HEIGHT = BUBBLE_SIZE + 48; // Total height per milestone (64 + 48 = 112)
+                const CONTAINER_TOP_PADDING = 16; // Match verticalPathContainer paddingTop
+                const MILESTONE_VERTICAL_MARGIN = 24; // Match milestoneWrapper marginVertical
+                
+                // Calculate Y positions to align with actual milestone positions
+                // Push down by 4 more bubbles worth of space
+                const ADDITIONAL_OFFSET = 4 * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2);
+                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                
                 const isLeft = index % 2 === 0;
                 const curveX = isLeft ? 40 : -40;
+                
+                // Determine if this path segment should be completed (darker)
+                // Since questions are reversed, we need to check the completion status correctly
+                const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
+                const isPathCompleted = questions && 
+                  questions[reversedCurrentIndex] && 
+                  questions[reversedCurrentIndex].completed;
                 
                 return (
                   <Path
                     key={index}
                     d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
-                    stroke="#E6E6FA"
+                    stroke={isPathCompleted ? "#6564c7" : "#C8B5FF"}
                     strokeWidth={20}
                     fill="none"
                     strokeLinecap="round"
                   />
                 );
               })}
+              
+              {/* Extended bendy path at the top to reach first 4 bubbles */}
+              {questions && questions.length > 0 && Array.from({ length: 4 }, (_, index) => {
+                const CONTAINER_TOP_PADDING = 16;
+                const MILESTONE_VERTICAL_MARGIN = 24;
+                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                
+                const isLeft = index % 2 === 0;
+                const curveX = isLeft ? 40 : -40;
+                
+                return (
+                  <Path
+                    key={`top-path-${index}`}
+                    d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                    stroke="#C8B5FF"
+                    strokeWidth={20}
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+              
+              {/* Extended path beyond the last bubble to fill bottom space */}
+              {questions && questions.length > 0 && (
+                <Path
+                  key="bottom-extended-path"
+                  d={`M${ROADMAP_WIDTH/2},${
+                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2
+                  } L${ROADMAP_WIDTH/2},${
+                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2 + 120
+                  }`}
+                  stroke="#C8B5FF"
+                  strokeWidth={20}
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              )}
             </Svg>
           </View>
 
@@ -541,8 +702,18 @@ export default function RoadmapTopic() {
           {[...(questions || [])].reverse().map((question, index) => {
             return renderRoadmapItem(question, index);
           })}
+          
+          {/* Starting text at the bottom */}
+          {questions && questions.length > 0 && (
+            <View style={styles.pathStartDecorator}>
+              <View style={styles.startTextBubble}>
+                <ThemedText style={styles.startText}>Start Your Journey!</ThemedText>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
+      </View>
 
       {/* Question Action Modal */}
       {selectedQuestion && (
@@ -558,6 +729,8 @@ export default function RoadmapTopic() {
           isLessonRequired={isLessonRequired(selectedQuestion)}
           isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
           topicName={topicString || ''}
+          isQuestionOnLeft={selectedQuestionIndex % 2 === 0}
+          bubblePosition={{ x: 200, y: 300 + selectedQuestionIndex * 112 }}
         />
       )}
     </SafeAreaView>
@@ -567,45 +740,94 @@ export default function RoadmapTopic() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F8F6FF',
   },
   header: {
-    padding: 16,
+    backgroundColor: '#6564c7',
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    width: 60,
   },
   backIcon: {
     width: 24,
     height: 24,
     marginRight: 8,
+    tintColor: '#fff',
   },
-  topicHeader: {
-    paddingTop: 24,
-    paddingBottom: 20,
-    paddingHorizontal: 16,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  topicTitle: {
-    fontSize: 24,
+  headerTitleBubble: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8E6FF',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: '60%',
+    maxWidth: '85%',
+  },
+  topicDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#6564c7',
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 16,
+    color: '#6564c7',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    width: 60,
+  },
+  contentWrapper: {
+    flex: 1,
+    position: 'relative',
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
     paddingVertical: 12,
-    marginBottom: 4,
+    paddingTop: 16,
+    backgroundColor: 'white',
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#E0D7FF',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    marginHorizontal: 16,
+    marginBottom: 0,
+    zIndex: 10,
+    position: 'relative',
   },
   statItem: {
     alignItems: 'center',
-    minHeight: 56,
+    minHeight: 40,
     justifyContent: 'center',
     paddingVertical: 2,
   },
@@ -617,7 +839,7 @@ const styles = StyleSheet.create({
   },
   starIconText: {
     fontSize: 24,
-    color: '#FFD700',
+    color: '#B19BFF',
   },
   statValue: {
     fontSize: 24,
@@ -631,7 +853,7 @@ const styles = StyleSheet.create({
   },
   roadmapContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F8F6FF',
   },
   roadmapContent: {
     width: '100%',
@@ -705,7 +927,8 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     position: 'relative',
-    paddingVertical: 32,
+    paddingTop: 16,
+    paddingBottom: 32,
     alignItems: 'center',
   },
   backgroundPath: {
@@ -748,27 +971,27 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#fffbe6',
+    backgroundColor: '#F3F0FF',
     borderWidth: 3,
-    borderColor: '#ffe066',
+    borderColor: '#B19BFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
-    shadowColor: '#ffe066',
+    shadowColor: '#B19BFF',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 2,
   },
   currentMilestone: {
-    borderColor: '#5f8dff',
-    backgroundColor: '#eef4ff',
-    shadowColor: '#5f8dff',
+    borderColor: '#6564c7',
+    backgroundColor: '#E8E6FF',
+    shadowColor: '#6564c7',
   },
   lockedMilestone: {
-    backgroundColor: '#d1d1d1',
-    borderColor: '#a0a0a0',
-    shadowColor: '#a0a0a0',
+    backgroundColor: '#D8D0FF',
+    borderColor: '#9B8AFF',
+    shadowColor: '#9B8AFF',
   },
   mascotIcon: {
     width: 56,
@@ -808,13 +1031,13 @@ const styles = StyleSheet.create({
   },
   levelUpButton: {
     width: 200,
-    backgroundColor: '#5f8dff',
+    backgroundColor: '#6564c7',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 24,
     alignSelf: 'center',
-    shadowColor: '#5f8dff',
+    shadowColor: '#6564c7',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -842,5 +1065,76 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  pathStartDecorator: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 10,
+    zIndex: 10,
+  },
+
+  startTextBubble: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 16,
+    borderWidth: 2,
+    borderColor: '#E8E6FF',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingLogoContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E8E6FF',
+    borderWidth: 4,
+    borderColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  loadingLogo: {
+    width: 80,
+    height: 80,
+    resizeMode: 'contain',
+  },
+  loadingPun: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6564c7',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  loadingSpinner: {
+    marginTop: 10,
   },
 });
