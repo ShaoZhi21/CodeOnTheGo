@@ -42,18 +42,35 @@ const BUBBLE_VERTICAL_GAP = 8; // Reduced from 24
 const decodeHtmlEntities = (text: string): string => {
   if (!text || typeof text !== 'string') return '';
   
-  return text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&copy;/g, '©')
-    .replace(/&reg;/g, '®')
-    .replace(/&trade;/g, '™')
-    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec));
+  try {
+    return text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&copy;/g, '©')
+      .replace(/&reg;/g, '®')
+      .replace(/&trade;/g, '™')
+      .replace(/&#(\d+);/g, (match, dec) => {
+        try {
+          const charCode = parseInt(dec, 10);
+          // Only allow safe character codes (printable ASCII and common Unicode)
+          if (charCode >= 32 && charCode <= 126 || charCode >= 160) {
+            return String.fromCharCode(charCode);
+          }
+          return match; // Keep original if unsafe
+        } catch (error) {
+          console.warn('Error decoding HTML entity:', match, error);
+          return match; // Keep original on error
+        }
+      });
+  } catch (error) {
+    console.warn('Error in decodeHtmlEntities:', error, 'Original text:', text);
+    return text || ''; // Return original text or empty string on error
+  }
 };
 
 function StarSVG({ size, filled }: { size: number; filled: boolean }) {
@@ -219,8 +236,13 @@ export default function RoadmapTopic() {
         .map(problem => {
           const safeTitle = String(problem.title).trim();
           console.log(`RoadmapTopic: Processing problem - ID: ${problem.leetcode_id}, Title: "${safeTitle}"`);
-          console.log(`RoadmapTopic: Raw title: "${problem.title}"`);
-          console.log(`RoadmapTopic: Decoded title: "${decodeHtmlEntities(safeTitle)}"`);
+          console.log(`RoadmapTopic: Raw title: "${String(problem.title || '').substring(0, 50)}"`);
+          try {
+            const decodedTitle = decodeHtmlEntities(safeTitle);
+            console.log(`RoadmapTopic: Decoded title: "${decodedTitle.substring(0, 50)}"`);
+          } catch (error) {
+            console.log(`RoadmapTopic: Error decoding title: ${error}`);
+          }
           return {
             ...problem,
             title: safeTitle, // Ensure title is never undefined
@@ -232,7 +254,8 @@ export default function RoadmapTopic() {
       // Calculate user-specific stats
       const totalStars = problemsWithProgress.reduce((sum, problem) => {
         const problemStars = problem.stars || 0;
-        console.log(`RoadmapTopic: Problem ${problem.leetcode_id} "${problem.title}" - stars: ${problemStars}, completed: ${problem.completed}`);
+        const safeTitle = String(problem.title || '').substring(0, 30);
+        console.log(`RoadmapTopic: Problem ${problem.leetcode_id} "${safeTitle}" - stars: ${problemStars}, completed: ${problem.completed}`);
         return sum + problemStars;
       }, 0);
       const completedProblems = problemsWithProgress.filter(problem => problem.completed).length;
@@ -248,7 +271,7 @@ export default function RoadmapTopic() {
       console.log('RoadmapTopic: Progress map details:', progressMap);
       console.log('RoadmapTopic: Problems with progress details:', problemsWithProgress.map(p => ({
         id: p.leetcode_id,
-        title: p.title,
+        title: String(p.title || '').substring(0, 30),
         stars: p.stars,
         completed: p.completed
       })));
@@ -280,7 +303,8 @@ export default function RoadmapTopic() {
   };
 
   const isUnlocked = (q: TopicProblemWithProgress, idx: number) => {
-    console.log(`🔓 Checking unlock for question ${idx}: ${q.title}`);
+    const safeTitle = String(q.title || '').substring(0, 30);
+    console.log(`🔓 Checking unlock for question ${idx}: ${safeTitle}`);
     console.log(`🔓 User skill level: ${userSkillLevel}`);
     console.log(`🔓 Question difficulty: ${q.difficulty}`);
     
@@ -293,7 +317,7 @@ export default function RoadmapTopic() {
     // Level unlocking: previous question must have 3+ stars (out of 5) for ALL users
     const previousQuestion = questions[idx - 1];
     console.log(`🔓 Previous question:`, previousQuestion ? {
-      title: previousQuestion.title,
+      title: String(previousQuestion.title || '').substring(0, 30),
       stars: previousQuestion.stars,
       completed: previousQuestion.completed
     } : 'null');
@@ -363,6 +387,19 @@ export default function RoadmapTopic() {
       return null;
     }
     
+    // Safely decode the title with error handling
+    let decodedTitle: string;
+    try {
+      decodedTitle = decodeHtmlEntities(titleString);
+      // Ensure decoded title is still a valid string
+      if (!decodedTitle || typeof decodedTitle !== 'string') {
+        decodedTitle = 'Problem Title';
+      }
+    } catch (error) {
+      console.warn('Error decoding title:', error, 'Original title:', titleString);
+      decodedTitle = 'Problem Title';
+    }
+    
     const actualIndex = (questions?.length || 0) - 1 - index;
     const isLeft = index % 2 === 0;
     const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
@@ -370,7 +407,7 @@ export default function RoadmapTopic() {
     const isCompleted = question.stars && question.stars > 0;
     
     // Safety checks for all properties with proper string conversion
-    const safeTitle = titleString;
+    const safeTitle = decodedTitle;
     const safeDifficulty = String(question.difficulty || 'Easy');
     const safeLeetcodeId = question.leetcode_id || 0;
     
@@ -397,14 +434,7 @@ export default function RoadmapTopic() {
               numberOfLines={2}
               ellipsizeMode="tail"
             >
-              {(() => {
-                try {
-                  return decodeHtmlEntities(safeTitle);
-                } catch (error) {
-                  console.warn('Error decoding title:', error, 'Original title:', safeTitle);
-                  return 'Problem Title';
-                }
-              })()}
+              {safeTitle}
             </ThemedText>
             {/* Difficulty indicator */}
             <View style={[
@@ -476,14 +506,7 @@ export default function RoadmapTopic() {
               numberOfLines={2}
               ellipsizeMode="tail"
             >
-              {(() => {
-                try {
-                  return decodeHtmlEntities(safeTitle);
-                } catch (error) {
-                  console.warn('Error decoding title:', error, 'Original title:', safeTitle);
-                  return 'Problem Title';
-                }
-              })()}
+              {safeTitle}
             </ThemedText>
             {/* Difficulty indicator */}
             <View style={[
@@ -720,12 +743,29 @@ export default function RoadmapTopic() {
         <QuestionActionModal
           visible={modalVisible}
           onClose={handleCloseModal}
-          questionTitle={decodeHtmlEntities(String(selectedQuestion.title || 'Untitled Problem'))}
+          questionTitle={(() => {
+            try {
+              const title = String(selectedQuestion.title || 'Untitled Problem');
+              return decodeHtmlEntities(title);
+            } catch (error) {
+              console.warn('Error decoding modal title:', error);
+              return 'Untitled Problem';
+            }
+          })()}
           questionId={selectedQuestion.leetcode_id || 0}
           userSkillLevel={userSkillLevel}
           hasCompletedLesson={lessonProgress[selectedQuestion.leetcode_id || 0] || false}
           questionDifficulty={(selectedQuestion.difficulty || 'Easy') as 'Easy' | 'Medium' | 'Hard'}
-          questionDescription={String(selectedQuestion.description || `Solve the problem: ${decodeHtmlEntities(String(selectedQuestion.title || 'Untitled Problem'))}`)}
+          questionDescription={(() => {
+            try {
+              const title = String(selectedQuestion.title || 'Untitled Problem');
+              const decodedTitle = decodeHtmlEntities(title);
+              return String(selectedQuestion.description || `Solve the problem: ${decodedTitle}`);
+            } catch (error) {
+              console.warn('Error decoding modal description:', error);
+              return String(selectedQuestion.description || 'Solve the problem: Untitled Problem');
+            }
+          })()}
           isLessonRequired={isLessonRequired(selectedQuestion)}
           isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
           topicName={topicString || ''}

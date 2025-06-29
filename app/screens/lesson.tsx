@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { ThemedText } from '../../components/ThemedText';
@@ -328,11 +328,27 @@ export default function LessonScreen() {
 
       const quizResult = await quizResponse.json();
       console.log('✅ Separate quiz generated successfully');
+      console.log('📊 Quiz result:', {
+        questionsCount: quizResult.questions?.length || 0,
+        questions: quizResult.questions?.map((q: any) => ({
+          id: q.id,
+          question: q.question?.substring(0, 50) + '...',
+          optionsCount: q.options?.length || 0,
+          correctAnswer: q.correctAnswer
+        }))
+      });
       
       // Set the new quiz questions (separate from lesson MCQs)
       setQuizQuestions(quizResult.questions || []);
       
       console.log('🎯 Starting quiz with new questions...');
+      console.log('📊 Quiz state after setting questions:', {
+        quizQuestionsLength: quizResult.questions?.length || 0,
+        currentQuestionIndex: 0,
+        selectedAnswers: [],
+        score: 0
+      });
+      
       setCurrentPage('quiz');
       setCurrentQuestionIndex(0);
       setSelectedAnswers([]);
@@ -353,8 +369,27 @@ export default function LessonScreen() {
   const handleOptionSelect = (optionIndex: number) => {
     if (showFeedback || isProcessingAnswer) return; // Prevent multiple selections
     
+    // Safety check for quiz questions
+    if (!quizQuestions || quizQuestions.length === 0) {
+      console.error('❌ No quiz questions available');
+      return;
+    }
+    
     const currentQuestion = quizQuestions[currentQuestionIndex];
+    if (!currentQuestion) {
+      console.error('❌ Current question not found');
+      return;
+    }
+    
     const isCorrect = optionIndex === currentQuestion.correctAnswer;
+    
+    console.log('🎯 Option selected:', {
+      optionIndex,
+      correctAnswer: currentQuestion.correctAnswer,
+      isCorrect,
+      currentQuestionIndex,
+      currentScore: score
+    });
     
     // Set processing flag to prevent multiple selections
     setIsProcessingAnswer(true);
@@ -364,9 +399,18 @@ export default function LessonScreen() {
     newSelectedAnswers[currentQuestionIndex] = optionIndex;
     setSelectedAnswers(newSelectedAnswers);
     
+    console.log('📊 Updated selected answers:', {
+      newSelectedAnswers,
+      length: newSelectedAnswers.length
+    });
+    
     // Update score only once
     if (isCorrect) {
-      setScore(prevScore => prevScore + 1);
+      setScore(prevScore => {
+        const newScore = prevScore + 1;
+        console.log('🎯 Score updated:', { prevScore, newScore });
+        return newScore;
+      });
     }
     
     setShowFeedback(true);
@@ -404,7 +448,23 @@ export default function LessonScreen() {
     setShowFeedback(false);
     setIsProcessingAnswer(false); // Reset processing flag
     
+    console.log('🔄 handleNextQuestion called');
+    console.log('📊 Current state:', {
+      currentQuestionIndex,
+      quizQuestionsLength: quizQuestions.length,
+      selectedAnswersLength: selectedAnswers.length,
+      score,
+      currentPage
+    });
+    
+    // Safety check: ensure we're dealing with main quiz questions, not lesson MCQs
+    if (!quizQuestions || quizQuestions.length === 0) {
+      console.error('❌ No main quiz questions available');
+      return;
+    }
+    
     if (currentQuestionIndex < quizQuestions.length - 1) {
+      console.log('🔄 Moving to next question');
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       // Reset animations for new question
       fadeAnim.setValue(0);
@@ -435,19 +495,107 @@ export default function LessonScreen() {
         }).start();
       });
     } else {
-      // Check if all answers are correct
-      const allCorrect = selectedAnswers.every((answer, index) => 
-        answer === quizQuestions[index].correctAnswer
-      );
+      // Quiz is complete when all questions are answered
+      const allQuestionsAnswered = selectedAnswers.length === quizQuestions.length;
       
-      if (allCorrect) {
-        // Quiz completed successfully - save to database and show completion page
-        handleSaveQuizCompletion().catch(error => {
+      console.log('🎯 Quiz finished - checking completion');
+      console.log('📊 Completion check:', {
+        allQuestionsAnswered,
+        selectedAnswersLength: selectedAnswers.length,
+        quizQuestionsLength: quizQuestions.length,
+        selectedAnswers,
+        quizQuestions: quizQuestions.map(q => q.correctAnswer)
+      });
+      
+      // Safety check: if we're on the last question and have quiz questions, consider it complete
+      if (currentQuestionIndex === quizQuestions.length - 1 && quizQuestions.length > 0) {
+        console.log('✅ On last question with quiz questions - considering complete');
+        
+        // Always save completion when quiz is finished, regardless of score
+        console.log('✅ Quiz completed - saving results');
+        handleSaveQuizCompletion().then(() => {
+          // Check if all answers are correct for UI display (completion vs retry page)
+          const allCorrect = selectedAnswers.every((answer, index) => 
+            answer === quizQuestions[index].correctAnswer
+          );
+          
+          console.log('🎯 Checking if all correct:', {
+            allCorrect,
+            selectedAnswers,
+            correctAnswers: quizQuestions.map(q => q.correctAnswer)
+          });
+          
+          if (allCorrect) {
+            console.log('🎉 All correct - showing completion page');
+            setCurrentPage('completion');
+          } else {
+            console.log('❌ Not all correct - showing retry page');
+            setCurrentPage('retry');
+          }
+        }).catch(error => {
           console.error('Failed to save quiz completion:', error);
+          // Still show completion/retry page even if save fails
+          const allCorrect = selectedAnswers.every((answer, index) => 
+            answer === quizQuestions[index].correctAnswer
+          );
+          
+          console.log('🎯 Fallback check if all correct:', allCorrect);
+          
+          if (allCorrect) {
+            console.log('🎉 All correct - showing completion page (fallback)');
+            setCurrentPage('completion');
+          } else {
+            console.log('❌ Not all correct - showing retry page (fallback)');
+            setCurrentPage('retry');
+          }
         });
-        setCurrentPage('completion');
+      } else if (allQuestionsAnswered) {
+        // Original logic for when all questions are answered
+        console.log('✅ Quiz completed - saving results');
+        handleSaveQuizCompletion().then(() => {
+          // Check if all answers are correct for UI display (completion vs retry page)
+          const allCorrect = selectedAnswers.every((answer, index) => 
+            answer === quizQuestions[index].correctAnswer
+          );
+          
+          console.log('🎯 Checking if all correct:', {
+            allCorrect,
+            selectedAnswers,
+            correctAnswers: quizQuestions.map(q => q.correctAnswer)
+          });
+          
+          if (allCorrect) {
+            console.log('🎉 All correct - showing completion page');
+            setCurrentPage('completion');
+          } else {
+            console.log('❌ Not all correct - showing retry page');
+            setCurrentPage('retry');
+          }
+        }).catch(error => {
+          console.error('Failed to save quiz completion:', error);
+          // Still show completion/retry page even if save fails
+          const allCorrect = selectedAnswers.every((answer, index) => 
+            answer === quizQuestions[index].correctAnswer
+          );
+          
+          console.log('🎯 Fallback check if all correct:', allCorrect);
+          
+          if (allCorrect) {
+            console.log('🎉 All correct - showing completion page (fallback)');
+            setCurrentPage('completion');
+          } else {
+            console.log('❌ Not all correct - showing retry page (fallback)');
+            setCurrentPage('retry');
+          }
+        });
       } else {
-        // Not all correct - show retry page
+        console.error('❌ Quiz incomplete - not all questions answered');
+        console.log('📊 Missing answers:', {
+          selectedAnswersLength: selectedAnswers.length,
+          quizQuestionsLength: quizQuestions.length,
+          selectedAnswers
+        });
+        // This shouldn't happen, but handle gracefully
         setCurrentPage('retry');
       }
     }
@@ -502,44 +650,102 @@ export default function LessonScreen() {
   const handleSaveQuizCompletion = async () => {
     try {
       console.log('🔄 Starting quiz completion save...');
-      console.log('📊 Quiz data:', { questionId, score, completed: true });
+      console.log('📊 Quiz data:', { 
+        questionId, 
+        score, 
+        completed: true,
+        selectedAnswers,
+        quizQuestionsLength: quizQuestions.length
+      });
       
       // Get the current session to include auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log('🔑 Session found:', !!session);
-      console.log('🔑 Token available:', !!session?.access_token);
+      console.log('🔑 Getting Supabase session...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('🔑 Session result:', { 
+        hasSession: !!session, 
+        sessionError: sessionError,
+        hasAccessToken: !!session?.access_token,
+        tokenLength: session?.access_token?.length || 0
+      });
+      
+      if (sessionError) {
+        console.error('❌ Session error:', sessionError);
+        alert('Authentication error. Please log in again.');
+        return;
+      }
       
       if (!session?.access_token) {
+        console.error('❌ No session or access token available');
+        console.log('🔑 Session details:', {
+          session: session,
+          accessToken: session?.access_token,
+          refreshToken: session?.refresh_token
+        });
         alert('You must be logged in to save your progress.');
         return;
       }
+      
+      // Validate the data before sending
+      if (!questionId || questionId === '0') {
+        console.error('❌ Invalid questionId:', questionId);
+        alert('Invalid question ID. Please try again.');
+        return;
+      }
+      
+      const requestBody = {
+        questionId: parseInt(questionId || '0'),
+        score: score,
+        completed: true,
+      };
+      
+      console.log('📡 Sending request with body:', requestBody);
+      console.log('🔑 Using token (first 20 chars):', session.access_token.substring(0, 20) + '...');
       
       const response = await apiCall('/api/quiz-completion', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          questionId: parseInt(questionId || '0'),
-          score: score,
-          completed: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       console.log('📡 API Response status:', response.status);
+      console.log('📡 API Response headers:', response.headers);
       
       if (response.ok) {
         const responseData = await response.json();
         console.log('✅ Quiz completion saved successfully:', responseData);
+        return responseData;
       } else {
         const errorData = await response.text();
-        alert('Failed to save quiz completion. Please check your connection and try again.');
-        console.error('❌ Failed to save quiz completion:', response.status, errorData);
+        console.error('❌ Failed to save quiz completion:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData: errorData
+        });
+        
+        // Try to parse error as JSON for better error messages
+        try {
+          const errorJson = JSON.parse(errorData);
+          console.error('❌ Parsed error:', errorJson);
+          alert(`Failed to save quiz completion: ${errorJson.message || errorJson.error || 'Unknown error'}`);
+        } catch (parseError) {
+          console.error('❌ Could not parse error as JSON:', parseError);
+          alert(`Failed to save quiz completion. Status: ${response.status}. Please check your connection and try again.`);
+        }
+        throw new Error(`HTTP ${response.status}: ${errorData}`);
       }
     } catch (error) {
-      alert('An unexpected error occurred while saving your quiz completion.');
       console.error('💥 Error saving quiz completion:', error);
+      console.error('💥 Error details:', {
+        message: (error as any)?.message || 'Unknown error',
+        stack: (error as any)?.stack || 'No stack trace',
+        name: (error as any)?.name || 'Unknown error type'
+      });
+      
+      // Don't show alert here, let the calling function handle it
+      throw error;
     }
   };
 
@@ -628,6 +834,53 @@ export default function LessonScreen() {
       });
     }
   }, [currentPage, currentQuestionIndex]);
+
+  // Debug currentPage changes
+  useEffect(() => {
+    console.log('🔄 Current page changed to:', currentPage);
+    console.log('📊 Current state:', {
+      currentPage,
+      currentQuestionIndex,
+      selectedAnswersLength: selectedAnswers.length,
+      quizQuestionsLength: quizQuestions.length,
+      score
+    });
+  }, [currentPage, currentQuestionIndex, selectedAnswers.length, quizQuestions.length, score]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Don't reset if we're on completion or retry page
+      if (currentPage === 'completion' || currentPage === 'retry') {
+        console.log('🔄 Screen focused on completion/retry page - not resetting state');
+        return;
+      }
+      
+      // Only reset if we're not in the middle of a quiz
+      if (currentPage === 'quiz' && quizQuestions.length > 0) {
+        // Don't reset if we're actively taking a quiz
+        console.log('🔄 Screen focused during quiz - not resetting state');
+        return;
+      }
+      
+      // Only reset if we have valid lesson data
+      if (!lessonData || !questionId) {
+        console.log('🔄 Screen focused but no lesson data - not resetting state');
+        return;
+      }
+      
+      console.log('🔄 Resetting lesson state on screen focus');
+      setCurrentPage('teaching');
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers([]);
+      setScore(0);
+      setShowFeedback(false);
+      setIsProcessingAnswer(false);
+      // Reset animations if needed
+      fadeAnim.setValue(1);
+      slideAnim.setValue(0);
+      optionAnimations.forEach(anim => anim.setValue(1));
+    }, [questionId, lessonData, currentPage, quizQuestions.length])
+  );
 
   if (currentPage === 'loading') {
     return (
