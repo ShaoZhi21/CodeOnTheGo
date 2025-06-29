@@ -4,14 +4,14 @@ import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 interface Topic {
@@ -61,10 +61,10 @@ const getTopicIcon = (topicName: string) => {
   return topicIcons[topicName] || require('@/assets/images/icons/book-icon.png');
 };
 
-// Topic color mapping for variety
+// Topic color mapping - pastel variety
 const getTopicColors = (index: number) => {
   const colorSchemes = [
-    { bg: '#F3F0FF', border: '#E0D7FF', accent: '#6564c7' }, // Purple
+    { bg: '#F3F0FF', border: '#E0D7FF', accent: '#8B5CF6' }, // Purple
     { bg: '#FFF3E0', border: '#FFE0B2', accent: '#FF9800' }, // Orange
     { bg: '#E8F5E8', border: '#C8E6C9', accent: '#4CAF50' }, // Green
     { bg: '#E3F2FD', border: '#BBDEFB', accent: '#2196F3' }, // Blue
@@ -345,7 +345,7 @@ export default function LearnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#F8F6FF', // Purple-tinted background like duel.tsx
   },
   scrollView: {
     flex: 1,
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#F8F6FF',
   },
   loadingText: {
     marginTop: 16,
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
   mainTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6',
     marginBottom: 8,
     lineHeight: 40,
   },
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     borderColor: '#E0D7FF',
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#6564c7',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 48,
     height: 48,
-    backgroundColor: '#6564c7',
+    backgroundColor: '#8B5CF6', // This will be overridden by dynamic colors
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   topicTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6', // This will be overridden by dynamic colors
     marginBottom: 8,
     lineHeight: 20,
   },
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   learnButton: {
-    backgroundColor: '#6564c7',
+    backgroundColor: '#8B5CF6', // This will be overridden by dynamic colors
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 12,

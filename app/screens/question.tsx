@@ -11,7 +11,7 @@ import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
 
@@ -99,12 +99,649 @@ interface ForBlockType {
 }
 type CodeBlock = BoxBlock | IfBlockType | ElseBlockType | ElseIfBlockType | WhileBlockType | ForBlockType;
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F4EEFF',
+  },
+  header: {
+    backgroundColor: '#6564c7',
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 60,
+  },
+  backIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    tintColor: '#fff',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleBubble: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    minWidth: '60%',
+    maxWidth: '85%',
+  },
+  difficultyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  headerSpacer: {
+    width: 60,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  section: {
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    marginLeft: '1%',
+    fontWeight: '600',
+    marginBottom: 0,
+    color: '#2d2d2d',
+    lineHeight: 30,
+    textAlignVertical: 'center',
+  },
+  solveButton: {
+    backgroundColor: '#6564c7',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solveButtonFullWidth: {
+    flex: 1,
+  },
+  solveButtonWithAnalysis: {
+    flex: 0.8,
+  },
+  solveButtonDisabled: {
+    backgroundColor: '#c7c1e9',
+  },
+  solveButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  toggleButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  toggleButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  descriptionContainer: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    height: 300,
+  },
+  codeInputContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    padding: 12,
+  },
+  codeInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#444',
+    textAlignVertical: 'top',
+  },
+  exampleContent: {
+    flex: 1,
+  },
+  exampleSection: {
+    marginBottom: 4,
+  },
+  exampleLabel: {
+    fontWeight: 'bold',
+    color: '#6564c7',
+    fontSize: 16,
+  },
+  exampleText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
+  },
+  exampleNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingTop: 8,
+  },
+  exampleNumberContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exampleIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: '#e8e7ff',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#6564c7',
+  },
+  activeExampleIndicator: {
+    backgroundColor: '#6564c7',
+  },
+  exampleIndicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6564c7',
+  },
+  activeExampleIndicatorText: {
+    color: '#fff',
+  },
+  arrowButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowButtonText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+    paddingRight: "2%",
+  },
+  disabledNavButton: {
+    backgroundColor: '#e0e0e0',
+  },
+  analysisToggleButton: {
+    flex: 0.2,
+    backgroundColor: '#6564c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analysisToggleIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#fff',
+  },
+  analysisWrapper: {
+    marginTop: 4,
+  },
+  analysisContainer: {
+    padding: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  analysisContent: {
+    marginTop: 8,
+  },
+  analysisSection: {
+    marginBottom: 8,
+  },
+  analysisSubtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2d2d2d',
+    marginBottom: 4,
+  },
+  analysisText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#444',
+  },
+  analysisButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 6,
+  },
+  analysisButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#c7c1e9',
+  },
+  selectedAnalysisButton: {
+    backgroundColor: '#6564c7',
+  },
+  correctButton: {
+    backgroundColor: '#e6f4ea', 
+    borderWidth: 4,
+    borderColor: '#009045',
+  },
+  wrongButton: {
+    backgroundColor: '#fff2f0', 
+    borderWidth: 4,
+    borderColor: '#FF375F',
+  },
+  correctnessIcon: {
+    width: 36,
+    height: 36,
+  },
+  analysisIcon: {
+    width: 42,
+    height: 42,
+  },
+  correctnessContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  largeStarIcon: {
+    width: 40,
+    height: 40,
+  },
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  scoreText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#2d2d2d',
+    lineHeight: 28,
+  },
+  scoreLabel: {
+    fontSize: 20,
+    color: '#666',
+    lineHeight: 20,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    marginBottom: 12,
+    gap: 8,
+  },
+  addBoxButton: {
+    flex: 1,
+    backgroundColor: '#6564c7',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBoxButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#6564c7',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  errorText: {
+    color: '#FF375F',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#6564c7',
+    padding: 12,
+    borderRadius: 8,    alignItems: 'center',
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  webviewContainer: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  webview: {
+    flex: 1,
+  },
+  webviewLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exampleScrollView: {
+    flex: 1,
+  },
+  exampleContentFormatted: {
+    flex: 1,
+    padding: 6,
+  },
+  exampleFieldContainer: {
+    marginBottom: 10,
+  },
+  exampleLabelContainer: {
+    marginBottom: 3,
+    flex: 1,
+  },
+  exampleLabelRowContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 3,
+  },
+  exampleValueContainer: {
+    paddingLeft: 6,
+  },
+  exampleLabelFormatted: {
+    fontWeight: '600',
+    color: '#6564c7',
+    fontSize: 15,
+  },
+  exampleTextFormatted: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#444',
+    backgroundColor: '#f8f9fa',
+    padding: 8,
+    borderRadius: 6,
+    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
+  },
+  exampleImageContainerFormatted: {
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 6,
+  },
+  exampleImageFormatted: {
+    width: '100%',
+    maxWidth: 280,
+    height: 160,
+    borderRadius: 6,
+  },
+  imageIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: '#e8e7ff',
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#6564c7',
+  },
+  imageIconPlaceholder: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 4,
+  },
+  imageIconText: {
+    fontSize: 10,
+  },
+  imageIndicatorText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6564c7',
+  },
+  navArrowButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+    backgroundColor: '#6564c7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navArrowText: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+    paddingRight: "2%",
+  },
+  disabledNavText: {
+    color: '#ccc',
+  },
+  exampleIndicatorsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  exampleIndicatorButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeExampleIndicatorButton: {
+    backgroundColor: '#6564c7',
+  },
+  exampleIndicatorNumber: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  activeExampleIndicatorNumber: {
+    color: '#fff',
+  },
+  progressExtensionContainer: {
+    marginBottom: 0,
+  },
+  progressExtension: {
+    backgroundColor: '#f0e6ff',
+    borderWidth: 2,
+    borderColor: '#d9b3ff',
+    borderBottomWidth: 0,
+    padding: 12,
+    paddingBottom: 20,
+    marginBottom: -24,
+    width: '100%',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  unifiedButtonContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#6564c7',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  unifiedButtonWithProgress: {
+    marginTop: 0,
+  },
+  solveButtonUnified: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    padding: 16,
+    borderRadius: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonDivider: {
+    width: 2,
+    height: '70%',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  analysisToggleButtonUnified: {
+    backgroundColor: 'transparent',
+    padding: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solutionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    minHeight: 30,
+  },
+  deleteToggleButton: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#FF375F',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minWidth: 60,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteToggleButtonText: {
+    color: '#FF375F',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 14,
+  },
+  deleteToggleIcon: {
+    width: 18,
+    height: 18,
+    tintColor: '#FF375F',
+  },
+  solveButtonWithProgress: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderTopWidth: 0,
+    marginTop: 0,
+  },
+  problemContainer: {
+    flex: 1,
+  },
+  problemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    zIndex: 10,
+  },
+  magicWandButton: {
+    backgroundColor: 'rgba(101, 100, 199, 0.2)',
+    borderWidth: 1.5,
+    borderColor: '#6564c7',
+    borderRadius: 16,
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  magicWandButtonActive: {
+    backgroundColor: 'rgba(101, 100, 199, 0.5)',
+  },
+  magicWandEmoji: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6564c7',
+  },
+  magicWandEmojiActive: {
+    color: '#fff',
+  },
+  simplifiedIndicator: {
+    backgroundColor: 'rgba(101, 100, 199, 0.1)',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(101, 100, 199, 0.3)',
+  },
+  simplifiedIndicatorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6564c7',
+    textAlign: 'center',
+  },
+});
+
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty } = params;
   
   // Refs
   const exampleScrollViewRef = useRef<ScrollView>(null);
+  const mainScrollViewRef = useRef<ScrollView>(null);
   
   // Dynamic data states
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -125,8 +762,25 @@ export default function QuestionScreen() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [deleteMode, setDeleteMode] = useState(false);
   const [isSimplifying, setIsSimplifying] = useState(false);
-  const [simplifiedDescription, setSimplifiedDescription] = useState<string | null>(null);
   const [showingSimplified, setShowingSimplified] = useState(false);
+  const [simplifiedDescription, setSimplifiedDescription] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchProblemData();
+  }, []);
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+      // Auto scroll down when keyboard opens
+      setTimeout(() => {
+        mainScrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+    };
+  }, []);
 
   // Function to parse examples from HTML content (improved)
   const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
@@ -354,12 +1008,6 @@ export default function QuestionScreen() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (id) {
-      fetchProblemData();
-    }
-  }, [id]);
 
   useEffect(() => {
     return () => {
@@ -1072,1017 +1720,392 @@ export default function QuestionScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.content} contentContainerStyle={{ flexGrow: 1 }}>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
-            <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
-            <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
-          </TouchableOpacity>
-        </View>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? -180 : -220}
+      >
+        <ScrollView 
+          style={[styles.content, { flex: 1 }]} 
+          contentContainerStyle={{ paddingBottom: 200 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive"
+          ref={mainScrollViewRef}
+        >
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>
+              <ThemedText style={styles.toggleButtonText}>Problem</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.toggleButton, { backgroundColor: !showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(false)}>
+              <ThemedText style={styles.toggleButtonText}>Example</ThemedText>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.section}>
-            <View style={styles.descriptionContainer}>
-              {showProblem ? (
-                <View style={styles.problemContainer}>
-                  {showingSimplified && simplifiedDescription && (
-                    <TouchableOpacity 
-                      style={styles.simplifiedIndicator}
-                      onPress={handleSimplifyQuestion}
-                      disabled={isSimplifying}
-                      activeOpacity={0.7}
-                    >
-                      <ThemedText style={styles.simplifiedIndicatorText}>
-                        ✨ Simplified • Tap for original
-                      </ThemedText>
-                    </TouchableOpacity>
-                  )}
-                  {!showingSimplified && (
-                    <View style={styles.problemHeader}>
+          <View style={styles.section}>
+              <View style={styles.descriptionContainer}>
+                {showProblem ? (
+                  <View style={styles.problemContainer}>
+                    {showingSimplified && simplifiedDescription && (
                       <TouchableOpacity 
-                        style={styles.magicWandButton}
+                        style={styles.simplifiedIndicator}
                         onPress={handleSimplifyQuestion}
                         disabled={isSimplifying}
+                        activeOpacity={0.7}
                       >
-                        {isSimplifying ? (
-                          <ActivityIndicator size="small" color="#6564c7" />
-                        ) : (
-                          <ThemedText style={styles.magicWandEmoji}>🪄</ThemedText>
-                        )}
+                        <ThemedText style={styles.simplifiedIndicatorText}>
+                          ✨ Simplified • Tap for original
+                        </ThemedText>
                       </TouchableOpacity>
-                    </View>
-                  )}
-                  <HtmlRenderer 
-                    htmlContent={showingSimplified && simplifiedDescription ? simplifiedDescription : cleanedDescription || problem.description || 'No description available'} 
-                    style={styles.webviewContainer}
-                  />
-                </View>
-              ) : (
-                <>
-                  <ScrollView 
-                    ref={exampleScrollViewRef}
-                    style={styles.exampleScrollView} 
-                    showsVerticalScrollIndicator={false}
-                  >
-                    <View style={styles.exampleContentFormatted}>
-
-                      <View style={styles.exampleFieldContainer}>
-                        <View style={styles.exampleLabelRowContainer}>
-                          <View style={styles.exampleLabelContainer}>
-                            <ThemedText style={styles.exampleLabelFormatted}>Input:</ThemedText>
-                          </View>
-                          {problem.examples[currentExampleIndex]?.image && (
-                            <TouchableOpacity 
-                              style={styles.imageIndicator}
-                              onPress={() => {
-                                // Scroll to bottom to show the image
-                                exampleScrollViewRef.current?.scrollToEnd({ animated: true });
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <View style={styles.imageIconPlaceholder}>
-                                <ThemedText style={styles.imageIconText}>📷</ThemedText>
-                              </View>
-                              <ThemedText style={styles.imageIndicatorText}>Image present</ThemedText>
-                            </TouchableOpacity>
+                    )}
+                    {!showingSimplified && (
+                      <View style={styles.problemHeader}>
+                        <TouchableOpacity 
+                          style={styles.magicWandButton}
+                          onPress={handleSimplifyQuestion}
+                          disabled={isSimplifying}
+                        >
+                          {isSimplifying ? (
+                            <ActivityIndicator size="small" color="#6564c7" />
+                          ) : (
+                            <ThemedText style={styles.magicWandEmoji}>🪄</ThemedText>
                           )}
-                        </View>
-                        <View style={styles.exampleValueContainer}>
-                          <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.input || 'No input available'}</ThemedText>
-                        </View>
+                        </TouchableOpacity>
                       </View>
+                    )}
+                    <HtmlRenderer 
+                      htmlContent={showingSimplified && simplifiedDescription ? simplifiedDescription : cleanedDescription || problem.description || 'No description available'} 
+                      style={styles.webviewContainer}
+                    />
+                  </View>
+                ) : (
+                  <>
+                    <ScrollView 
+                      ref={exampleScrollViewRef}
+                      style={styles.exampleScrollView} 
+                      showsVerticalScrollIndicator={false}
+                    >
+                      <View style={styles.exampleContentFormatted}>
 
-                      <View style={styles.exampleFieldContainer}>
-                        <View style={styles.exampleLabelContainer}>
-                          <ThemedText style={styles.exampleLabelFormatted}>Output:</ThemedText>
-                        </View>
-                        <View style={styles.exampleValueContainer}>
-                          <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.output || 'No output available'}</ThemedText>
-                        </View>
-                      </View>
-
-                      <View style={styles.exampleFieldContainer}>
-                        <View style={styles.exampleLabelContainer}>
-                          <ThemedText style={styles.exampleLabelFormatted}>Explanation:</ThemedText>
-                        </View>
-                        <View style={styles.exampleValueContainer}>
-                          <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.explanation || 'No explanation available'}</ThemedText>
-                        </View>
-                      </View>
-
-                      {problem.examples[currentExampleIndex]?.image && (
                         <View style={styles.exampleFieldContainer}>
-                          <View style={styles.exampleLabelContainer}>
-                            <ThemedText style={styles.exampleLabelFormatted}>Image:</ThemedText>
+                          <View style={styles.exampleLabelRowContainer}>
+                            <View style={styles.exampleLabelContainer}>
+                              <ThemedText style={styles.exampleLabelFormatted}>Input:</ThemedText>
+                            </View>
+                            {problem.examples[currentExampleIndex]?.image && (
+                              <TouchableOpacity 
+                                style={styles.imageIndicator}
+                                onPress={() => {
+                                  // Scroll to bottom to show the image
+                                  exampleScrollViewRef.current?.scrollToEnd({ animated: true });
+                                }}
+                                activeOpacity={0.7}
+                              >
+                                <View style={styles.imageIconPlaceholder}>
+                                  <ThemedText style={styles.imageIconText}>📷</ThemedText>
+                                </View>
+                                <ThemedText style={styles.imageIndicatorText}>Image present</ThemedText>
+                              </TouchableOpacity>
+                            )}
                           </View>
                           <View style={styles.exampleValueContainer}>
-                            <View style={styles.exampleImageContainerFormatted}>
-                              <Image 
-                                source={{ uri: problem.examples[currentExampleIndex]?.image }}
-                                style={styles.exampleImageFormatted}
-                                resizeMode="contain"
-                              />
-                            </View>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.input || 'No input available'}</ThemedText>
                           </View>
                         </View>
-                      )}
-                      
-                    </View>
-                  </ScrollView>
-                  
-                  <View style={styles.exampleNavigation}>
-                    <TouchableOpacity 
-                      style={[styles.navArrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
-                      onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
-                      disabled={currentExampleIndex === 0}
-                    >
-                      <ThemedText style={[styles.navArrowText, currentExampleIndex === 0 && styles.disabledNavText]}>‹</ThemedText>
-                    </TouchableOpacity>
-                    
-                    <View style={styles.exampleIndicatorsContainer}>
-                      {problem.examples.map((_, index) => (
-                        <TouchableOpacity 
-                          key={index}
-                          onPress={() => setCurrentExampleIndex(index)}
-                          style={[
-                            styles.exampleIndicatorButton,
-                            currentExampleIndex === index && styles.activeExampleIndicatorButton
-                          ]}
-                        >
-                          <ThemedText style={[
-                            styles.exampleIndicatorNumber,
-                            currentExampleIndex === index && styles.activeExampleIndicatorNumber
-                          ]}>
-                            {index + 1}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
 
-                    <TouchableOpacity 
-                      style={[styles.navArrowButton, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavButton]}
-                      onPress={() => setCurrentExampleIndex(prev => Math.min(problem.examples.length - 1, prev + 1))}
-                      disabled={currentExampleIndex === problem.examples.length - 1}
-                    >
-                      <ThemedText style={[styles.navArrowText, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavText]}>›</ThemedText>
-                    </TouchableOpacity>
-                  </View>
+                        <View style={styles.exampleFieldContainer}>
+                          <View style={styles.exampleLabelContainer}>
+                            <ThemedText style={styles.exampleLabelFormatted}>Output:</ThemedText>
+                          </View>
+                          <View style={styles.exampleValueContainer}>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.output || 'No output available'}</ThemedText>
+                          </View>
+                        </View>
+
+                        <View style={styles.exampleFieldContainer}>
+                          <View style={styles.exampleLabelContainer}>
+                            <ThemedText style={styles.exampleLabelFormatted}>Explanation:</ThemedText>
+                          </View>
+                          <View style={styles.exampleValueContainer}>
+                            <ThemedText style={styles.exampleTextFormatted}>{problem.examples[currentExampleIndex]?.explanation || 'No explanation available'}</ThemedText>
+                          </View>
+                        </View>
+
+                        {problem.examples[currentExampleIndex]?.image && (
+                          <View style={styles.exampleFieldContainer}>
+                            <View style={styles.exampleLabelContainer}>
+                              <ThemedText style={styles.exampleLabelFormatted}>Image:</ThemedText>
+                            </View>
+                            <View style={styles.exampleValueContainer}>
+                              <View style={styles.exampleImageContainerFormatted}>
+                                <Image 
+                                  source={{ uri: problem.examples[currentExampleIndex]?.image }}
+                                  style={styles.exampleImageFormatted}
+                                  resizeMode="contain"
+                                />
+                              </View>
+                            </View>
+                          </View>
+                        )}
+                        
+                      </View>
+                    </ScrollView>
+                    
+                    <View style={styles.exampleNavigation}>
+                      <TouchableOpacity 
+                        style={[styles.navArrowButton, currentExampleIndex === 0 && styles.disabledNavButton]}
+                        onPress={() => setCurrentExampleIndex(prev => Math.max(0, prev - 1))}
+                        disabled={currentExampleIndex === 0}
+                      >
+                        <ThemedText style={[styles.navArrowText, currentExampleIndex === 0 && styles.disabledNavText]}>‹</ThemedText>
+                      </TouchableOpacity>
+                      
+                      <View style={styles.exampleIndicatorsContainer}>
+                        {problem.examples.map((_, index) => (
+                          <TouchableOpacity 
+                            key={index}
+                            onPress={() => setCurrentExampleIndex(index)}
+                            style={[
+                              styles.exampleIndicatorButton,
+                              currentExampleIndex === index && styles.activeExampleIndicatorButton
+                            ]}
+                          >
+                            <ThemedText style={[
+                              styles.exampleIndicatorNumber,
+                              currentExampleIndex === index && styles.activeExampleIndicatorNumber
+                            ]}>
+                              {index + 1}
+                            </ThemedText>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <TouchableOpacity 
+                        style={[styles.navArrowButton, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavButton]}
+                        onPress={() => setCurrentExampleIndex(prev => Math.min(problem.examples.length - 1, prev + 1))}
+                        disabled={currentExampleIndex === problem.examples.length - 1}
+                      >
+                        <ThemedText style={[styles.navArrowText, currentExampleIndex === problem.examples.length - 1 && styles.disabledNavText]}>›</ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+          </View>
+          
+          <View style={[styles.section, { flex: 1 }]}>
+            <View style={styles.solutionHeader}>
+              <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
+              <TouchableOpacity 
+                style={styles.deleteToggleButton}
+                onPress={() => setDeleteMode(!deleteMode)}
+              >
+                {deleteMode ? (
+                  <ThemedText style={styles.deleteToggleButtonText}>
+                    Done
+                  </ThemedText>
+                ) : (
+                  <Image 
+                    source={require('@/assets/images/icons/trash-delete-icon.png')}
+                    style={styles.deleteToggleIcon}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Render all DescriptionBoxes */}
+            {descriptionBoxes.map((block, idx) => {
+              // Check if this block should be connected to the previous block
+              const isConnected = idx > 0 && 
+                (block.type === 'if' || block.type === 'elseif') &&
+                (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
+
+              if (block.type === 'text') {
+                return (
+                  <DescriptionBox
+                    key={idx}
+                    value={block.value}
+                    onChangeText={text => handleDescriptionBoxChange(idx, text)}
+                    placeholder="Write your solution here..."
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              if (block.type === 'if') {
+                return (
+                  <IfBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleIfBlockBodyChange(idx, text)}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              if (block.type === 'elseif') {
+                return (
+                  <ElseIfBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    isConnected={isConnected}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              if (block.type === 'else') {
+                return (
+                  <ElseBlock
+                    key={idx}
+                    body={block.body}
+                    onChangeBody={text => handleElseBlockBodyChange(idx, text)}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              if (block.type === 'while') {
+                return (
+                  <WhileBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              if (block.type === 'for') {
+                return (
+                  <ForBlock
+                    key={idx}
+                    condition={block.condition}
+                    body={block.body}
+                    onChangeCondition={text => handleForBlockConditionChange(idx, text)}
+                    onChangeBody={text => handleForBlockBodyChange(idx, text)}
+                    onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
+                    borderStyle={getBlockBorderStyle(idx)}
+                    explanation={getBlockExplanation(idx)}
+                  />
+                );
+              }
+              return null;
+            })}
+          </View>
+
+          {/* Button Row */}
+          <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
+                <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
+                <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addBoxButton, {
+                  opacity:
+                    descriptionBoxes.length > 0 &&
+                    (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                      ? 1 : 0.5
+                }]}
+                onPress={handleAddElseBlock}
+                disabled={
+                  !(
+                    descriptionBoxes.length > 0 &&
+                    (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
+                  )
+                }
+              >
+                <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
+                <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
+                <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
+              </TouchableOpacity>
+            </View>
+
+            {/* Error message for analysis failure */}
+            {analysisError && (
+              <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
+                <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
+              </View>
+            )}
+            
+                    {/* Progress Bar Extension - pops up from top and slides underneath */}
+            {analysis && (
+              <View style={styles.progressExtensionContainer}>
+                <View style={styles.progressExtension}>
+                  <ProgressBar score={analysis.score} />
+                </View>
+              </View>
+            )}
+
+            <View style={[
+              styles.unifiedButtonContainer,
+              analysis && styles.unifiedButtonWithProgress
+            ]}>
+              <TouchableOpacity 
+                style={[
+                  styles.solveButton, 
+                  (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
+                  analysis ? styles.solveButtonUnified : styles.solveButtonFullWidth
+                ]}
+                onPress={handleSolveProblem}
+                disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
+                )}
+              </TouchableOpacity>
+
+              {analysis && (
+                <>
+                  <View style={styles.buttonDivider} />
+                  <TouchableOpacity 
+                    style={styles.analysisToggleButtonUnified}
+                    onPress={() => setShowAnalysis(true)}
+                  >
+                    <Image 
+                      source={require('@/assets/images/icons/up-arrow.png')}
+                      style={styles.analysisToggleIcon}
+                    />
+                  </TouchableOpacity>
                 </>
               )}
             </View>
-        </View>
-        
-        <View style={[styles.section, { flex: 1 }]}>
-          <View style={styles.solutionHeader}>
-            <ThemedText style={styles.sectionTitle}>Solution</ThemedText>
-            <TouchableOpacity 
-              style={styles.deleteToggleButton}
-              onPress={() => setDeleteMode(!deleteMode)}
-            >
-              {deleteMode ? (
-                <ThemedText style={styles.deleteToggleButtonText}>
-                  Done
-                </ThemedText>
-              ) : (
-                <Image 
-                  source={require('@/assets/images/icons/trash-delete-icon.png')}
-                  style={styles.deleteToggleIcon}
-                />
-              )}
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
 
-          {/* Render all DescriptionBoxes */}
-          {descriptionBoxes.map((block, idx) => {
-            // Check if this block should be connected to the previous block
-            const isConnected = idx > 0 && 
-              (block.type === 'if' || block.type === 'elseif') &&
-              (descriptionBoxes[idx - 1].type === 'if' || descriptionBoxes[idx - 1].type === 'elseif');
-
-            if (block.type === 'text') {
-              return (
-                <DescriptionBox
-                  key={idx}
-                  value={block.value}
-                  onChangeText={text => handleDescriptionBoxChange(idx, text)}
-                  placeholder="Write your solution here..."
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            if (block.type === 'if') {
-              return (
-                <IfBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleIfBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleIfBlockBodyChange(idx, text)}
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  isConnected={isConnected}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            if (block.type === 'elseif') {
-              return (
-                <ElseIfBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleElseIfBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleElseIfBlockBodyChange(idx, text)}
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  isConnected={isConnected}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            if (block.type === 'else') {
-              return (
-                <ElseBlock
-                  key={idx}
-                  body={block.body}
-                  onChangeBody={text => handleElseBlockBodyChange(idx, text)}
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            if (block.type === 'while') {
-              return (
-                <WhileBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleWhileBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleWhileBlockBodyChange(idx, text)}
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            if (block.type === 'for') {
-              return (
-                <ForBlock
-                  key={idx}
-                  condition={block.condition}
-                  body={block.body}
-                  onChangeCondition={text => handleForBlockConditionChange(idx, text)}
-                  onChangeBody={text => handleForBlockBodyChange(idx, text)}
-                  onDelete={deleteMode && descriptionBoxes.length > 1 ? () => handleDeleteBox(idx) : undefined}
-                  borderStyle={getBlockBorderStyle(idx)}
-                  explanation={getBlockExplanation(idx)}
-                />
-              );
-            }
-            return null;
-          })}
-        </View>
-
-        {/* Button Row */}
-        <View style={styles.buttonRow}>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddDescriptionBox}>
-              <ThemedText style={styles.addBoxButtonText}>Line</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddIfBlock}>
-              <ThemedText style={styles.addBoxButtonText}>If</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addBoxButton, {
-                opacity:
-                  descriptionBoxes.length > 0 &&
-                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
-                    ? 1 : 0.5
-              }]}
-              onPress={handleAddElseBlock}
-              disabled={
-                !(
-                  descriptionBoxes.length > 0 &&
-                  (descriptionBoxes[descriptionBoxes.length - 1].type === 'if' || descriptionBoxes[descriptionBoxes.length - 1].type === 'elseif')
-                )
-              }
-            >
-              <ThemedText style={styles.addBoxButtonText}>Else</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddWhileBlock}>
-              <ThemedText style={styles.addBoxButtonText}>While</ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addBoxButton} onPress={handleAddForBlock}>
-              <ThemedText style={styles.addBoxButtonText}>For</ThemedText>
-            </TouchableOpacity>
-          </View>
-
-        {/* Error message for analysis failure */}
-        {analysisError && (
-          <View style={{ marginBottom: 8, backgroundColor: '#fff2f0', borderRadius: 8, padding: 10 }}>
-            <ThemedText style={{ color: '#FF375F', fontWeight: '600' }}>{analysisError}</ThemedText>
-          </View>
-        )}
-        
-                {/* Progress Bar Extension - pops up from top and slides underneath */}
-        {analysis && (
-          <View style={styles.progressExtensionContainer}>
-            <View style={styles.progressExtension}>
-              <ProgressBar score={analysis.score} />
-            </View>
-          </View>
-        )}
-
-        <View style={[
-          styles.unifiedButtonContainer,
-          analysis && styles.unifiedButtonWithProgress
-        ]}>
-          <TouchableOpacity 
-            style={[
-              styles.solveButton, 
-              (!descriptionBoxes.join('\n').trim() || isAnalyzing) && styles.solveButtonDisabled,
-              analysis ? styles.solveButtonUnified : styles.solveButtonFullWidth
-            ]}
-            onPress={handleSolveProblem}
-            disabled={!descriptionBoxes.join('\n').trim() || isAnalyzing}
-          >
-            {isAnalyzing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.solveButtonText}>Solve Problem</ThemedText>
-            )}
-          </TouchableOpacity>
-
-          {analysis && (
-            <>
-              <View style={styles.buttonDivider} />
-              <TouchableOpacity 
-                style={styles.analysisToggleButtonUnified}
-                onPress={() => setShowAnalysis(true)}
-              >
-                <Image 
-                  source={require('@/assets/images/icons/up-arrow.png')}
-                  style={styles.analysisToggleIcon}
-                />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </ScrollView>
-
-      <AnalysisModal
-        visible={showAnalysis}
-        onClose={() => setShowAnalysis(false)}
-        analysis={analysis}
-        onTryForHigherScore={handleTryForHigherScore}
-        onMarkComplete={handleMarkComplete}
-        onWritePseudocode={handleWritePseudocode}
-        onRemark={handleRemark}
-      />
+          <AnalysisModal
+            visible={showAnalysis}
+            onClose={() => setShowAnalysis(false)}
+            analysis={analysis}
+            onTryForHigherScore={handleTryForHigherScore}
+            onMarkComplete={handleMarkComplete}
+            onWritePseudocode={handleWritePseudocode}
+            onRemark={handleRemark}
+          />
+        </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F4EEFF',
-  },
-  header: {
-    backgroundColor: '#6564c7',
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 60,
-  },
-  backIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
-    tintColor: '#fff',
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitleBubble: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-    minWidth: '60%',
-    maxWidth: '85%',
-  },
-  difficultyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    flexShrink: 1,
-  },
-  headerSpacer: {
-    width: 60,
-  },
 
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-
-  section: {
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    marginLeft: '1%',
-    fontWeight: '600',
-    marginBottom: 0,
-    color: '#2d2d2d',
-    lineHeight: 30,
-    textAlignVertical: 'center',
-  },
-  solveButton: {
-    backgroundColor: '#6564c7',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  solveButtonFullWidth: {
-    flex: 1,
-  },
-  solveButtonWithAnalysis: {
-    flex: 0.8,
-  },
-  solveButtonDisabled: {
-    backgroundColor: '#c7c1e9',
-  },
-  solveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  toggleButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  toggleButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  descriptionContainer: {
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    height: 300,
-  },
-  codeInputContainer: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-    padding: 12,
-  },
-  codeInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#444',
-    textAlignVertical: 'top',
-  },
-  exampleContent: {
-    flex: 1,
-  },
-  exampleSection: {
-    marginBottom: 4,
-  },
-  exampleLabel: {
-    fontWeight: 'bold',
-    color: '#6564c7',
-    fontSize: 16,
-  },
-  exampleText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#444',
-  },
-  exampleNavigation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-    paddingTop: 8,
-  },
-  exampleNumberContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  exampleIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    backgroundColor: '#e8e7ff',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#6564c7',
-  },
-  activeExampleIndicator: {
-    backgroundColor: '#6564c7',
-  },
-  exampleIndicatorText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6564c7',
-  },
-  activeExampleIndicatorText: {
-    color: '#fff',
-  },
-  arrowButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  arrowButtonText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    paddingRight: "2%",
-  },
-  disabledNavButton: {
-    backgroundColor: '#e0e0e0',
-  },
-  analysisToggleButton: {
-    flex: 0.2,
-    backgroundColor: '#6564c7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  analysisToggleIcon: {
-    width: 24,
-    height: 24,
-    tintColor: '#fff',
-  },
-  analysisWrapper: {
-    marginTop: 4,
-  },
-  analysisContainer: {
-    padding: 12,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  analysisContent: {
-    marginTop: 8,
-  },
-  analysisSection: {
-    marginBottom: 8,
-  },
-  analysisSubtitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2d2d2d',
-    marginBottom: 4,
-  },
-  analysisText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#444',
-  },
-  analysisButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 6,
-  },
-  analysisButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#c7c1e9',
-  },
-  selectedAnalysisButton: {
-    backgroundColor: '#6564c7',
-  },
-  correctButton: {
-    backgroundColor: '#e6f4ea', 
-    borderWidth: 4,
-    borderColor: '#009045',
-  },
-  wrongButton: {
-    backgroundColor: '#fff2f0', 
-    borderWidth: 4,
-    borderColor: '#FF375F',
-  },
-  correctnessIcon: {
-    width: 36,
-    height: 36,
-  },
-  analysisIcon: {
-    width: 42,
-    height: 42,
-  },
-  correctnessContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 16,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  largeStarIcon: {
-    width: 40,
-    height: 40,
-  },
-  scoreContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  scoreText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#2d2d2d',
-    lineHeight: 28,
-  },
-  scoreLabel: {
-    fontSize: 20,
-    color: '#666',
-    lineHeight: 20,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    width: '100%',
-    marginBottom: 12,
-    gap: 8,
-  },
-  addBoxButton: {
-    flex: 1,
-    backgroundColor: '#6564c7',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addBoxButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 15,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#6564c7',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  errorText: {
-    color: '#FF375F',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  retryButton: {
-    backgroundColor: '#6564c7',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  webviewContainer: {
-    flex: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  webview: {
-    flex: 1,
-  },
-  webviewLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  exampleScrollView: {
-    flex: 1,
-  },
-  exampleContentFormatted: {
-    flex: 1,
-    padding: 6,
-  },
-  exampleFieldContainer: {
-    marginBottom: 10,
-  },
-  exampleLabelContainer: {
-    marginBottom: 3,
-    flex: 1,
-  },
-  exampleLabelRowContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 3,
-  },
-  exampleValueContainer: {
-    paddingLeft: 6,
-  },
-  exampleLabelFormatted: {
-    fontWeight: '600',
-    color: '#6564c7',
-    fontSize: 15,
-  },
-  exampleTextFormatted: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#444',
-    backgroundColor: '#f8f9fa',
-    padding: 8,
-    borderRadius: 6,
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-  },
-  exampleImageContainerFormatted: {
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 6,
-  },
-  exampleImageFormatted: {
-    width: '100%',
-    maxWidth: 280,
-    height: 160,
-    borderRadius: 6,
-  },
-  imageIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    backgroundColor: '#e8e7ff',
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: '#6564c7',
-  },
-  imageIconPlaceholder: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 4,
-  },
-  imageIconText: {
-    fontSize: 10,
-  },
-  imageIndicatorText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6564c7',
-  },
-  navArrowButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 20,
-    backgroundColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navArrowText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    paddingRight: "2%",
-  },
-  disabledNavText: {
-    color: '#ccc',
-  },
-  exampleIndicatorsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  exampleIndicatorButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#e0e0e0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeExampleIndicatorButton: {
-    backgroundColor: '#6564c7',
-  },
-  exampleIndicatorNumber: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  activeExampleIndicatorNumber: {
-    color: '#fff',
-  },
-  progressExtensionContainer: {
-    marginBottom: 0,
-  },
-  progressExtension: {
-    backgroundColor: '#f0e6ff', // Same light purple as description boxes
-    borderWidth: 2,
-    borderColor: '#d9b3ff',
-    borderBottomWidth: 0, // No bottom border to slide under button
-    padding: 12, // Reduced padding to take up less space
-    paddingBottom: 20, // Extra bottom padding to account for sliding under
-    marginBottom: -24, // More negative margin to slide further underneath
-    width: '100%', // Full width to match unified button
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // Shadow to match description box style
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  unifiedButtonContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#6564c7',
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  unifiedButtonWithProgress: {
-    // Keep top radius and border for visual separation
-    marginTop: 0, // No margin for tight spacing
-  },
-  solveButtonUnified: {
-    flex: 1,
-    backgroundColor: 'transparent', // Transparent since container has background
-    padding: 16,
-    borderRadius: 0, // No radius since it's part of unified container
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonDivider: {
-    width: 2,
-    height: '70%',
-    backgroundColor: 'rgba(255, 255, 255, 0.6)', // More visible white line
-  },
-  analysisToggleButtonUnified: {
-    backgroundColor: 'transparent', // Same as container background
-    padding: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  solutionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    minHeight: 30,
-  },
-  deleteToggleButton: {
-    backgroundColor: '#fff',
-    borderWidth: 2,
-    borderColor: '#FF375F',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    minWidth: 60,
-    height: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteToggleButtonText: {
-    color: '#FF375F',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    lineHeight: 14,
-  },
-  deleteToggleIcon: {
-    width: 18,
-    height: 18,
-    tintColor: '#FF375F',
-  },
-  solveButtonWithProgress: {
-    borderTopLeftRadius: 0, // Remove top left radius to connect with extension
-    borderTopRightRadius: 0, // Remove top right radius to connect with extension
-    borderTopWidth: 0, // Remove top border to seamlessly connect
-    marginTop: 0, // No margin for seamless connection
-  },
-  problemContainer: {
-    flex: 1,
-  },
-  problemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    zIndex: 10,
-  },
-  magicWandButton: {
-    backgroundColor: 'rgba(101, 100, 199, 0.2)',
-    borderWidth: 1.5,
-    borderColor: '#6564c7',
-    borderRadius: 16,
-    padding: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  magicWandButtonActive: {
-    backgroundColor: 'rgba(101, 100, 199, 0.5)',
-  },
-  magicWandEmoji: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6564c7',
-  },
-  magicWandEmojiActive: {
-    color: '#fff',
-  },
-  simplifiedIndicator: {
-    backgroundColor: 'rgba(101, 100, 199, 0.1)',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(101, 100, 199, 0.3)',
-  },
-  simplifiedIndicatorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#6564c7',
-    textAlign: 'center',
-  },
-}); 
+ 

@@ -1,4 +1,7 @@
 import { ThemedText } from '@/components/ThemedText';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
+import type { UserProfileStats } from '@/lib/types/profile';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -19,6 +22,9 @@ export default function DailyRouletteScreen() {
   
   const [phase, setPhase] = useState<'loading' | 'spinning' | 'revealing' | 'revealed'>('loading');
   const [revealedNumber, setRevealedNumber] = useState<number | null>(null);
+  const [currentSpinNumber, setCurrentSpinNumber] = useState<number>(1);
+  const [profile, setProfile] = useState<UserProfileStats | null>(null);
+  const [selectedProblem, setSelectedProblem] = useState<{id: number, title: string} | null>(null);
   
   // Animation values
   const spinAnimation = useRef(new Animated.Value(0)).current;
@@ -35,58 +41,177 @@ export default function DailyRouletteScreen() {
   ).current;
 
   useEffect(() => {
-    startAnimation();
+    loadProfile();
   }, []);
 
+  // Start animation after profile and problem are loaded
+  useEffect(() => {
+    if (profile && selectedProblem) {
+      startAnimation();
+    }
+  }, [profile, selectedProblem]);
+
+  const loadProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const profileData = await ProfileService.getUserProfileStats(user.id);
+      setProfile(profileData);
+      
+      // Select appropriate problem based on skill level
+      if (profileData) {
+        await selectProblemBySkillLevel(profileData.skill_level);
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    }
+  };
+
+  const selectProblemBySkillLevel = async (skillLevel: string) => {
+    try {
+      let difficultyFilter: string[] = [];
+      
+      switch (skillLevel) {
+        case 'Beginner':
+          difficultyFilter = ['Easy'];
+          break;
+        case 'Intermediate':
+          difficultyFilter = ['Easy', 'Medium'];
+          break;
+        case 'Advanced':
+        default:
+          difficultyFilter = ['Easy', 'Medium', 'Hard'];
+          break;
+      }
+
+      // Get problems matching the difficulty filter
+      const { data: problems } = await supabase
+        .from('leetcode_problems')
+        .select('leetcode_id, title, difficulty')
+        .in('difficulty', difficultyFilter)
+        .eq('is_premium', false); // Only free problems
+
+      if (problems && problems.length > 0) {
+        // Select random problem from filtered list
+        const randomIndex = Math.floor(Math.random() * problems.length);
+        const randomProblem = problems[randomIndex];
+        
+        setSelectedProblem({
+          id: randomProblem.leetcode_id,
+          title: randomProblem.title
+        });
+      } else {
+        // Fallback to provided problem
+        setSelectedProblem({
+          id: parseInt(problemId || '1'),
+          title: decodeURIComponent(title || 'Daily Challenge')
+        });
+      }
+    } catch (error) {
+      console.error('Error selecting problem by skill level:', error);
+      // Fallback to provided problem
+      setSelectedProblem({
+        id: parseInt(problemId || '1'),
+        title: decodeURIComponent(title || 'Daily Challenge')
+      });
+    }
+  };
+
   const startAnimation = () => {
-    // Phase 1: Loading and entrance
-    setPhase('loading');
+    // Set initial values and show the wheel
+    scaleAnimation.setValue(1);
+    fadeAnimation.setValue(1);
     
-    Animated.parallel([
-      Animated.spring(scaleAnimation, {
-        toValue: 1,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnimation, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Phase 2: Start spinning after 1 second
-      setTimeout(() => {
-        setPhase('spinning');
-        startSpinning();
-      }, 1000);
-    });
+    // Wait 2 seconds before starting the spin
+    setTimeout(() => {
+      setPhase('spinning');
+      startSpinning();
+    }, 2000);
   };
 
   const startSpinning = () => {
-    // Create continuous spinning animation
-    const spin = () => {
+    const finalNumber = selectedProblem?.id || parseInt(problemId || '1');
+    
+    // Create realistic number progression during spin
+    let currentNumber = Math.max(1, finalNumber - 100); // Start from 100 numbers before final
+    let interval = 30; // Start with 30ms intervals (very fast)
+    let totalTime = 0;
+    const maxTime = 5000; // 5 seconds total spin time
+    let rotationDuration = 100; // Start with very fast rotation
+    
+    const updateNumber = () => {
+      if (phase !== 'spinning' || totalTime >= maxTime) {
+        // Stop spinning and reveal final number
+        setPhase('revealing');
+        setRevealedNumber(finalNumber);
+        setCurrentSpinNumber(finalNumber);
+        revealNumber(finalNumber);
+        return;
+      }
+      
+      // Calculate progress (0 to 1)
+      const progress = totalTime / maxTime;
+      
+      // Create smooth deceleration curve
+      const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+      
+      // Slow down the interval as we progress (stronger deceleration)
+      interval = 30 + (easeOut * 400); // From 30ms to 430ms
+      
+      // Update the displayed number with realistic progression
+      if (progress < 0.7) {
+        // First 70%: Fast random-like progression with tendency towards final
+        const randomRange = Math.max(10, Math.floor(50 * (1 - progress)));
+        const bias = Math.floor((finalNumber - currentNumber) * progress * 0.3);
+        currentNumber = Math.max(1, currentNumber + Math.floor(Math.random() * randomRange) + bias);
+      } else if (progress < 0.9) {
+        // 70-90%: More controlled approach to final number
+        const remaining = Math.abs(finalNumber - currentNumber);
+        const step = Math.max(1, Math.floor(remaining * 0.3));
+        if (currentNumber < finalNumber) {
+          currentNumber = Math.min(finalNumber, currentNumber + step);
+        } else if (currentNumber > finalNumber) {
+          currentNumber = Math.max(finalNumber, currentNumber - step);
+        }
+      } else {
+        // Final 10%: Converge to exact final number
+        if (currentNumber !== finalNumber) {
+          currentNumber = finalNumber + (Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0);
+          currentNumber = Math.max(1, currentNumber);
+        } else {
+          currentNumber = finalNumber;
+        }
+      }
+      
+      setCurrentSpinNumber(currentNumber);
+      totalTime += interval;
+      
+      setTimeout(updateNumber, interval);
+    };
+    
+    // Start the visual spinning animation with deceleration
+    const createSpinLoop = () => {
       spinAnimation.setValue(0);
+      
+      // Calculate current rotation speed based on progress
+      const progress = totalTime / maxTime;
+      const easeOut = 1 - Math.pow(1 - progress, 2); // Quadratic ease-out for rotation
+      rotationDuration = 100 + (easeOut * 900); // From 100ms to 1000ms
+      
       Animated.timing(spinAnimation, {
         toValue: 1,
-        duration: 100, // Fast spin
+        duration: rotationDuration,
         useNativeDriver: true,
       }).start(() => {
         if (phase === 'spinning') {
-          spin(); // Continue spinning
+          createSpinLoop();
         }
       });
     };
     
-    spin();
-    
-    // Stop spinning after 3 seconds and reveal
-    setTimeout(() => {
-      setPhase('revealing');
-      const finalNumber = parseInt(problemId || '1');
-      setRevealedNumber(finalNumber);
-      revealNumber(finalNumber);
-    }, 3000);
+    createSpinLoop();
+    updateNumber();
   };
 
   const revealNumber = (number: number) => {
@@ -163,7 +288,13 @@ export default function DailyRouletteScreen() {
   };
 
   const handleContinue = () => {
-    router.push(`/screens/question?id=${problemId}&title=${encodeURIComponent(title || '')}&isDaily=true`);
+    const finalProblemId = selectedProblem?.id || problemId;
+    const finalTitle = selectedProblem?.title || title || 'Daily Challenge';
+    router.push(`/screens/question?id=${finalProblemId}&title=${encodeURIComponent(finalTitle)}&isDaily=true`);
+  };
+
+  const handleBack = () => {
+    router.back();
   };
 
   const getSpinValue = () => {
@@ -177,11 +308,16 @@ export default function DailyRouletteScreen() {
   };
 
   const getDisplayNumber = () => {
-    if (phase === 'spinning') {
-      // Show random numbers while spinning
-      return Math.floor(Math.random() * 9999) + 1;
+    if (phase === 'loading') {
+      return '?';
     }
-    return revealedNumber || parseInt(problemId || '1');
+    if (phase === 'spinning') {
+      return currentSpinNumber;
+    }
+    if (phase === 'revealing' || phase === 'revealed') {
+      return revealedNumber;
+    }
+    return '?';
   };
 
   return (
@@ -193,14 +329,39 @@ export default function DailyRouletteScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Daily Challenge</ThemedText>
-        <ThemedText style={styles.headerSubtitle}>
-          {phase === 'loading' && 'Preparing your challenge...'}
-          {phase === 'spinning' && 'Finding your question...'}
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+          <Image 
+            source={require('@/assets/images/icons/back-icon.png')} 
+            style={styles.backIcon}
+          />
+        </TouchableOpacity>
+        
+        <View style={styles.headerContent}>
+          <ThemedText style={styles.headerTitle}>Daily Challenge</ThemedText>
+                  <ThemedText style={styles.headerSubtitle}>
+          {phase === 'loading' && 'Loading...'}
+          {phase === 'spinning' && 'Spinning the roulette...'}
           {phase === 'revealing' && 'Challenge found!'}
           {phase === 'revealed' && 'Ready to solve!'}
         </ThemedText>
+        </View>
       </View>
+
+      {/* Streak Section */}
+      {profile && (
+        <View style={styles.streakSection}>
+          <View style={styles.streakCard}>
+            <View style={styles.streakIconContainer}>
+              <Image 
+                source={require('@/assets/images/icons/fire-icon.png')} 
+                style={styles.streakIcon}
+              />
+            </View>
+            <ThemedText style={styles.streakTitle}>Current Streak</ThemedText>
+            <ThemedText style={styles.streakValue}>{profile.current_streak} days</ThemedText>
+          </View>
+        </View>
+      )}
 
       {/* Main Roulette Container */}
       <View style={styles.rouletteContainer}>
@@ -276,7 +437,7 @@ export default function DailyRouletteScreen() {
         {phase === 'revealed' && (
           <Animated.View style={[styles.actionContainer, { opacity: fadeAnimation }]}>
             <ThemedText style={styles.problemTitle} numberOfLines={2}>
-              {decodeURIComponent(title || 'Daily Challenge')}
+              {selectedProblem?.title || decodeURIComponent(title || 'Daily Challenge')}
             </ThemedText>
             <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
               <ThemedText style={styles.continueButtonText}>Start Challenge</ThemedText>
@@ -292,8 +453,8 @@ export default function DailyRouletteScreen() {
           <View style={styles.loadingSection}>
             <ActivityIndicator size="large" color="#8B5CF6" />
             <ThemedText style={styles.loadingText}>
-              {phase === 'loading' && 'Initializing challenge...'}
-              {phase === 'spinning' && 'Spinning the wheel...'}
+              {phase === 'loading' && 'Loading...'}
+              {phase === 'spinning' && 'Watch the numbers spin...'}
               {phase === 'revealing' && 'Revealing your challenge...'}
             </ThemedText>
           </View>
@@ -306,7 +467,7 @@ export default function DailyRouletteScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0F',
+    backgroundColor: '#FFFFFF',
   },
   background: {
     position: 'absolute',
@@ -317,25 +478,26 @@ const styles = StyleSheet.create({
   },
   gradientOverlay: {
     flex: 1,
-    backgroundColor: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+    backgroundColor: '#FFFFFF',
   },
   header: {
     paddingTop: 20,
     paddingHorizontal: 20,
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 20,
+    position: 'relative',
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#8B5CF6',
     textAlign: 'center',
     marginBottom: 8,
     paddingTop: 20,
   },
   headerSubtitle: {
     fontSize: 16,
-    color: '#B0B0B0',
+    color: '#6B7280',
     textAlign: 'center',
   },
   rouletteContainer: {
@@ -360,15 +522,15 @@ const styles = StyleSheet.create({
     width: 240,
     height: 240,
     borderRadius: 120,
-    backgroundColor: '#1F1F2E',
+    backgroundColor: '#FFFFFF',
     borderWidth: 8,
     borderColor: '#8B5CF6',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
     shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
     shadowRadius: 15,
     elevation: 10,
   },
@@ -376,7 +538,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: '#2A2A3E',
+    backgroundColor: '#F3F0FF',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -385,10 +547,10 @@ const styles = StyleSheet.create({
   numberText: {
     fontSize: 36,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    textShadowColor: '#8B5CF6',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 10,
+    color: '#8B5CF6',
+    textShadowColor: 'rgba(139, 92, 246, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
     paddingTop: 10,
   },
   ringDot: {
@@ -424,7 +586,7 @@ const styles = StyleSheet.create({
   problemTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#1F2937',
     textAlign: 'center',
     marginBottom: 20,
     paddingHorizontal: 20,
@@ -460,8 +622,75 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#B0B0B0',
+    color: '#6B7280',
     marginTop: 16,
     textAlign: 'center',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#8B5CF6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  backIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#FFFFFF',
+  },
+  headerContent: {
+    alignItems: 'center',
+  },
+  streakSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  streakCard: {
+    backgroundColor: '#F3F0FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+  },
+  streakIconContainer: {
+    marginRight: 12,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 16,
+    padding: 8,
+  },
+  streakIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#FFFFFF',
+  },
+  streakTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginRight: 8,
+  },
+  streakValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8B5CF6',
   },
 }); 

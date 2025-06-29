@@ -138,7 +138,7 @@ export default function HomeScreen() {
           problem_id, 
           is_solved, 
           created_at,
-          problems (
+          leetcode_problems (
             difficulty
           )
         `)
@@ -166,13 +166,13 @@ export default function HomeScreen() {
       
       // Calculate dynamic difficulty counts based on user's solved problems
       const userEasyCount = solvedData?.filter(item => 
-        item.problems && (item.problems as any).difficulty === 'Easy'
+        item.leetcode_problems && (item.leetcode_problems as any).difficulty === 'Easy'
       ).length || 0;
       const userMediumCount = solvedData?.filter(item => 
-        item.problems && (item.problems as any).difficulty === 'Medium'
+        item.leetcode_problems && (item.leetcode_problems as any).difficulty === 'Medium'
       ).length || 0;
       const userHardCount = solvedData?.filter(item => 
-        item.problems && (item.problems as any).difficulty === 'Hard'
+        item.leetcode_problems && (item.leetcode_problems as any).difficulty === 'Hard'
       ).length || 0;
 
       setDailyStats({
@@ -634,24 +634,53 @@ export default function HomeScreen() {
           {/* Topic Roadmap */}
           <View style={styles.subsection}>
             <ThemedText style={styles.subsectionTitle}>Explore Topics</ThemedText>
+            
+            {/* First Row */}
             <ScrollView 
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.topicsScrollContent}
+              style={styles.topicsRow}
             >
-              {roadmapTopics.map((topic, index) => (
+              {roadmapTopics.slice(0, Math.ceil(roadmapTopics.length / 2)).map((topic, index) => (
                 <TouchableOpacity 
                   key={index} 
                   style={styles.modernTopicCard} 
                   onPress={() => handleTopicClick(topic.name)}
                 >
-                  <View style={[styles.topicIconContainer, { backgroundColor: roadmapTopics[index].color }]}>
+                  <View style={[styles.topicIconContainer, { backgroundColor: topic.color }]}>
                     <Image 
                       source={getTopicIcon(topic.name)} 
                       style={styles.topicCardIcon}
                     />
                   </View>
-                  <ThemedText style={[styles.modernTopicName, { color: roadmapTopics[index].color }]}>
+                  <ThemedText style={[styles.modernTopicName, { color: topic.color }]}>
+                    {topic.name}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Second Row */}
+            <ScrollView 
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.topicsScrollContent}
+              style={styles.topicsRow}
+            >
+              {roadmapTopics.slice(Math.ceil(roadmapTopics.length / 2)).map((topic, index) => (
+                <TouchableOpacity 
+                  key={index + Math.ceil(roadmapTopics.length / 2)} 
+                  style={styles.modernTopicCard} 
+                  onPress={() => handleTopicClick(topic.name)}
+                >
+                  <View style={[styles.topicIconContainer, { backgroundColor: topic.color }]}>
+                    <Image 
+                      source={getTopicIcon(topic.name)} 
+                      style={styles.topicCardIcon}
+                    />
+                  </View>
+                  <ThemedText style={[styles.modernTopicName, { color: topic.color }]}>
                     {topic.name}
                   </ThemedText>
                 </TouchableOpacity>
@@ -954,9 +983,12 @@ const styles = StyleSheet.create({
   topicsScrollContent: {
     paddingLeft: 0,
   },
+  topicsRow: {
+    marginBottom: 12,
+  },
   topicCard: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 20,
     borderRadius: 20,
     marginRight: 12,
     shadowColor: '#000',
@@ -972,14 +1004,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   modernTopicCard: {
-    width: 110,
+    width: 120,
+    height: 120,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
     marginRight: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -987,12 +1022,12 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   topicIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1000,14 +1035,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   topicCardIcon: {
-    width: 22,
-    height: 22,
+    width: 24,
+    height: 24,
   },
   modernTopicName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
+    maxWidth: '100%',
   },
 
   // Progress Grid

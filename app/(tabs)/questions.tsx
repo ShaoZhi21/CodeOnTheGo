@@ -1,8 +1,8 @@
 import { ThemedText } from '@/components/ThemedText';
 import { createClient } from '@supabase/supabase-js';
 import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Supabase configuration
@@ -58,10 +58,6 @@ export default function AllQuestionsScreen() {
   const [totalProblems, setTotalProblems] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [customPageInput, setCustomPageInput] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchSuggestions, setSearchSuggestions] = useState<Problem[]>([]);
-  const [allProblems, setAllProblems] = useState<Problem[]>([]);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
@@ -83,16 +79,6 @@ export default function AllQuestionsScreen() {
         .select('*', { count: 'exact', head: true });
 
       setTotalProblems(count || 0);
-
-      // Get all problems for search functionality (if not already loaded)
-      if (allProblems.length === 0) {
-        const { data: allData } = await supabase
-          .from('leetcode_problems')
-          .select('id, leetcode_id, title, difficulty, tags, is_premium')
-          .order('leetcode_id', { ascending: true });
-        
-        setAllProblems(allData || []);
-      }
 
       // Get problems for current page
       const { data, error } = await supabase
@@ -251,41 +237,6 @@ export default function AllQuestionsScreen() {
     setCustomPageInput('');
   };
 
-  const handleSearchToggle = () => {
-    setShowSearch(!showSearch);
-    if (showSearch) {
-      setSearchQuery('');
-      setSearchSuggestions([]);
-    }
-  };
-
-  const handleSearchChange = (text: string) => {
-    setSearchQuery(text);
-    
-    if (text.trim() === '') {
-      setSearchSuggestions([]);
-      return;
-    }
-
-    // Filter problems based on search query (limit to 6 suggestions)
-    const filtered = allProblems
-      .filter(problem => 
-        problem.title.toLowerCase().includes(text.toLowerCase()) ||
-        problem.leetcode_id.toString().includes(text) ||
-        problem.difficulty.toLowerCase().includes(text.toLowerCase())
-      )
-      .slice(0, 6);
-    
-    setSearchSuggestions(filtered);
-  };
-
-  const handleSuggestionPress = (problem: Problem) => {
-    setShowSearch(false);
-    setSearchQuery('');
-    setSearchSuggestions([]);
-    handleProblemPress(problem);
-  };
-
   const sortProblems = (problems: ProblemWithStatus[], column: string, direction: 'asc' | 'desc'): ProblemWithStatus[] => {
     return [...problems].sort((a, b) => {
       let aValue: any;
@@ -372,24 +323,6 @@ export default function AllQuestionsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <ThemedText style={styles.title}>Problems</ThemedText>
-            {refreshingStatus && (
-              <ActivityIndicator 
-                size="small" 
-                color="#6564c7" 
-                style={styles.refreshIndicator} 
-              />
-            )}
-          </View>
-          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
-            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
-          </TouchableOpacity>
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
           <ThemedText style={styles.loadingText}>Loading problems...</ThemedText>
@@ -401,24 +334,6 @@ export default function AllQuestionsScreen() {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <ThemedText style={styles.title}>Problems</ThemedText>
-            {refreshingStatus && (
-              <ActivityIndicator 
-                size="small" 
-                color="#6564c7" 
-                style={styles.refreshIndicator} 
-              />
-            )}
-          </View>
-          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
-            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
-          </TouchableOpacity>
-        </View>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchProblems(currentPage)}>
@@ -431,70 +346,6 @@ export default function AllQuestionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        {!showSearch ? (
-          <>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-            </TouchableOpacity>
-            <View style={styles.titleContainer}>
-              <ThemedText style={styles.title}>Problems</ThemedText>
-              {refreshingStatus && (
-                <ActivityIndicator 
-                  size="small" 
-                  color="#6564c7" 
-                  style={styles.refreshIndicator} 
-                />
-              )}
-            </View>
-            <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
-              <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
-            </TouchableOpacity>
-          </>
-        ) : (
-          <View style={styles.fullSearchContainer}>
-            <TextInput
-              style={styles.fullSearchInput}
-              placeholder="Search problems..."
-              placeholderTextColor="#ccc"
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoFocus
-            />
-            <TouchableOpacity onPress={handleSearchToggle} style={styles.closeSearchButton}>
-              <Image source={require('@/assets/images/icons/wrong-icon.png')} style={styles.closeSearchIcon} />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-      
-      {/* Search Suggestions Dropdown */}
-      {showSearch && searchSuggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <ScrollView style={styles.suggestionsList} nestedScrollEnabled>
-            {searchSuggestions.map((problem) => (
-              <TouchableOpacity
-                key={problem.id}
-                style={styles.suggestionItem}
-                onPress={() => handleSuggestionPress(problem)}
-              >
-                <View style={styles.suggestionContent}>
-                  <ThemedText style={styles.suggestionId}>#{problem.leetcode_id}</ThemedText>
-                  <ThemedText style={styles.suggestionTitle} numberOfLines={1}>
-                    {problem.title}
-                  </ThemedText>
-                  <View style={[styles.suggestionDifficulty, { backgroundColor: getDifficultyColor(problem.difficulty) }]}>
-                    <ThemedText style={styles.suggestionDifficultyText}>
-                      {problem.difficulty}
-                    </ThemedText>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-      
       <View style={styles.tableHeader}>
         <TouchableOpacity 
           style={[styles.headerCell, { flex: 1.3 }]} 
@@ -657,14 +508,22 @@ export default function AllQuestionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#F8F6FF', // Purple-tinted background like duel.tsx
+    paddingBottom: 50, // Add padding to prevent tab bar blocking
   },
-  header: {
-    backgroundColor: '#6564c7',
-    padding: 16, 
+    header: {
+    backgroundColor: '#8B5CF6',
+    padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  searchHeader: {
+    backgroundColor: '#F8F6FF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     flexDirection: 'row',
@@ -729,16 +588,16 @@ const styles = StyleSheet.create({
   },
   suggestionsContainer: {
     position: 'absolute',
-    top: 120,
+    top: 80,
     left: 16,
     right: 16,
     backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#E5E7EB',
     borderRadius: 8,
     maxHeight: 300,
     elevation: 10,
-    shadowColor: '#000',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -760,7 +619,7 @@ const styles = StyleSheet.create({
   suggestionId: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6564c7',
+    color: '#8B5CF6',
     minWidth: 40,
   },
   suggestionTitle: {
@@ -792,17 +651,17 @@ const styles = StyleSheet.create({
   },
   pageText: {
     fontSize: 14,
-    color: '#6564c7',
+    color: '#8B5CF6',
     fontWeight: '600',
   },
   tableContainer: {
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#F8F6FF',
     flexGrow: 1,
     flexShrink: 1,
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#897fef',
+    backgroundColor: '#8B5CF6',
     paddingVertical: 12,
     paddingHorizontal: 14,
     alignItems: 'center',

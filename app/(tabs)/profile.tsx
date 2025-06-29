@@ -3,7 +3,7 @@ import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
@@ -418,7 +418,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4EEFF',
+    backgroundColor: '#F8F6FF', // Purple-tinted background like duel.tsx
   },
   scrollView: {
     flex: 1,
@@ -438,17 +438,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     borderWidth: 3,
-    borderColor: '#6564c7',
+    borderColor: '#8B5CF6',
   },
   profileImage: {
     width: 50,
     height: 50,
-    tintColor: '#6564c7',
+    tintColor: '#8B5CF6',
   },
   profileName: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6',
     marginBottom: 4,
     lineHeight: 36,
   },
@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6',
     marginBottom: 20,
     lineHeight: 28,
   },
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#6564c7',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   mainStatNumber: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6',
     lineHeight: 38,
   },
   mainStatLabel: {
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#6564c7',
+    color: '#8B5CF6',
     lineHeight: 30,
   },
   statLabel: {
