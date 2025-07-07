@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { createClient } from '@supabase/supabase-js';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Supabase configuration
@@ -307,29 +307,16 @@ export default function AllQuestionsScreen() {
   };
 
   const handleProblemPress = (problem: Problem) => {
-    // Set flag to refresh status when returning from question
-    setShouldRefreshStatus(true);
-    
-    router.push({
-      pathname: '/screens/question',
+    // Replace current screen with loading screen
+    router.replace({
+      pathname: '/loading',
       params: {
-        id: problem.leetcode_id.toString(),
-        name: problem.title,
-        difficulty: problem.difficulty
+        problemId: problem.leetcode_id.toString(),
+        questionTitle: problem.title,
+        questionDifficulty: problem.difficulty
       }
     });
   };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Loading problems...</ThemedText>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   if (error) {
     return (

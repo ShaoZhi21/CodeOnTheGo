@@ -1,8 +1,9 @@
+import LoadingScreen from '@/app/screens/LoadingQuestion';
 import { ThemedText } from '@/components/ThemedText';
 import { decodeHtmlEntities } from '@/lib/utils/textUtils';
 import { createClient } from '@supabase/supabase-js';
 import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -67,6 +68,9 @@ export default function AllQuestionsScreen() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const [clickedProblem, setClickedProblem] = useState<Problem | null>(null);
+  const fetchedDataRef = useRef<any>(null);
 
   const totalPages = Math.ceil(totalProblems / PROBLEMS_PER_PAGE);
 
@@ -357,78 +361,44 @@ export default function AllQuestionsScreen() {
   };
 
   const handleProblemPress = (problem: Problem) => {
+    // Store the clicked problem first
+    setClickedProblem(problem);
+    
     // Set flag to refresh status when returning from question
     setShouldRefreshStatus(true);
     
-    router.push({
-      pathname: '/screens/question',
-      params: {
-        id: problem.leetcode_id.toString(),
-        name: problem.title,
-        difficulty: problem.difficulty
-      }
-    });
+    // Show loading screen immediately
+    setShowLoadingScreen(true);
   };
 
-  if (loading) {
+  // Show loading screen if active - this should be the first check
+  if (showLoadingScreen && clickedProblem) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <ThemedText style={styles.title}>Problems</ThemedText>
-            {refreshingStatus && (
-              <ActivityIndicator 
-                size="small" 
-                color="#6564c7" 
-                style={styles.refreshIndicator} 
-              />
-            )}
-          </View>
-          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
-            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Loading problems...</ThemedText>
-        </View>
-      </SafeAreaView>
+      <LoadingScreen 
+        problemId={clickedProblem.leetcode_id.toString()}
+        onDataFetched={(data) => {
+          console.log('📊 AllQuestions: Problem data fetched:', data);
+        }}
+        onLoadingComplete={() => {
+          setShowLoadingScreen(false);
+          // Navigate to the clicked problem
+          router.push({
+            pathname: '/screens/question',
+            params: {
+              id: clickedProblem.leetcode_id.toString(),
+              name: clickedProblem.title,
+              difficulty: clickedProblem.difficulty
+            }
+          });
+        }}
+        onProgressUpdate={(progress) => {
+          console.log(`📊 AllQuestions: Loading progress: ${progress}%`);
+        }}
+        loadingDuration={5000} // 5 seconds total with progress tracking
+      />
     );
   }
 
-  if (error) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <ThemedText style={styles.title}>Problems</ThemedText>
-            {refreshingStatus && (
-              <ActivityIndicator 
-                size="small" 
-                color="#6564c7" 
-                style={styles.refreshIndicator} 
-              />
-            )}
-          </View>
-          <TouchableOpacity onPress={handleSearchToggle} style={styles.searchIconButton}>
-            <Image source={require('@/assets/images/icons/search-icon.png')} style={styles.searchIconImage} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.errorContainer}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchProblems(currentPage)}>
-            <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>

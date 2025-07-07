@@ -237,12 +237,12 @@ export default function LearnScreen() {
         await TopicService.recordTopicNavigation(user.id, topic.name);
       }
       
-      // Navigate to roadmap topic screen
-      router.push({
-        pathname: '/screens/roadmaptopic',
-        params: { 
-          topic: topic.name,
-          topicId: topic.id.toString()
+      // Navigate to loading screen first
+      router.replace({
+        pathname: '/screens/LoadingRoadMap',
+        params: {
+          topicName: topic.name,
+          from: 'learn'
         }
       });
     } catch (error) {

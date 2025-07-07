@@ -8,6 +8,7 @@ import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -737,7 +738,7 @@ const styles = StyleSheet.create({
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
-  const { id, name, difficulty } = params;
+  const { id, name, difficulty, preFetchedData } = params;
   
   // Refs
   const exampleScrollViewRef = useRef<ScrollView>(null);
@@ -766,8 +767,51 @@ export default function QuestionScreen() {
   const [simplifiedDescription, setSimplifiedDescription] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProblemData();
-  }, []);
+    // If we have pre-fetched data, use it immediately
+    if (preFetchedData) {
+      try {
+        const parsedData = JSON.parse(preFetchedData as string);
+        console.log('✅ Using pre-fetched data:', parsedData);
+        
+        // Parse examples from description HTML
+        const { examples: htmlExamples, cleanedHtml } = parseExamplesFromHtmlSimple(parsedData.description || '');
+        
+        let finalExamples: Example[] = [];
+        if (htmlExamples.length > 0) {
+          finalExamples = htmlExamples;
+        } else if (parsedData.examples) {
+          finalExamples = Array.isArray(parsedData.examples) ? parsedData.examples : [];
+        }
+        
+        if (finalExamples.length === 0) {
+          finalExamples = [
+            {
+              input: "No example available",
+              output: "No example available", 
+              explanation: "No example available for this problem."
+            }
+          ];
+        }
+
+        setParsedExamples(finalExamples);
+        setCleanedDescription(cleanedHtml || parsedData.description || '');
+        
+        setProblem({
+          ...parsedData,
+          examples: finalExamples,
+          constraints: parsedData.constraints || [],
+          hints: parsedData.hints || []
+        });
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error parsing pre-fetched data:', error);
+        fetchProblemData();
+      }
+    } else {
+      fetchProblemData();
+    }
+  }, [preFetchedData]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -1011,13 +1055,17 @@ export default function QuestionScreen() {
 
   useEffect(() => {
     return () => {
+      // Cleanup when component unmounts
+      if (id) {
+        AsyncStorage.removeItem(`problem_${id}`);
+      }
       setSolution("");
       setIsAnalyzing(false);
       setAnalysis(null);
       setShowAnalysis(false);
       setSelectedAnalysisSection('correctness');
     };
-  }, []);
+  }, [id]);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -1698,7 +1746,17 @@ export default function QuestionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={async () => {
+          // Clear any stored data
+          if (id) {
+            await AsyncStorage.removeItem(`problem_${id}`);
+          }
+          // Clear any analysis data
+          setAnalysis(null);
+          setShowAnalysis(false);
+          // Navigate directly to questions list
+          router.replace('/(tabs)/questions');
+        }} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         

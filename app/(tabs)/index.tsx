@@ -261,13 +261,24 @@ export default function HomeScreen() {
       // Refresh the recent topics to show the new order
       await loadTopicsProgress();
       
-      // Navigate to the topic
-      console.log('Navigating to topic:', topicName);
-      router.push(`/screens/roadmaptopic?topic=${topicName}`);
+      // Navigate to loading screen first
+      router.replace({
+        pathname: '/screens/LoadingRoadMap',
+        params: {
+          topicName: topicName,
+          from: 'home'
+        }
+      });
     } catch (error) {
       console.error('Error handling topic click:', error);
-      // Still navigate even if updating fails
-      router.push(`/screens/roadmaptopic?topic=${topicName}`);
+      // Still navigate to loading screen even if updating fails
+      router.replace({
+        pathname: '/screens/LoadingRoadMap',
+        params: {
+          topicName: topicName,
+          from: 'home'
+        }
+      });
     }
   };
 

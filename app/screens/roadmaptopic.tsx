@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import QuestionActionModal from '../../components/QuestionActionModal';
@@ -92,13 +92,15 @@ export default function RoadmapTopic() {
   const params = useLocalSearchParams();
   const topic = Array.isArray(params.topic) ? params.topic[0] : params.topic;
   const topicString = typeof topic === 'string' ? topic : '';
+  const fromPage = Array.isArray(params.from) ? params.from[0] : params.from;
+  const preFetchedData = params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
 
   console.log('RoadmapTopic: topic param =', topicString);
+  console.log('RoadmapTopic: from param =', fromPage);
   
   const router = useRouter();
-  const [questions, setQuestions] = useState<TopicProblemWithProgress[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [topicStats, setTopicStats] = useState<any>(null);
+  const [questions, setQuestions] = useState<TopicProblemWithProgress[]>(preFetchedData?.problems || []);
+  const [topicStats, setTopicStats] = useState<any>(preFetchedData?.progress || null);
   const [progress, setProgress] = useState<Record<number, UserProgress>>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
@@ -115,30 +117,29 @@ export default function RoadmapTopic() {
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      if (topicString) {
+      if (topicString && !preFetchedData) {
         loadTopicData();
       }
-    }, [topicString])
+    }, [topicString, preFetchedData])
   );
 
+  // Scroll to bottom when questions load
   useEffect(() => {
-    if (currentQuestionIndex !== null && !loading) {
+    if (questions && questions.length > 0) {
+      // Add a small delay to ensure content is rendered
       setTimeout(() => {
-        // Scroll to the bottom (easiest question)
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        scrollViewRef.current?.scrollToEnd({ animated: false });
       }, 100);
     }
-  }, [currentQuestionIndex, loading]);
+  }, [questions]);
 
   const loadTopicData = async () => {
     console.log('RoadmapTopic: loadTopicData called');
     if (!topicString) {
       console.log('RoadmapTopic: Aborting load, no topic string.');
-      setLoading(false);
       return;
     }
     try {
-      setLoading(true);
       console.log('RoadmapTopic: Fetching problems for topic:', topicString);
       
       const problems = await TopicService.getTopicProblems(topicString);
@@ -196,94 +197,28 @@ export default function RoadmapTopic() {
           lessonData.forEach(lesson => {
             lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
           });
-        } else {
-          // Default to no quizzes completed for beginners
-          problems.forEach((problem, index) => {
-            lessonProgressMap[problem.leetcode_id] = false;
-          });
         }
-        setLessonProgress(lessonProgressMap);
-        console.log('Lesson progress set:', lessonProgressMap);
       }
-      
-      // Combine problems with progress
-      const problemsWithProgress: TopicProblemWithProgress[] = problems
-        .filter(problem => {
-          // Filter out undefined/null problems
-          if (!problem || !problem.leetcode_id) return false;
-          
-          // Filter out problems with invalid titles that cause text rendering errors
-          if (!problem.title || problem.title === null || problem.title === undefined) {
-            console.warn('RoadmapTopic: Filtering out problem with invalid title:', problem);
-            return false;
-          }
-          
-          // Check if title is a valid string or number
-          if (typeof problem.title !== 'string' && typeof problem.title !== 'number') {
-            console.warn('RoadmapTopic: Filtering out problem with non-string/non-number title:', problem);
-            return false;
-          }
-          
-          // Check if title is empty or just whitespace
-          const titleString = String(problem.title).trim();
-          if (!titleString || titleString === 'null' || titleString === 'undefined') {
-            console.warn('RoadmapTopic: Filtering out problem with empty/invalid title string:', problem);
-            return false;
-          }
-          
-          return true;
-        })
-        .map(problem => {
-          const safeTitle = String(problem.title).trim();
-          console.log(`RoadmapTopic: Processing problem - ID: ${problem.leetcode_id}, Title: "${safeTitle}"`);
-          console.log(`RoadmapTopic: Raw title: "${String(problem.title || '').substring(0, 50)}"`);
-          try {
-            const decodedTitle = decodeHtmlEntities(safeTitle);
-            console.log(`RoadmapTopic: Decoded title: "${decodedTitle.substring(0, 50)}"`);
-          } catch (error) {
-            console.log(`RoadmapTopic: Error decoding title: ${error}`);
-          }
-          return {
-            ...problem,
-            title: safeTitle, // Ensure title is never undefined
-            completed: progressMap[problem.leetcode_id]?.completed || false,
-            stars: progressMap[problem.leetcode_id]?.stars || 0,
-          };
-        });
 
-      // Calculate user-specific stats
-      const totalStars = problemsWithProgress.reduce((sum, problem) => {
-        const problemStars = problem.stars || 0;
-        const safeTitle = String(problem.title || '').substring(0, 30);
-        console.log(`RoadmapTopic: Problem ${problem.leetcode_id} "${safeTitle}" - stars: ${problemStars}, completed: ${problem.completed}`);
-        return sum + problemStars;
-      }, 0);
-      const completedProblems = problemsWithProgress.filter(problem => problem.completed).length;
-      const completionPercentage = problemsWithProgress.length > 0 ? Math.round((completedProblems / problemsWithProgress.length) * 100) : 0;
-      
-      const userStats = {
+      // Update state with fetched data
+      setQuestions(problems || []);
+      setProgress(progressMap);
+      setLessonProgress(lessonProgressMap);
+
+      // Calculate and set topic stats
+      const completedCount = Object.values(progressMap).filter(p => p.completed).length;
+      const totalStars = Object.values(progressMap).reduce((sum, p) => sum + (p.stars || 0), 0);
+      const completionPercentage = problems.length > 0 
+        ? Math.round((completedCount / problems.length) * 100) 
+        : 0;
+
+      setTopicStats({
         total_stars: totalStars,
         completion_percentage: completionPercentage
-      };
+      });
 
-      console.log('RoadmapTopic: Problems with progress created:', problemsWithProgress.length);
-      console.log('RoadmapTopic: User stats calculated:', userStats);
-      console.log('RoadmapTopic: Progress map details:', progressMap);
-      console.log('RoadmapTopic: Problems with progress details:', problemsWithProgress.map(p => ({
-        id: p.leetcode_id,
-        title: String(p.title || '').substring(0, 30),
-        stars: p.stars,
-        completed: p.completed
-      })));
-      setQuestions(problemsWithProgress);
-      setTopicStats(userStats);
-      setCurrentQuestionIndex(problemsWithProgress.findIndex(q => !q.completed));
-      console.log('RoadmapTopic: Data loading completed successfully');
     } catch (error) {
-      console.error('RoadmapTopic: Error loading topic data:', error);
-    } finally {
-      setLoading(false);
-      console.log('RoadmapTopic: Loading state set to false');
+      console.error('Error loading topic data:', error);
     }
   };
 
@@ -551,33 +486,19 @@ export default function RoadmapTopic() {
     return "Code-ing your way to greatness! 🚀";
   };
 
-  if (loading || !topicString) {
-    console.log('RoadmapTopic: Rendering loading state');
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingLogoContainer}>
-            <Image source={mascotIcon} style={styles.loadingLogo} />
-          </View>
-          <ThemedText style={styles.loadingPun}>
-            {getTopicPun(topicString || '')}
-          </ThemedText>
-          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
-          <ActivityIndicator size="large" color="#6564c7" style={styles.loadingSpinner} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  console.log('RoadmapTopic: Rendering main content, questions count:', questions?.length || 0);
-  console.log('RoadmapTopic: Current topicStats being displayed:', topicStats);
-  
   // Safety check: if no questions, show empty state
   if (!questions || questions.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => {
+            // Navigate back based on where we came from
+            if (fromPage === 'learn') {
+              router.replace('/(tabs)/learn');
+            } else {
+              router.replace('/(tabs)');
+            }
+          }} style={styles.backButton}>
             <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
           
@@ -601,7 +522,14 @@ export default function RoadmapTopic() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => {
+          // Navigate back based on where we came from
+          if (fromPage === 'learn') {
+            router.replace('/(tabs)/learn');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }} style={styles.backButton}>
           <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         
@@ -635,107 +563,106 @@ export default function RoadmapTopic() {
         )}
 
         <ScrollView
-        ref={scrollViewRef}
-        style={styles.roadmapContainer}
-        contentContainerStyle={[styles.roadmapContent, { 
-          paddingBottom: 0
-        }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.verticalPathContainer}>
-          {/* Background Path */}
-          <View style={styles.backgroundPath}>
-            <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-              {/* Regular path segments between bubbles */}
-              {(questions || []).map((_, index) => {
-                if (index === (questions?.length || 0) - 1) return null; // Skip the last item (which is the first question after reverse)
-                const MILESTONE_HEIGHT = BUBBLE_SIZE + 48; // Total height per milestone (64 + 48 = 112)
-                const CONTAINER_TOP_PADDING = 16; // Match verticalPathContainer paddingTop
-                const MILESTONE_VERTICAL_MARGIN = 24; // Match milestoneWrapper marginVertical
+          ref={scrollViewRef}
+          style={styles.roadmapContainer}
+          contentContainerStyle={[styles.roadmapContent, { 
+            paddingBottom: 120, // Add more padding at bottom for better visibility
+          }]}
+          showsVerticalScrollIndicator={false}
+          maintainVisibleContentPosition={{ // This helps maintain scroll position when content changes
+            minIndexForVisible: 0,
+          }}
+        >
+          <View style={styles.verticalPathContainer}>
+            {/* Background Path */}
+            <View style={styles.backgroundPath}>
+              <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+                {/* Regular path segments between bubbles */}
+                {(questions || []).map((_, index) => {
+                  if (index === (questions?.length || 0) - 1) return null;
+                  const MILESTONE_HEIGHT = BUBBLE_SIZE + 48;
+                  const CONTAINER_TOP_PADDING = 16;
+                  const MILESTONE_VERTICAL_MARGIN = 24;
+                  
+                  const ADDITIONAL_OFFSET = 4 * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2);
+                  const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  
+                  const isLeft = index % 2 === 0;
+                  const curveX = isLeft ? 40 : -40;
+                  
+                  const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
+                  const isPathCompleted = questions && 
+                    questions[reversedCurrentIndex] && 
+                    questions[reversedCurrentIndex].completed;
+                  
+                  return (
+                    <Path
+                      key={index}
+                      d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                      stroke={isPathCompleted ? "#6564c7" : "#C8B5FF"}
+                      strokeWidth={20}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
                 
-                // Calculate Y positions to align with actual milestone positions
-                // Push down by 4 more bubbles worth of space
-                const ADDITIONAL_OFFSET = 4 * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2);
-                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                {/* Extended bendy path at the top */}
+                {questions && questions.length > 0 && Array.from({ length: 4 }, (_, index) => {
+                  const CONTAINER_TOP_PADDING = 16;
+                  const MILESTONE_VERTICAL_MARGIN = 24;
+                  const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  
+                  const isLeft = index % 2 === 0;
+                  const curveX = isLeft ? 40 : -40;
+                  
+                  return (
+                    <Path
+                      key={`top-path-${index}`}
+                      d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                      stroke="#C8B5FF"
+                      strokeWidth={20}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
                 
-                const isLeft = index % 2 === 0;
-                const curveX = isLeft ? 40 : -40;
-                
-                // Determine if this path segment should be completed (darker)
-                // Since questions are reversed, we need to check the completion status correctly
-                const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
-                const isPathCompleted = questions && 
-                  questions[reversedCurrentIndex] && 
-                  questions[reversedCurrentIndex].completed;
-                
-                return (
+                {/* Extended path beyond the last bubble */}
+                {questions && questions.length > 0 && (
                   <Path
-                    key={index}
-                    d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
-                    stroke={isPathCompleted ? "#6564c7" : "#C8B5FF"}
-                    strokeWidth={20}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-              
-              {/* Extended bendy path at the top to reach first 4 bubbles */}
-              {questions && questions.length > 0 && Array.from({ length: 4 }, (_, index) => {
-                const CONTAINER_TOP_PADDING = 16;
-                const MILESTONE_VERTICAL_MARGIN = 24;
-                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                
-                const isLeft = index % 2 === 0;
-                const curveX = isLeft ? 40 : -40;
-                
-                return (
-                  <Path
-                    key={`top-path-${index}`}
-                    d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                    key="bottom-extended-path"
+                    d={`M${ROADMAP_WIDTH/2},${
+                      16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2
+                    } L${ROADMAP_WIDTH/2},${
+                      16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2 + 120
+                    }`}
                     stroke="#C8B5FF"
                     strokeWidth={20}
                     fill="none"
                     strokeLinecap="round"
                   />
-                );
-              })}
-              
-              {/* Extended path beyond the last bubble to fill bottom space */}
-              {questions && questions.length > 0 && (
-                <Path
-                  key="bottom-extended-path"
-                  d={`M${ROADMAP_WIDTH/2},${
-                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2
-                  } L${ROADMAP_WIDTH/2},${
-                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2 + 120
-                  }`}
-                  stroke="#C8B5FF"
-                  strokeWidth={20}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              )}
-            </Svg>
-          </View>
-
-          {/* Milestones */}
-          {[...(questions || [])].reverse().map((question, index) => {
-            return renderRoadmapItem(question, index);
-          })}
-          
-          {/* Starting text at the bottom */}
-          {questions && questions.length > 0 && (
-            <View style={styles.pathStartDecorator}>
-              <View style={styles.startTextBubble}>
-                <ThemedText style={styles.startText}>Start Your Journey!</ThemedText>
-              </View>
+                )}
+              </Svg>
             </View>
-          )}
-        </View>
-      </ScrollView>
+
+            {/* Milestones */}
+            {[...(questions || [])].reverse().map((question, index) => {
+              return renderRoadmapItem(question, index);
+            })}
+            
+            {/* Starting text at the bottom */}
+            {questions && questions.length > 0 && (
+              <View style={styles.pathStartDecorator}>
+                <View style={styles.startTextBubble}>
+                  <ThemedText style={styles.startText}>Start Your Journey!</ThemedText>
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </View>
 
       {/* Question Action Modal */}
@@ -780,7 +707,7 @@ export default function RoadmapTopic() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F6FF',
+    backgroundColor: '#F4EEFF',
   },
   header: {
     backgroundColor: '#6564c7',
@@ -1132,49 +1059,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  loadingLogoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E8E6FF',
-    borderWidth: 4,
-    borderColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  loadingLogo: {
-    width: 80,
-    height: 80,
-    resizeMode: 'contain',
-  },
-  loadingPun: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6564c7',
-    textAlign: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  loadingSpinner: {
-    marginTop: 10,
   },
 });
