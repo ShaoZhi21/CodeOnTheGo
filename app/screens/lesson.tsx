@@ -95,9 +95,10 @@ export default function LessonScreen() {
   const questionTitle = Array.isArray(params.questionTitle) ? params.questionTitle[0] : params.questionTitle;
   const questionDescription = Array.isArray(params.questionDescription) ? params.questionDescription[0] : params.questionDescription;
   const topicName = Array.isArray(params.topicName) ? params.topicName[0] : params.topicName;
+  const preFetchedData = params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
   
   const router = useRouter();
-  const [currentPage, setCurrentPage] = useState<'loading' | 'teaching' | 'quiz' | 'completion' | 'retry'>('loading');
+  const [currentPage, setCurrentPage] = useState<'teaching' | 'quiz' | 'completion' | 'retry'>('teaching');
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -108,7 +109,7 @@ export default function LessonScreen() {
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
   
   // Lesson and quiz data
-  const [lessonData, setLessonData] = useState<LessonData | null>(null);
+  const [lessonData, setLessonData] = useState<LessonData | null>(preFetchedData);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
@@ -213,82 +214,26 @@ export default function LessonScreen() {
     }
   }, [lessonData]);
 
-  // Load lesson and quiz data
+  // Load lesson data from pre-fetched data
   useEffect(() => {
-    const loadLessonData = async () => {
-      try {
-        console.log('🔄 Loading lesson data for problem:', questionId, 'topic:', topicName);
-        
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        console.log('👤 User found:', !!user);
-        
-        console.log('📡 Making lesson API call...');
-        console.log('📡 API request body:', {
-          topicName: topicName,
-          problemId: parseInt(questionId || '0'),
-          userId: user?.id,
-        });
-        
-        // Generate all lesson content in ONE fast API call
-        console.log('📡 Generating complete lesson content in single call...');
-        
-        const lessonResponse = await apiCall('/api/generate-topic-lesson', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-          body: JSON.stringify({
-            topicName: topicName,
-            problemId: parseInt(questionId || '0'),
-            userId: user?.id,
-            fastStructuredLesson: true,
-          }),
-        });
-
-        if (!lessonResponse.ok) {
-          throw new Error('Failed to generate fast lesson');
-        }
-
-        const lessonResult = await lessonResponse.json();
-        console.log('✅ Fast lesson generated successfully');
-        console.log('📊 Lesson result structure:', JSON.stringify(lessonResult, null, 2));
-        console.log('📊 Lesson parts:', lessonResult.parts);
-        console.log('📊 First part MCQ:', lessonResult.parts?.[0]?.mcq);
-        
-        setLessonData(lessonResult);
-        setCurrentPartIndex(0);
-        
-        // Note: Quiz questions will be generated separately when "Start Quiz" is pressed
-
-        console.log('✅ Fast lesson loaded successfully, showing teaching page');
-        setCurrentPage('teaching');
-      } catch (error: any) {
-        console.error('💥 Error loading lesson data:', error);
-        console.error('💥 Error details:', {
-          message: error?.message || 'Unknown error',
-          stack: error?.stack || 'No stack trace',
-          name: error?.name || 'Unknown error type'
-        });
-        
-        // Fallback to basic content if API fails
-        setLessonData({
-          title: questionTitle || 'Lesson',
-          content: 'Lesson content could not be loaded. Please try again later.',
-          keyConcepts: ['Basic concepts'],
-          example: 'Example 1',
-          hint: 'Hint 1',
-          commonMistake: 'Common mistake 1',
-        });
-        setCurrentPage('teaching');
-      }
-    };
-
-    if (questionId && topicName) {
-      loadLessonData();
+    if (preFetchedData) {
+      console.log('✅ Using pre-fetched lesson data');
+      setLessonData(preFetchedData);
+      setCurrentPage('teaching');
+    } else {
+      console.log('⚠️ No pre-fetched data found, this should not happen');
+      // Fallback to basic content if no pre-fetched data
+      setLessonData({
+        title: questionTitle || 'Lesson',
+        content: 'Lesson content could not be loaded. Please try again later.',
+        keyConcepts: ['Basic concepts'],
+        example: 'Example 1',
+        hint: 'Hint 1',
+        commonMistake: 'Common mistake 1',
+      });
+      setCurrentPage('teaching');
     }
-  }, [questionId, topicName]);
+  }, [preFetchedData, questionTitle]);
 
   const handleStartQuiz = async () => {
     console.log('🎯 Starting quiz generation...');
@@ -881,36 +826,6 @@ export default function LessonScreen() {
       optionAnimations.forEach(anim => anim.setValue(1));
     }, [questionId, lessonData, currentPage, quizQuestions.length])
   );
-
-  if (currentPage === 'loading') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.lessonDot} />
-              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
-                {decodeHtmlEntities(questionTitle || topicName || 'Lesson')}
-              </ThemedText>
-            </View>
-          </View>
-          
-          <View style={styles.headerSpacer} />
-        </View>
-        
-        <View style={[styles.content, { justifyContent: 'center', alignItems: 'center' }]}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={[styles.lessonText, { marginTop: 20, textAlign: 'center' }]}>
-            Generating your personalized lesson...
-          </ThemedText>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   if (currentPage === 'teaching') {
     console.log('🎨 Rendering teaching page with lessonData:', lessonData);

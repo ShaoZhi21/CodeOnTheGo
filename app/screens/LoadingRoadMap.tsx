@@ -9,7 +9,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function LoadingRoadMap() {
   const params = useLocalSearchParams();
-  const { topicName } = params;
+  const { topicName, from } = params;
   
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
@@ -41,17 +41,17 @@ export default function LoadingRoadMap() {
     // Start actual data loading
     loadRoadmapData();
     
-    // Simulate realistic fetch progress
+    // Simulate realistic fetch progress with 2-second total duration
     const progressSteps = [
-      { time: 300, progress: 15 },   // Initial connection
-      { time: 600, progress: 30 },   // Database query/API call
-      { time: 900, progress: 45 },   // Data processing
-      { time: 1200, progress: 60 },  // Content processing
-      { time: 1500, progress: 75 },  // Final processing
-      { time: 1800, progress: 85 },  // Storage
-      { time: 2100, progress: 90 },  // 90% - Bird should fly!
-      { time: 2500, progress: 95 },  // Almost done
-      { time: 3000, progress: 100 }, // Complete
+      { time: 200, progress: 15 },   // Initial connection
+      { time: 400, progress: 30 },   // Database query/API call
+      { time: 600, progress: 45 },   // Data processing
+      { time: 800, progress: 60 },   // Content processing
+      { time: 1000, progress: 75 },  // Final processing
+      { time: 1200, progress: 85 },  // Storage
+      { time: 1400, progress: 90 },  // Almost done
+      { time: 1600, progress: 95 },  // 95% - Bird should fly!
+      { time: 2000, progress: 100 }, // Complete
     ];
 
     progressSteps.forEach(({ time, progress }) => {
@@ -107,7 +107,8 @@ export default function LoadingRoadMap() {
         pathname: '/screens/roadmaptopic',
         params: {
           topic: topicName,
-          preFetchedData: JSON.stringify(roadmapData)
+          preFetchedData: JSON.stringify(roadmapData),
+          from: from
         }
       });
 
@@ -119,7 +120,8 @@ export default function LoadingRoadMap() {
       router.replace({
         pathname: '/screens/roadmaptopic',
         params: {
-          topic: topicName
+          topic: topicName,
+          from: from
         }
       });
     }
@@ -182,10 +184,10 @@ export default function LoadingRoadMap() {
     };
   }, []);
 
-  // Watch for 90% progress to trigger bird flight
+  // Watch for 95% progress to trigger bird flight
   useEffect(() => {
-    if (fetchProgress >= 90 && !birdFlightStarted) {
-      console.log('🦅 90% progress reached! Bird starting to fly away...');
+    if (fetchProgress >= 95 && !birdFlightStarted) {
+      console.log('🦅 95% progress reached! Bird starting to fly away...');
       setBirdFlightStarted(true);
 
       Animated.timing(birdFlyAnim, {

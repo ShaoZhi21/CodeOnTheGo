@@ -149,17 +149,17 @@ export default function LoadingScreen({
       fetchProblemData();
     }
     
-    // Define progress steps with their timings
+    // Define progress steps with 2-second total duration
     const progressSteps = [
-      { time: 300, progress: 15 },   // Initial connection
-      { time: 600, progress: 30 },   // Database query/API call
-      { time: 900, progress: 45 },   // Data processing
-      { time: 1200, progress: 60 },  // Content processing
-      { time: 1500, progress: 75 },  // Final processing
-      { time: 1800, progress: 85 },  // Storage
-      { time: 2100, progress: 90 },  // 90% - Bird should fly!
-      { time: 2500, progress: 95 },  // Almost done
-      { time: 3000, progress: 100 }, // Complete
+      { time: 200, progress: 15 },   // Initial connection
+      { time: 400, progress: 30 },   // Database query/API call
+      { time: 600, progress: 45 },   // Data processing
+      { time: 800, progress: 60 },   // Content processing
+      { time: 1000, progress: 75 },  // Final processing
+      { time: 1200, progress: 85 },  // Storage
+      { time: 1400, progress: 90 },  // 90% - Bird should fly!
+      { time: 1600, progress: 95 },  // Almost done
+      { time: 2000, progress: 100 }, // Complete
     ];
 
     // Set up progress updates at each step
@@ -236,14 +236,6 @@ export default function LoadingScreen({
     if (fetchProgress >= 90 && !birdFlightStarted) {
       console.log('🦅 90% progress reached! Bird starting to fly away...');
       setBirdFlightStarted(true);
-      
-      // Clean up any existing stored data for this problem
-      if (problemId) {
-        AsyncStorage.removeItem(`problem_${problemId}`);
-      }
-      if (questionId) {
-        AsyncStorage.removeItem(`lesson_${questionId}`);
-      }
 
       // Start the bird flight animation
       Animated.timing(birdFlyAnim, {
@@ -258,17 +250,17 @@ export default function LoadingScreen({
     }
   }, [fetchProgress, birdFlightStarted]);
 
-  // Handle completion
+  // Handle completion and navigation
   useEffect(() => {
     if (fetchProgress >= 100) {
-      const finalTimer = setTimeout(() => {
+      const finalTimer = setTimeout(async () => {
         console.log('🎯 Fetch complete, transitioning to appropriate screen');
         setIsReady(true);
         
         // Navigate to appropriate screen based on mode
         if (isLessonMode === 'true') {
           console.log('🎯 Navigating to lesson screen with pre-fetched data');
-          router.replace({
+          await router.replace({
             pathname: '/screens/lesson',
             params: {
               questionId: questionId,
@@ -278,9 +270,17 @@ export default function LoadingScreen({
               usePrefetchedData: 'true'
             },
           });
+
+          // Clean up lesson data after navigation
+          setTimeout(async () => {
+            console.log('🧹 Cleaning up lesson data');
+            if (questionId) {
+              await AsyncStorage.removeItem(`lesson_${questionId}`);
+            }
+          }, 1000);
         } else {
           console.log('🎯 Navigating to question screen with pre-fetched data');
-          router.replace({
+          await router.replace({
             pathname: '/screens/question',
             params: {
               id: problemId,
@@ -289,6 +289,14 @@ export default function LoadingScreen({
               usePrefetchedData: 'true'
             },
           });
+
+          // Clean up problem data after navigation
+          setTimeout(async () => {
+            console.log('🧹 Cleaning up problem data');
+            if (problemId) {
+              await AsyncStorage.removeItem(`problem_${problemId}`);
+            }
+          }, 1000);
         }
         
         if (onLoadingComplete) {

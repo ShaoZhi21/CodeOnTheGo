@@ -82,6 +82,14 @@ const getTopicColors = (index: number) => {
 const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }) => {
   const colors = getTopicColors(index);
   
+  // Always have a default progress object, even if progress is undefined
+  const displayProgress = {
+    topic_name: topic.name,
+    completed_problems: progress?.completed_problems || 0,
+    total_problems: progress?.total_problems || 0,
+    completion_percentage: progress?.completion_percentage || 0
+  };
+  
   return (
     <TouchableOpacity 
       style={[styles.topicCard, { backgroundColor: colors.bg, borderColor: colors.border }]} 
@@ -97,13 +105,12 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }
           />
         </View>
         
-        {progress && progress.total_problems > 0 && (
-          <View style={styles.progressBadge}>
-            <ThemedText style={styles.progressText}>
-              {progress.completed_problems}/{progress.total_problems}
-            </ThemedText>
-          </View>
-        )}
+        {/* ALWAYS show progress badge - NO CONDITIONAL */}
+        <View style={styles.progressBadge}>
+          <ThemedText style={styles.progressText}>
+            {displayProgress.completed_problems}/{displayProgress.total_problems || '?'}
+          </ThemedText>
+        </View>
       </View>
       
       <View style={styles.cardContent}>
@@ -115,28 +122,27 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }
           {topic.description}
         </ThemedText>
         
-        {progress && progress.total_problems > 0 && (
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { 
-                    width: `${progress.completion_percentage}%`,
-                    backgroundColor: colors.accent 
-                  }
-                ]} 
-              />
-            </View>
-            <ThemedText style={styles.progressLabel}>
-              {Math.round(progress.completion_percentage)}% complete
-            </ThemedText>
+        {/* ALWAYS show progress container - NO CONDITIONAL */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { 
+                  width: `${displayProgress.completion_percentage}%`,
+                  backgroundColor: colors.accent 
+                }
+              ]} 
+            />
           </View>
-        )}
+          <ThemedText style={styles.progressLabel}>
+            {Math.round(displayProgress.completion_percentage)}% complete
+          </ThemedText>
+        </View>
         
         <View style={[styles.learnButton, { backgroundColor: colors.accent }]}>
           <ThemedText style={styles.learnButtonText}>
-            {progress && progress.completed_problems > 0 ? 'Continue →' : 'Start →'}
+            {displayProgress.completed_problems > 0 ? 'Continue →' : 'Start →'}
           </ThemedText>
         </View>
       </View>
@@ -147,12 +153,10 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }
 export default function LearnScreen() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recentTopics, setRecentTopics] = useState<string[]>([]);
   const [topicProgress, setTopicProgress] = useState<{ [key: string]: TopicProgress }>({});
 
   useEffect(() => {
     loadTopics();
-    loadRecentTopics();
   }, []);
 
   // Load progress when topics are available
@@ -170,18 +174,6 @@ export default function LearnScreen() {
       console.error('Error loading topics:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadRecentTopics = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const recentData = await TopicService.getRecentTopicNavigation(user.id);
-        setRecentTopics(recentData.map(item => item.topic_name));
-      }
-    } catch (error) {
-      console.error('Error loading recent topics:', error);
     }
   };
 
@@ -231,12 +223,6 @@ export default function LearnScreen() {
 
   const handleTopicPress = async (topic: Topic) => {
     try {
-      // Record topic navigation
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await TopicService.recordTopicNavigation(user.id, topic.name);
-      }
-      
       // Navigate to loading screen first
       router.replace({
         pathname: '/screens/LoadingRoadMap',
@@ -261,7 +247,6 @@ export default function LearnScreen() {
     );
   }
 
-  const recentTopicData = topics.filter(topic => recentTopics.includes(topic.name));
   const allTopicsData = topics;
 
   return (
@@ -274,39 +259,6 @@ export default function LearnScreen() {
             Master data structures and algorithms through interactive lessons
           </ThemedText>
         </View>
-
-        {/* Recent Topics Section */}
-        {recentTopicData.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Image 
-                  source={require('@/assets/images/icons/fire-icon.png')} 
-                  style={styles.sectionIcon}
-                  tintColor="#6564c7"
-                />
-                <ThemedText style={styles.sectionTitle}>Continue Learning</ThemedText>
-              </View>
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalScroll}
-            >
-              {recentTopicData.map((topic, index) => (
-                <View key={topic.id} style={styles.horizontalCard}>
-                  <TopicCard 
-                    topic={topic} 
-                    index={index} 
-                    progress={topicProgress[topic.name]}
-                    onPress={() => handleTopicPress(topic)} 
-                  />
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         {/* All Topics Section */}
         <View style={styles.section}>
@@ -420,13 +372,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E0D7FF',
-  },
-  horizontalScroll: {
-    paddingLeft: 24,
-  },
-  horizontalCard: {
-    marginRight: 16,
-    width: CARD_WIDTH,
   },
   topicsGrid: {
     flexDirection: 'row',
