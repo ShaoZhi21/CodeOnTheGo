@@ -6,6 +6,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const { getTopicProblems, getTopicStats, getAllTopics, recordTopicNavigation, getRecentTopicNavigation, getProblemSolution } = require('./services/topicService');
 const { getUserProfile, updateUserProfile, getUserProfileStats } = require('./services/profileService');
+const { TournamentService } = require('./services/tournamentService');
 const bodyParser = require('body-parser');
 
 // To use Judge0 API for code execution, you need to:
@@ -1520,6 +1521,261 @@ Make the content specific to this exact problem type and topic. Do not include a
   } catch (error) {
     console.error('Error generating test lesson with Gemini:', error);
     res.status(500).json({ error: 'Failed to generate lesson.' });
+  }
+});
+
+// --- Tournament Endpoints ---
+
+// Create a new tournament
+app.post('/api/tournaments', async (req, res) => {
+  try {
+    const { name, bracketSize, topicId, difficulty, entryFee, createdBy } = req.body;
+    
+    if (!name || !bracketSize || !topicId || !difficulty || !createdBy) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const tournamentId = await TournamentService.createTournament({
+      name, bracketSize, topicId, difficulty, entryFee, createdBy
+    });
+
+    res.json({ tournamentId });
+  } catch (error) {
+    console.error('Error creating tournament:', error);
+    res.status(500).json({ error: 'Failed to create tournament' });
+  }
+});
+
+// Join a tournament
+app.post('/api/tournaments/:tournamentId/join', async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const { playerId, skillLevel } = req.body;
+
+    if (!playerId || !skillLevel) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const success = await TournamentService.joinTournament(tournamentId, playerId, skillLevel);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ error: 'Cannot join tournament' });
+    }
+  } catch (error) {
+    console.error('Error joining tournament:', error);
+    res.status(500).json({ error: 'Failed to join tournament' });
+  }
+});
+
+// Get tournament details
+app.get('/api/tournaments/:tournamentId', async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const tournament = await TournamentService.getTournament(tournamentId);
+    res.json(tournament);
+  } catch (error) {
+    console.error('Error getting tournament:', error);
+    res.status(500).json({ error: 'Failed to get tournament' });
+  }
+});
+
+// Get all active tournaments
+app.get('/api/tournaments', async (req, res) => {
+  try {
+    const tournaments = await TournamentService.getActiveTournaments();
+    res.json(tournaments);
+  } catch (error) {
+    console.error('Error getting tournaments:', error);
+    res.status(500).json({ error: 'Failed to get tournaments' });
+  }
+});
+
+// Get tournament bracket
+app.get('/api/tournaments/:tournamentId/bracket', async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const bracket = await TournamentService.getTournamentBracket(tournamentId);
+    res.json(bracket);
+  } catch (error) {
+    console.error('Error getting bracket:', error);
+    res.status(500).json({ error: 'Failed to get bracket' });
+  }
+});
+
+// Get tournament players
+app.get('/api/tournaments/:tournamentId/players', async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const players = await TournamentService.getTournamentPlayers(tournamentId);
+    res.json(players);
+  } catch (error) {
+    console.error('Error getting players:', error);
+    res.status(500).json({ error: 'Failed to get players' });
+  }
+});
+
+// Get current match for a player
+app.get('/api/tournaments/:tournamentId/current-match/:playerId', async (req, res) => {
+  try {
+    const { tournamentId, playerId } = req.params;
+    const match = await TournamentService.getCurrentMatch(tournamentId, playerId);
+    res.json(match);
+  } catch (error) {
+    console.error('Error getting current match:', error);
+    res.status(500).json({ error: 'Failed to get current match' });
+  }
+});
+
+// Start a match
+app.post('/api/matches/:matchId/start', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    await TournamentService.startMatch(matchId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error starting match:', error);
+    res.status(500).json({ error: 'Failed to start match' });
+  }
+});
+
+// Submit solution for a match
+app.post('/api/matches/:matchId/submit', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { playerId, pseudocode } = req.body;
+
+    if (!playerId || !pseudocode) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const submission = await TournamentService.submitSolution(matchId, playerId, pseudocode);
+    res.json(submission);
+  } catch (error) {
+    console.error('Error submitting solution:', error);
+    res.status(500).json({ error: 'Failed to submit solution' });
+  }
+});
+
+// Complete a match (called after both players submit and analysis is done)
+app.post('/api/matches/:matchId/complete', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const winnerId = await TournamentService.completeMatch(matchId);
+    res.json({ winnerId });
+  } catch (error) {
+    console.error('Error completing match:', error);
+    res.status(500).json({ error: 'Failed to complete match' });
+  }
+});
+
+// Join tournament queue for matchmaking
+app.post('/api/tournament-queue/join', async (req, res) => {
+  try {
+    const { bracketSize, topicId, difficulty, skillLevel, playerId } = req.body;
+
+    if (!bracketSize || !topicId || !difficulty || !skillLevel || !playerId) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const queueEntry = await TournamentService.joinQueue({
+      bracketSize, topicId, difficulty, skillLevel, playerId
+    });
+
+    res.json(queueEntry);
+  } catch (error) {
+    console.error('Error joining queue:', error);
+    res.status(500).json({ error: 'Failed to join queue' });
+  }
+});
+
+// Leave tournament queue
+app.delete('/api/tournament-queue/leave/:playerId', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    await TournamentService.leaveQueue(playerId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error leaving queue:', error);
+    res.status(500).json({ error: 'Failed to leave queue' });
+  }
+});
+
+// Find matchmaking opportunities (for background job)
+app.get('/api/tournament-queue/matchmaking', async (req, res) => {
+  try {
+    const matchmakingGroups = await TournamentService.findMatchmaking();
+    res.json(matchmakingGroups);
+  } catch (error) {
+    console.error('Error finding matchmaking:', error);
+    res.status(500).json({ error: 'Failed to find matchmaking' });
+  }
+});
+
+// Create tournament from matchmaking group
+app.post('/api/tournament-queue/create-tournament', async (req, res) => {
+  try {
+    const { group } = req.body;
+    const tournamentId = await TournamentService.createTournamentFromMatchmaking(group);
+    res.json({ tournamentId });
+  } catch (error) {
+    console.error('Error creating tournament from matchmaking:', error);
+    res.status(500).json({ error: 'Failed to create tournament' });
+  }
+});
+
+// Get user's tournament history
+app.get('/api/users/:userId/tournaments', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const tournaments = await TournamentService.getUserTournaments(userId);
+    res.json(tournaments);
+  } catch (error) {
+    console.error('Error getting user tournaments:', error);
+    res.status(500).json({ error: 'Failed to get user tournaments' });
+  }
+});
+
+// Get tournament statistics
+app.get('/api/tournaments/:tournamentId/stats', async (req, res) => {
+  try {
+    const { tournamentId } = req.params;
+    const stats = await TournamentService.getTournamentStats(tournamentId);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error getting tournament stats:', error);
+    res.status(500).json({ error: 'Failed to get tournament stats' });
+  }
+});
+
+// Get match submissions
+app.get('/api/matches/:matchId/submissions', async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const submissions = await TournamentService.getMatchSubmissions(matchId);
+    res.json(submissions);
+  } catch (error) {
+    console.error('Error getting match submissions:', error);
+    res.status(500).json({ error: 'Failed to get match submissions' });
+  }
+});
+
+// Update submission with analysis
+app.put('/api/submissions/:submissionId/analysis', async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { analysis } = req.body;
+
+    if (!analysis) {
+      return res.status(400).json({ error: 'Missing analysis data' });
+    }
+
+    await TournamentService.updateSubmissionAnalysis(submissionId, analysis);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating submission analysis:', error);
+    res.status(500).json({ error: 'Failed to update submission analysis' });
   }
 });
 

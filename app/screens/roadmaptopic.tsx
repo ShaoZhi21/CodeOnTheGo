@@ -524,31 +524,29 @@ export default function RoadmapTopic() {
   };
 
   // Topic-specific puns for loading screen
-  const getTopicPun = (topic: string): string => {
+  const getTopicPun = (topic: string): React.ReactNode => {
     const topicLower = topic.toLowerCase();
-    
-    if (topicLower.includes('array')) return "Array-ing your path to success! 📊";
-    if (topicLower.includes('string')) return "String-ing along your coding journey! 🧵";
-    if (topicLower.includes('tree')) return "Branch-ing out into new algorithms! 🌳";
-    if (topicLower.includes('graph')) return "Graph-ing your way to mastery! 📈";
-    if (topicLower.includes('hash')) return "Hash-tag coding excellence! #️⃣";
-    if (topicLower.includes('stack')) return "Stack-ing up your skills! 📚";
-    if (topicLower.includes('queue')) return "Queue-ing up some amazing problems! 🚶‍♂️";
-    if (topicLower.includes('sort')) return "Sort-ing out the best challenges! 🔄";
-    if (topicLower.includes('search')) return "Search-ing for the perfect solution! 🔍";
-    if (topicLower.includes('dynamic')) return "Dynamic-ally building your expertise! ⚡";
-    if (topicLower.includes('greedy')) return "Greedy for more coding knowledge! 🤤";
-    if (topicLower.includes('backtrack')) return "Back-track-ing to find the best path! 🔄";
-    if (topicLower.includes('recursion')) return "Recursion: See recursion! 🔁";
-    if (topicLower.includes('binary')) return "Binary thinking for optimal solutions! 1️⃣0️⃣";
-    if (topicLower.includes('linked')) return "Link-ed and ready to code! 🔗";
-    if (topicLower.includes('heap')) return "Heap-ing on the coding challenges! ⛰️";
-    if (topicLower.includes('trie')) return "Trie-ing your best at every problem! 🌲";
-    if (topicLower.includes('sliding')) return "Sliding into coding greatness! 🛝";
-    if (topicLower.includes('two')) return "Two pointers, infinite possibilities! 👉👈";
-    if (topicLower.includes('bit')) return "Bit by bit, mastering algorithms! 🔢";
-    
-    return "Code-ing your way to greatness! 🚀";
+    if (topicLower.includes('array')) return <ThemedText>Array-ing your path to success! 📊</ThemedText>;
+    if (topicLower.includes('string')) return <ThemedText>String-ing along your coding journey! 🧵</ThemedText>;
+    if (topicLower.includes('tree')) return <ThemedText>Branch-ing out into new algorithms! 🌳</ThemedText>;
+    if (topicLower.includes('graph')) return <ThemedText>Graph-ing your way to mastery! 📈</ThemedText>;
+    if (topicLower.includes('hash')) return <ThemedText>Hash-tag coding excellence! #️⃣</ThemedText>;
+    if (topicLower.includes('stack')) return <ThemedText>Stack-ing up your skills! 📚</ThemedText>;
+    if (topicLower.includes('queue')) return <ThemedText>Queue-ing up some amazing problems! 🚶‍♂️</ThemedText>;
+    if (topicLower.includes('sort')) return <ThemedText>Sort-ing out the best challenges! 🔄</ThemedText>;
+    if (topicLower.includes('search')) return <ThemedText>Search-ing for the perfect solution! 🔍</ThemedText>;
+    if (topicLower.includes('dynamic')) return <ThemedText>Dynamic-ally building your expertise! ⚡</ThemedText>;
+    if (topicLower.includes('greedy')) return <ThemedText>Greedy for more coding knowledge! 🤤</ThemedText>;
+    if (topicLower.includes('backtrack')) return <ThemedText>Back-track-ing to find the best path! 🔄</ThemedText>;
+    if (topicLower.includes('recursion')) return <ThemedText>Recursion: See recursion! 🔁</ThemedText>;
+    if (topicLower.includes('binary')) return <ThemedText>Binary thinking for optimal solutions! 1️⃣0️⃣</ThemedText>;
+    if (topicLower.includes('linked')) return <ThemedText>Link-ed and ready to code! 🔗</ThemedText>;
+    if (topicLower.includes('heap')) return <ThemedText>Heap-ing on the coding challenges! ⛰️</ThemedText>;
+    if (topicLower.includes('trie')) return <ThemedText>Trie-ing your best at every problem! 🌲</ThemedText>;
+    if (topicLower.includes('sliding')) return <ThemedText>Sliding into coding greatness! 🛝</ThemedText>;
+    if (topicLower.includes('two')) return <ThemedText>Two pointers, infinite possibilities! 👉👈</ThemedText>;
+    if (topicLower.includes('bit')) return <ThemedText>Bit by bit, mastering algorithms! 🔢</ThemedText>;
+    return <ThemedText>Code-ing your way to greatness! 🚀</ThemedText>;
   };
 
   if (loading || !topicString) {
@@ -559,9 +557,7 @@ export default function RoadmapTopic() {
           <View style={styles.loadingLogoContainer}>
             <Image source={mascotIcon} style={styles.loadingLogo} />
           </View>
-          <ThemedText style={styles.loadingPun}>
-            {getTopicPun(topicString || '')}
-          </ThemedText>
+          {getTopicPun(topicString || '')}
           <ThemedText style={styles.loadingText}>Loading...</ThemedText>
           <ActivityIndicator size="large" color="#6564c7" style={styles.loadingSpinner} />
         </View>
