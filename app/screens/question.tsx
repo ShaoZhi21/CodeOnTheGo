@@ -7,6 +7,7 @@ import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
+import { useStreak } from '@/contexts/StreakContext';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
@@ -739,6 +740,7 @@ const styles = StyleSheet.create({
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty, preFetchedData } = params;
+  const { showStreakAnimation } = useStreak();
   
   // Refs
   const exampleScrollViewRef = useRef<ScrollView>(null);
@@ -1554,17 +1556,9 @@ export default function QuestionScreen() {
   };
 
   const handleMarkComplete = async () => {
-    if (!problem || !analysis) {
-      console.error('Missing problem or analysis data');
-      return;
-    }
-
-    console.log('🔍 HANDLE MARK COMPLETE - Full Analysis Object:', JSON.stringify(analysis, null, 2));
-    console.log('🔍 HANDLE MARK COMPLETE - Score from analysis:', analysis.score, 'Type:', typeof analysis.score);
-    console.log('🔍 HANDLE MARK COMPLETE - Stars from analysis:', analysis.stars, 'Type:', typeof analysis.stars);
-
     try {
-      // Import the service function
+      if (!analysis) return;
+      
       const { markQuestionComplete } = await import('@/lib/services/userProgress');
       
       const completeParams = {
@@ -1579,6 +1573,30 @@ export default function QuestionScreen() {
 
       if (result.success) {
         console.log('Problem marked as complete!');
+        
+        // Check if this is a daily challenge completion
+        const isDailyChallenge = params.isDaily === 'true';
+        if (isDailyChallenge) {
+          console.log('🎯 Daily challenge completed! Triggering streak animation');
+          // Trigger streak animation for daily challenge completion
+          showStreakAnimation(1);
+          
+          // Mark daily challenge as completed in the service
+          try {
+            const { DailyChallengeService } = await import('@/lib/services/dailyChallengeService');
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await DailyChallengeService.markChallengeCompleted(user.id);
+              console.log('✅ Daily challenge marked as completed in database');
+            }
+          } catch (error) {
+            console.error('Error marking daily challenge as completed:', error);
+          }
+        } else {
+          // Regular question completion
+          showStreakAnimation(1);
+        }
+        
         // Show success message or animation here if desired
         router.back();
       } else {

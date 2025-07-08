@@ -1,8 +1,18 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { ThemedText } from '../../components/ThemedText';
+import { useStreak } from '../../contexts/StreakContext';
 import { apiCall } from '../../lib/api-config';
 import { supabase } from '../../lib/supabase';
 
@@ -87,17 +97,27 @@ function renderLessonContent(content: string) {
 }
 
 export default function LessonScreen() {
-  console.log('🚀 LessonScreen component loaded!');
-  console.log('🚀 Params:', useLocalSearchParams());
-  
+  const isMounted = useRef(false);
   const params = useLocalSearchParams();
   const questionId = Array.isArray(params.questionId) ? params.questionId[0] : params.questionId;
   const questionTitle = Array.isArray(params.questionTitle) ? params.questionTitle[0] : params.questionTitle;
   const questionDescription = Array.isArray(params.questionDescription) ? params.questionDescription[0] : params.questionDescription;
   const topicName = Array.isArray(params.topicName) ? params.topicName[0] : params.topicName;
-  const preFetchedData = params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
+  
+  // Parse preFetchedData only once using useMemo
+  const preFetchedData = useMemo(() => {
+    try {
+      return params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
+    } catch (e) {
+      console.error('Failed to parse preFetchedData:', e);
+      return null;
+    }
+  }, [params.preFetchedData]); // Add params.preFetchedData as dependency
   
   const router = useRouter();
+  const { showStreakAnimation } = useStreak();
+  
+  // Initialize all state
   const [currentPage, setCurrentPage] = useState<'teaching' | 'quiz' | 'completion' | 'retry'>('teaching');
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -108,16 +128,20 @@ export default function LessonScreen() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
   
-  // Lesson and quiz data
-  const [lessonData, setLessonData] = useState<LessonData | null>(preFetchedData);
+  // Initialize lesson data state
+  const [lessonData, setLessonData] = useState<LessonData | null>(null);
   const [quizData, setQuizData] = useState<QuizData | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
   
-  // Animation values
-  const fadeAnim = new Animated.Value(1);
-  const slideAnim = new Animated.Value(0);
-  const optionAnimations = [new Animated.Value(1), new Animated.Value(1), new Animated.Value(1)];
+  // Animation values with useRef
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const optionAnimations = useRef([
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1)
+  ]).current;
 
   // Generate MCQ for each part - this is just a fallback, real MCQs come from the API
   const generateMCQForPart = (title: string, content: string, index: number): QuizQuestion => {
@@ -132,7 +156,7 @@ export default function LessonScreen() {
   };
 
   // Function to create structured lesson parts
-  const createStructuredLessonParts = (): LessonPart[] => {
+  const createStructuredLessonParts = useCallback((): LessonPart[] => {
     const parts: LessonPart[] = [];
     
     // Define the structured lesson outline - reduced to 4 essential parts
@@ -159,17 +183,16 @@ export default function LessonScreen() {
     lessonStructure.forEach((structure, index) => {
       parts.push({
         title: structure.title,
-        content: structure.prompt, // Use prompt as placeholder content
+        content: structure.prompt,
         mcq: generateMCQForPart(structure.title, structure.prompt, index)
       });
     });
 
     return parts;
-  };
+  }, [questionTitle]);
 
   // Function to break lesson content into parts (fallback)
-  const breakContentIntoParts = (content: string): LessonPart[] => {
-    // Ensure content is a string before splitting
+  const breakContentIntoParts = useCallback((content: string): LessonPart[] => {
     if (!content || typeof content !== 'string') {
       return createStructuredLessonParts();
     }
@@ -193,13 +216,8 @@ export default function LessonScreen() {
       }
     });
     
-    // If no sections found, create structured parts
-    if (parts.length === 0) {
-      return createStructuredLessonParts();
-    }
-    
-    return parts;
-  };
+    return parts.length > 0 ? parts : createStructuredLessonParts();
+  }, [createStructuredLessonParts]);
 
   // Debug lessonData changes
   useEffect(() => {
@@ -212,7 +230,53 @@ export default function LessonScreen() {
       const parts = breakContentIntoParts(lessonData.content);
       setLessonData(prev => prev ? { ...prev, parts } : null);
     }
-  }, [lessonData]);
+  }, [lessonData, breakContentIntoParts]);
+
+  // Initialize lesson data only once
+  useEffect(() => {
+    if (!isMounted.current && preFetchedData) {
+      isMounted.current = true;
+      
+      // Use requestAnimationFrame to ensure we're not scheduling updates during render
+      requestAnimationFrame(() => {
+        console.log('🎯 Initializing lesson data (one-time only)');
+        setLessonData(preFetchedData);
+      });
+    }
+  }, [preFetchedData]);
+
+  // Handle state reset in a separate effect
+  const resetState = useCallback(() => {
+    requestAnimationFrame(() => {
+      setCurrentPage('teaching');
+      setCurrentPartIndex(0);
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers([]);
+      setPartMcqAnswers({});
+      setShowPartMcqFeedback({});
+      setScore(0);
+      setShowFeedback(false);
+      setIsProcessingAnswer(false);
+      setQuizData(null);
+      setQuizQuestions([]);
+      setIsGeneratingQuiz(false);
+    });
+  }, []);
+
+  // Break content into parts when lesson data changes
+  useEffect(() => {
+    if (lessonData?.content && !lessonData.parts && typeof lessonData.content === 'string') {
+      requestAnimationFrame(() => {
+        const parts = breakContentIntoParts(lessonData.content);
+        setLessonData(prev => prev ? { ...prev, parts } : null);
+      });
+    }
+  }, [lessonData, breakContentIntoParts]);
+
+  // Memoize the current part to prevent unnecessary re-renders
+  const currentPart = useMemo(() => {
+    return lessonData?.parts?.[currentPartIndex] || null;
+  }, [lessonData?.parts, currentPartIndex]);
 
   // Load lesson data from pre-fetched data
   useEffect(() => {
@@ -472,6 +536,8 @@ export default function LessonScreen() {
           
           if (allCorrect) {
             console.log('🎉 All correct - showing completion page');
+            // Trigger streak animation for lesson completion
+            showStreakAnimation(1);
             setCurrentPage('completion');
           } else {
             console.log('❌ Not all correct - showing retry page');
@@ -488,6 +554,8 @@ export default function LessonScreen() {
           
           if (allCorrect) {
             console.log('🎉 All correct - showing completion page (fallback)');
+            // Trigger streak animation for lesson completion (fallback)
+            showStreakAnimation(1);
             setCurrentPage('completion');
           } else {
             console.log('❌ Not all correct - showing retry page (fallback)');
@@ -511,6 +579,8 @@ export default function LessonScreen() {
           
           if (allCorrect) {
             console.log('🎉 All correct - showing completion page');
+            // Trigger streak animation for lesson completion
+            showStreakAnimation(1);
             setCurrentPage('completion');
           } else {
             console.log('❌ Not all correct - showing retry page');
@@ -527,6 +597,8 @@ export default function LessonScreen() {
           
           if (allCorrect) {
             console.log('🎉 All correct - showing completion page (fallback)');
+            // Trigger streak animation for lesson completion (fallback)
+            showStreakAnimation(1);
             setCurrentPage('completion');
           } else {
             console.log('❌ Not all correct - showing retry page (fallback)');
@@ -585,11 +657,12 @@ export default function LessonScreen() {
   };
 
   const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/screens/tournament');
-    }
+    router.replace({
+      pathname: '/screens/roadmaptopic',
+      params: {
+        topicName: topicName as string
+      }
+    });
   };
 
   const handleSaveQuizCompletion = async () => {
@@ -792,39 +865,28 @@ export default function LessonScreen() {
     });
   }, [currentPage, currentQuestionIndex, selectedAnswers.length, quizQuestions.length, score]);
 
+  // Handle focus changes without resetting state unnecessarily
   useFocusEffect(
-    React.useCallback(() => {
-      // Don't reset if we're on completion or retry page
+    useCallback(() => {
+      let shouldCleanup = false;
+
+      // Only reset if we're actually coming from completion/retry
       if (currentPage === 'completion' || currentPage === 'retry') {
-        console.log('🔄 Screen focused on completion/retry page - not resetting state');
-        return;
+        console.log('🔄 Resetting state after completion/retry');
+        shouldCleanup = true;
+        // Schedule the state reset for the next frame
+        requestAnimationFrame(() => {
+          resetState();
+        });
       }
       
-      // Only reset if we're not in the middle of a quiz
-      if (currentPage === 'quiz' && quizQuestions.length > 0) {
-        // Don't reset if we're actively taking a quiz
-        console.log('🔄 Screen focused during quiz - not resetting state');
-        return;
-      }
-      
-      // Only reset if we have valid lesson data
-      if (!lessonData || !questionId) {
-        console.log('🔄 Screen focused but no lesson data - not resetting state');
-        return;
-      }
-      
-      console.log('🔄 Resetting lesson state on screen focus');
-      setCurrentPage('teaching');
-      setCurrentQuestionIndex(0);
-      setSelectedAnswers([]);
-      setScore(0);
-      setShowFeedback(false);
-      setIsProcessingAnswer(false);
-      // Reset animations if needed
-      fadeAnim.setValue(1);
-      slideAnim.setValue(0);
-      optionAnimations.forEach(anim => anim.setValue(1));
-    }, [questionId, lessonData, currentPage, quizQuestions.length])
+      return () => {
+        // Cleanup only if necessary
+        if (shouldCleanup) {
+          console.log('🧹 Cleaning up after completion/retry');
+        }
+      };
+    }, [currentPage, resetState])
   );
 
   if (currentPage === 'teaching') {

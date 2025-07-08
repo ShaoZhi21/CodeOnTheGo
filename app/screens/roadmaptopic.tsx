@@ -338,7 +338,7 @@ export default function RoadmapTopic() {
     const actualIndex = (questions?.length || 0) - 1 - index;
     const isLeft = index % 2 === 0;
     const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
-    const isLocked = !isUnlocked(question, actualIndex);
+    const unlocked = isUnlocked(question, actualIndex); // Call once and store result
     const isCompleted = question.stars && question.stars > 0;
     
     // Safety checks for all properties with proper string conversion
@@ -364,7 +364,7 @@ export default function RoadmapTopic() {
             <ThemedText 
               style={[
                 styles.milestoneTitle,
-                isLocked && styles.lockedText
+                !unlocked && styles.lockedText
               ]}
               numberOfLines={2}
               ellipsizeMode="tail"
@@ -389,12 +389,12 @@ export default function RoadmapTopic() {
               style={[
                 styles.milestoneIconWrapper,
                 isCurrent && styles.currentMilestone,
-                isLocked && styles.lockedMilestone
+                !unlocked && styles.lockedMilestone
               ]}
               onPress={() => handleQuestionPress(question, actualIndex)}
-              disabled={isLocked}
+              disabled={!unlocked}
             >
-              {isLocked ? (
+              {!unlocked ? (
                 <Image 
                   source={require('../../assets/images/icons/lock-icon.png')} 
                   style={[styles.lockIcon, { tintColor: '#fff' }]} 
@@ -406,13 +406,13 @@ export default function RoadmapTopic() {
                   source={icon} 
                   style={[
                     styles.milestoneIcon,
-                    isLocked && { tintColor: '#fff' }
+                    !unlocked && { tintColor: '#fff' }
                   ]} 
                 />
               )}
             </TouchableOpacity>
             {/* Concave stars below bubble: only show if unlocked and completed */}
-            {isUnlocked(question, actualIndex) && isCompleted && (
+            {unlocked && isCompleted && (
               <View style={styles.concaveStarsContainer} pointerEvents="none">
                 {[1, 2, 3, 4, 5].map((star, i) => {
                   const arcOffsets = [18, 9, 0, 9, 18];
@@ -436,7 +436,7 @@ export default function RoadmapTopic() {
             <ThemedText 
               style={[
                 styles.milestoneTitle,
-                isLocked && styles.lockedText
+                !unlocked && styles.lockedText
               ]}
               numberOfLines={2}
               ellipsizeMode="tail"

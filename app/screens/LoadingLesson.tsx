@@ -1,8 +1,8 @@
 import { apiCall } from '@/lib/api-config';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
@@ -18,15 +18,13 @@ export default function LoadingLesson({
   onDataFetched
 }: LoadingLessonProps) {
   const params = useLocalSearchParams();
-  const { questionId, questionTitle, questionDescription, topicName, questionDifficulty, from } = params;
+  const { questionId, questionTitle, questionDescription, topicName, questionDifficulty } = params;
   
   const [isReady, setIsReady] = useState(false);
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
   const [fetchedData, setFetchedData] = useState<any>(null);
-  const [startTime, setStartTime] = useState<number>(0);
   const [apiCompleted, setApiCompleted] = useState(false);
-  const [apiCompletedTime, setApiCompletedTime] = useState<number>(0);
   
   // Animation values
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -35,11 +33,11 @@ export default function LoadingLesson({
   const birdFlyAnim = useRef(new Animated.Value(0)).current;
   const captionFadeAnim = useRef(new Animated.Value(0)).current;
   const effectRun = useRef(false);
-  const speedUpTriggered = useRef(false);
   const animationsStarted = useRef(false);
   const progressUpdateRef = useRef(onProgressUpdate);
   const onLoadingCompleteRef = useRef(onLoadingComplete);
   const onDataFetchedRef = useRef(onDataFetched);
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Update refs when props change
   useEffect(() => {
@@ -51,69 +49,20 @@ export default function LoadingLesson({
   const appName = 'CodeOnTheGo';
   const caption = 'Generating your personalized lesson...';
 
-  // Fun loading messages
-  const loadingMessages = [
-    "Turning complex code into simple steps... like untangling headphones! 🎧",
-    "Making this lesson as easy as copy & paste... but you'll actually learn! 📚",
-    "Brewing the perfect mix of theory and practice... ☕️",
-    "Finding the easiest way to explain this... no big words, promise! 🤝",
-    "Loading examples that will make you go 'Aha!' 💡",
-    "Sprinkling some magic to make coding fun... ✨",
-    "Preparing a lesson so good, even your cat could understand it! 🐱",
-    "Making sure this is easier than finding the TV remote 📺",
-    "Cooking up code examples that'll make you smile 👨‍🍳",
-    "Don't worry, we're making this byte-sized! 🍪",
-    "Why did the programmer quit his job? He didn't get arrays! 🤓",
-    "What's a programmer's favorite snack? Computer chips! 🍪",
-    "Why do programmers prefer dark mode? Because light attracts bugs! 🐛",
-    "Why did the programmer go broke? Because he used up all his cache! 💰",
-    "What did the HTML tag say to the other? You're looking so bold today! 😎"
-  ];
-
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const messageAnim = useRef(new Animated.Value(1)).current;
-
-  // Cycle through messages every 6 seconds
-  useEffect(() => {
-    if (fetchProgress >= 100) return;
-
-    const cycleMessages = () => {
-      Animated.sequence([
-        // Fade out
-        Animated.timing(messageAnim, {
-          toValue: 0,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        // Change message and fade in
-        Animated.timing(messageAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        })
-      ]).start(() => {
-        setCurrentMessageIndex((prev) => (prev + 1) % loadingMessages.length);
-      });
-    };
-
-    const interval = setInterval(cycleMessages, 6000);
-    return () => clearInterval(interval);
-  }, [fetchProgress]);
-
-  // Fetch lesson data with dynamic timing
-  const fetchLessonData = async () => {
+  // Fetch lesson data
+  const fetchLessonData = useCallback(async () => {
     try {
       console.log('🔄 Fetching lesson data...');
-      setStartTime(Date.now());
       
-      const response = await apiCall('/generate-lesson', {
+      const response = await apiCall('/api/generate-topic-lesson', {
         method: 'POST',
         body: JSON.stringify({
-          questionId: questionId,
+          problemId: questionId,
           questionTitle: questionTitle,
           questionDescription: questionDescription,
           topicName: topicName,
-          difficulty: questionDifficulty
+          difficulty: questionDifficulty,
+          fastStructuredLesson: true
         })
       });
 
@@ -122,7 +71,6 @@ export default function LoadingLesson({
         console.log('✅ Lesson data fetched successfully');
         setFetchedData(lessonData);
         setApiCompleted(true);
-        setApiCompletedTime(Date.now());
         
         if (onDataFetchedRef.current) {
           onDataFetchedRef.current(lessonData);
@@ -135,9 +83,9 @@ export default function LoadingLesson({
       console.error('❌ Error fetching lesson data:', error);
       setApiCompleted(true);
     }
-  };
+  }, [questionId, questionTitle, questionDescription, topicName, questionDifficulty]);
 
-  // Start lesson generation and slow progress simulation
+  // Start lesson generation and progress simulation
   useEffect(() => {
     if (effectRun.current) return;
     effectRun.current = true;
@@ -147,80 +95,73 @@ export default function LoadingLesson({
     // Start actual lesson generation
     fetchLessonData();
     
-    // Slow progress steps (8 seconds total, but stops at 90% until API completes)
-    const slowProgressSteps = [
-      { time: 800, progress: 10 },
-      { time: 1600, progress: 20 },
-      { time: 2400, progress: 30 },
-      { time: 3200, progress: 40 },
-      { time: 4000, progress: 50 },
-      { time: 4800, progress: 60 },
-      { time: 5600, progress: 70 },
-      { time: 6400, progress: 80 },
-      { time: 7200, progress: 85 },
-      { time: 8000, progress: 90 },
+    // Progress steps - 10% every second, stops at 90% until API completes
+    const progressSteps = [
+      { time: 1000, progress: 10 },
+      { time: 2000, progress: 20 },
+      { time: 3000, progress: 30 },
+      { time: 4000, progress: 40 },
+      { time: 5000, progress: 50 },
+      { time: 6000, progress: 60 },
+      { time: 7000, progress: 70 },
+      { time: 8000, progress: 80 },
+      { time: 9000, progress: 90 },
     ];
 
-    // Set up slow progress updates
-    const timeouts: number[] = [];
-    slowProgressSteps.forEach(({ time, progress }) => {
+    // Set up progress updates
+    progressSteps.forEach(({ time, progress }) => {
       const timeout = setTimeout(() => {
-        setFetchProgress(prev => Math.max(prev, progress));
-        if (progressUpdateRef.current) {
-          progressUpdateRef.current(progress);
-        }
+        setFetchProgress(prev => {
+          const newProgress = Math.max(prev, progress);
+          if (progressUpdateRef.current) {
+            progressUpdateRef.current(newProgress);
+          }
+          return newProgress;
+        });
       }, time);
-      timeouts.push(timeout);
+      timeoutsRef.current.push(timeout);
     });
 
     return () => {
-      timeouts.forEach(clearTimeout);
+      timeoutsRef.current.forEach(clearTimeout);
+      timeoutsRef.current = [];
     };
-  }, []);
+  }, [fetchLessonData]);
 
-  // Speed up progress when API completes
+  // Complete progress when API is done
   useEffect(() => {
-    if (!apiCompleted || !apiCompletedTime || speedUpTriggered.current) return;
-    speedUpTriggered.current = true;
-    
-    console.log('🚀 API completed, speeding up progress bar');
-    
-    const speedUpSteps = [
-      { time: 100, progress: 95 },
-      { time: 300, progress: 100 },
-    ];
+    if (apiCompleted && fetchProgress >= 90) {
+      // Complete the progress
+      setFetchProgress(100);
+      if (progressUpdateRef.current) {
+        progressUpdateRef.current(100);
+      }
+      if (onLoadingCompleteRef.current) {
+        onLoadingCompleteRef.current();
+      }
 
-    const timeouts: number[] = [];
-    speedUpSteps.forEach(({ time, progress }) => {
-      const timeout = setTimeout(() => {
-        setFetchProgress(progress);
-        if (progressUpdateRef.current) {
-          progressUpdateRef.current(progress);
-        }
-      }, time);
-      timeouts.push(timeout);
-    });
+      // Add delay before navigation to allow animations to complete
+      const navigationTimer = setTimeout(() => {
+        router.replace({
+          pathname: '/screens/lesson',
+          params: {
+            questionId: questionId as string,
+            questionTitle: questionTitle as string,
+            questionDescription: questionDescription as string,
+            topicName: topicName as string,
+            preFetchedData: JSON.stringify(fetchedData)
+          }
+        });
+      }, 500);
 
-    return () => {
-      timeouts.forEach(clearTimeout);
-    };
-  }, [apiCompleted, apiCompletedTime]);
+      return () => clearTimeout(navigationTimer);
+    }
+  }, [apiCompleted, fetchProgress, questionId, questionTitle, questionDescription, topicName, fetchedData]);
 
-  // Update progress animation
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: fetchProgress,
-      duration: apiCompleted ? 200 : 300,
-      useNativeDriver: false,
-    }).start();
-  }, [fetchProgress]);
-
-  // Start animations immediately and reliably
+  // Start animations when component mounts
   useEffect(() => {
     if (animationsStarted.current) return;
     animationsStarted.current = true;
-    
-    console.log('🔄 LoadingLesson: Starting animations...');
 
     // Bird scale in
     Animated.timing(birdScaleAnim, {
@@ -272,45 +213,16 @@ export default function LoadingLesson({
     };
   }, []);
 
-  // Watch for 95% progress to trigger bird flight
+  // Start bird flight animation when progress is complete
   useEffect(() => {
-    if (fetchProgress < 95 || birdFlightStarted) return;
-    
-    console.log('🦅 95% progress reached! Bird starting to fly away...');
-    setBirdFlightStarted(true);
-
-    Animated.timing(birdFlyAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start(() => {
-      if (onLoadingCompleteRef.current) {
-        onLoadingCompleteRef.current();
-      }
-    });
-  }, [fetchProgress]);
-
-  // Handle completion and navigation
-  useEffect(() => {
-    if (fetchProgress < 100) return;
-    
-    const finalTimer = setTimeout(() => {
-      console.log('🎯 Lesson generation complete, transitioning to lesson screen');
-      setIsReady(true);
-      
-      router.replace({
-        pathname: '/screens/lesson',
-        params: {
-          questionId: questionId as string,
-          questionTitle: questionTitle as string,
-          questionDescription: questionDescription as string,
-          topicName: topicName as string,
-          preFetchedData: JSON.stringify(fetchedData)
-        }
-      });
-    }, 300);
-
-    return () => clearTimeout(finalTimer);
+    if (fetchProgress >= 95 && !birdFlightStarted) {
+      setBirdFlightStarted(true);
+      Animated.timing(birdFlyAnim, {
+        toValue: 1,
+        duration: 1000,
+        useNativeDriver: true,
+      }).start();
+    }
   }, [fetchProgress]);
 
   // Interpolate animations
@@ -380,7 +292,7 @@ export default function LoadingLesson({
           >
             {caption}
           </Animated.Text>
-
+          
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
             <View style={styles.progressBarBackground}>
@@ -388,29 +300,12 @@ export default function LoadingLesson({
                 style={[
                   styles.progressBarFill,
                   {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: ['0%', '100%'],
-                    }),
+                    width: `${fetchProgress}%`,
                   },
                 ]}
               />
             </View>
             <Text style={styles.progressText}>{Math.round(fetchProgress)}%</Text>
-          </View>
-
-          {/* Fun loading message container */}
-          <View style={styles.messageContainer}>
-            <Animated.Text
-              style={[
-                styles.loadingMessage,
-                {
-                  opacity: messageAnim
-                }
-              ]}
-            >
-              {loadingMessages[currentMessageIndex]}
-            </Animated.Text>
           </View>
         </View>
       </LinearGradient>
@@ -475,36 +370,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#8B5CF6',
     fontWeight: '600',
-  },
-  messageContainer: {
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  loadingMessage: {
-    color: '#fff',
-    fontSize: 15,
-    textAlign: 'center',
-    fontStyle: 'italic',
-    opacity: 1,
-    lineHeight: 20,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    fontFamily: Platform.select({
-      ios: 'Avenir-Medium',
-      android: 'sans-serif-medium'
-    }),
   },
 }); 

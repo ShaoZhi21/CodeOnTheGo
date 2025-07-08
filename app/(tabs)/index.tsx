@@ -4,6 +4,7 @@ import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, 
 import { router } from 'expo-router';
 import CircularProgress from '../../components/CircularProgress';
 import { ThemedText } from '../../components/ThemedText';
+import { useStreak } from '../../contexts/StreakContext';
 import { DailyChallengeService } from '../../lib/services/dailyChallengeService';
 import { ProfileService } from '../../lib/services/profileService';
 import { RecentTopicsService } from '../../lib/services/recentTopicsService';
@@ -66,6 +67,7 @@ const getTopicIcon = (topicName: string) => {
 
 export default function HomeScreen() {
   console.log('HomeScreen component loaded');
+  const { showStreakAnimation } = useStreak();
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [topicsInProgress, setTopicsInProgress] = useState<TopicProgress[]>([]);
@@ -81,6 +83,7 @@ export default function HomeScreen() {
   });
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
+  const [showDailyChallenge, setShowDailyChallenge] = useState(false); // Control visibility
 
   useEffect(() => {
     loadProfile();
@@ -458,6 +461,9 @@ export default function HomeScreen() {
         // Update local state
         setDailyChallenge(prev => prev ? { ...prev, completed: true } : null);
         console.log('Daily challenge marked as completed!');
+        
+        // Trigger streak animation for daily challenge completion
+        showStreakAnimation(1);
       }
     } catch (error) {
       console.error('Error marking daily challenge as completed:', error);
@@ -514,39 +520,76 @@ export default function HomeScreen() {
             </View>
           </View>
           
-          {/* Daily Streak Card - Now a Button */}
-          <TouchableOpacity style={styles.streakCard} onPress={handleRandomQuestion}>
-            <View style={styles.streakHeader}>
-              <View style={styles.streakIconContainer}>
+          {/* Daily Challenge - Compact and Collapsible */}
+          <View style={styles.dailyChallengeContainer}>
+            <TouchableOpacity 
+              style={styles.dailyChallengeToggle} 
+              onPress={() => setShowDailyChallenge(!showDailyChallenge)}
+            >
+              <View style={styles.dailyChallengeHeader}>
+                <View style={styles.dailyChallengeIconContainer}>
+                  <Image 
+                    source={require('../../assets/images/icons/fire-icon.png')} 
+                    style={styles.dailyChallengeIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+                <View style={styles.dailyChallengeInfo}>
+                  <ThemedText style={styles.dailyChallengeTitle}>Daily Challenge</ThemedText>
+                  <ThemedText style={styles.dailyChallengeStreak}>{dailyStats.streak} day streak</ThemedText>
+                </View>
+                <View style={styles.dailyChallengeStatus}>
+                  {challengeLoading ? (
+                    <ActivityIndicator size="small" color="#8B5CF6" />
+                  ) : dailyChallenge?.completed ? (
+                    <View style={styles.completedBadge}>
+                      <ThemedText style={styles.completedText}>✓</ThemedText>
+                    </View>
+                  ) : (
+                    <ThemedText style={styles.pendingText}>•</ThemedText>
+                  )}
+                </View>
                 <Image 
-                  source={require('../../assets/images/icons/fire-icon.png')} 
-                  style={styles.streakIcon}
-                  tintColor="#FFFFFF"
+                  source={require('../../assets/images/icons/up-arrow.png')} 
+                  style={[
+                    styles.expandIcon, 
+                    { transform: [{ rotate: showDailyChallenge ? '180deg' : '0deg' }] }
+                  ]}
+                  tintColor="#8B5CF6"
                 />
               </View>
-              <View style={styles.streakContent}>
-                <ThemedText style={styles.streakTitle}>Daily Challenge</ThemedText>
-                <ThemedText style={styles.streakValue}>{dailyStats.streak} days streak</ThemedText>
-              </View>
-              <View style={styles.streakStats}>
-                {challengeLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : dailyChallenge?.completed ? (
-                  <>
-                    <ThemedText style={styles.tapForRandomTextLarge}>COMPLETED ✓</ThemedText>
-                    <ThemedText style={styles.streakSubtext}>Come back tomorrow</ThemedText>
-                  </>
-                ) : (
-                  <>
-                    <ThemedText style={styles.tapForRandomTextLarge}>START →</ThemedText>
-                    <ThemedText style={styles.streakSubtext}>
-                      {dailyChallenge ? `Today: ${dailyChallenge.problemTitle.substring(0, 20)}...` : 'Tap to generate'}
+            </TouchableOpacity>
+            
+            {/* Expanded Daily Challenge Content */}
+            {showDailyChallenge && (
+              <View style={styles.dailyChallengeExpanded}>
+                {dailyChallenge?.completed ? (
+                  <View style={styles.completedChallengeContent}>
+                    <ThemedText style={styles.completedChallengeText}>
+                      Challenge completed! Come back tomorrow for a new one.
                     </ThemedText>
-                  </>
+                  </View>
+                ) : (
+                  <View style={styles.pendingChallengeContent}>
+                    <ThemedText style={styles.challengeTitle}>
+                      {dailyChallenge ? dailyChallenge.problemTitle : 'No challenge available'}
+                    </ThemedText>
+                    <TouchableOpacity 
+                      style={styles.startChallengeButton} 
+                      onPress={handleRandomQuestion}
+                      disabled={challengeLoading}
+                    >
+                      {challengeLoading ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <ThemedText style={styles.startChallengeText}>Start Challenge</ThemedText>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
-            </View>
-          </TouchableOpacity>
+            )}
+          </View>
 
           <View style={styles.quickActionsGrid}>
             <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/allquestions')}>
@@ -835,9 +878,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Daily Streak Card
-  streakCard: {
-    backgroundColor: '#8B5CF6',
+  // Daily Challenge Card
+  dailyChallengeContainer: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginBottom: 16,
     shadowColor: '#8B5CF6',
@@ -845,70 +888,111 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  streakHeader: {
+  dailyChallengeToggle: {
+    padding: 16,
+  },
+  dailyChallengeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    minHeight: 70, // Ensure minimum height
+    justifyContent: 'space-between',
   },
-  streakIconContainer: {
+  dailyChallengeIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#F3F0FF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-    flexShrink: 0, // Prevent shrinking
   },
-  streakIcon: {
+  dailyChallengeIcon: {
     width: 20,
     height: 20,
   },
-  streakContent: {
+  dailyChallengeInfo: {
     flex: 1,
     marginRight: 12,
+  },
+  dailyChallengeTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  dailyChallengeStreak: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  dailyChallengeStatus: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 30,
+    flexShrink: 0,
+  },
+  completedBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  completedText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  pendingText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  expandIcon: {
+    width: 16,
+    height: 16,
+    marginLeft: 10,
+  },
+  dailyChallengeExpanded: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  completedChallengeContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  completedChallengeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  pendingChallengeContent: {
+    paddingVertical: 20,
+  },
+  challengeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  startChallengeButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  streakTitle: {
+  startChallengeText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    marginBottom: 2,
-    flexWrap: 'wrap',
-  },
-  streakValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  streakStats: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    flexShrink: 0,
-    minWidth: 80,
-  },
-  tapForRandomTextLarge: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    letterSpacing: 0.5,
-    textAlign: 'right',
-  },
-  streakSubtext: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-    textAlign: 'right',
-    flexWrap: 'wrap',
   },
 
   // Quick Actions

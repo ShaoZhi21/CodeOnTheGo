@@ -1,8 +1,9 @@
 import { ThemedText } from '@/components/ThemedText';
+import { useStreak } from '@/contexts/StreakContext';
 import { apiCall } from '@/lib/api-config';
 import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 interface QuizQuestion {
@@ -46,6 +47,7 @@ export default function LessonScreen() {
   const topicName = Array.isArray(params.topicName) ? params.topicName[0] : params.topicName;
   
   const router = useRouter();
+  const { showStreakAnimation } = useStreak();
   const [currentPage, setCurrentPage] = useState<'loading' | 'teaching' | 'quiz' | 'completion' | 'retry'>('loading');
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -303,6 +305,8 @@ export default function LessonScreen() {
         handleSaveQuizCompletion().catch(error => {
           console.error('Failed to save quiz completion:', error);
         });
+        // Trigger streak animation for lesson completion
+        showStreakAnimation(1);
         setCurrentPage('completion');
       } else {
         // Not all correct - show retry page
