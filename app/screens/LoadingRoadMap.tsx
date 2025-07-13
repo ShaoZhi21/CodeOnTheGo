@@ -11,6 +11,10 @@ export default function LoadingRoadMap() {
   const params = useLocalSearchParams();
   const { topicName, from } = params;
   
+  console.log('🎯 LoadingRoadMap: Received params:', { topicName, from });
+  console.log('🎯 LoadingRoadMap: topicName type:', typeof topicName);
+  console.log('🎯 LoadingRoadMap: topicName value:', topicName);
+  
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
   const animationsStarted = useRef(false);
@@ -41,17 +45,17 @@ export default function LoadingRoadMap() {
     // Start actual data loading
     loadRoadmapData();
     
-    // Simulate realistic fetch progress with 2-second total duration
+    // Simulate realistic fetch progress with 1-second total duration
     const progressSteps = [
-      { time: 200, progress: 15 },   // Initial connection
-      { time: 400, progress: 30 },   // Database query/API call
-      { time: 600, progress: 45 },   // Data processing
-      { time: 800, progress: 60 },   // Content processing
-      { time: 1000, progress: 75 },  // Final processing
-      { time: 1200, progress: 85 },  // Storage
-      { time: 1400, progress: 90 },  // Almost done
-      { time: 1600, progress: 95 },  // 95% - Bird should fly!
-      { time: 2000, progress: 100 }, // Complete
+      { time: 100, progress: 15 },   // Initial connection
+      { time: 200, progress: 30 },   // Database query/API call
+      { time: 300, progress: 45 },   // Data processing
+      { time: 400, progress: 60 },   // Content processing
+      { time: 500, progress: 75 },   // Final processing
+      { time: 600, progress: 85 },   // Storage
+      { time: 700, progress: 90 },   // Almost done
+      { time: 800, progress: 95 },   // Almost done
+      { time: 1000, progress: 100 }, // Complete
     ];
 
     progressSteps.forEach(({ time, progress }) => {
@@ -64,6 +68,7 @@ export default function LoadingRoadMap() {
 
   const loadRoadmapData = async () => {
     try {
+      console.log('🎯 LoadingRoadMap: loadRoadmapData called with topicName:', topicName);
       // Get user session
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -73,7 +78,10 @@ export default function LoadingRoadMap() {
       }
 
       // Fetch topic problems
+      console.log('🎯 LoadingRoadMap: Fetching problems for topic:', topicName);
       const problems = await TopicService.getTopicProblems(topicName as string);
+      console.log('🎯 LoadingRoadMap: Problems fetched:', problems?.length || 0, 'problems');
+      console.log('🎯 LoadingRoadMap: First problem:', problems?.[0]);
       
       // Get user progress for these problems
       const { data: progressData } = await supabase
@@ -89,6 +97,12 @@ export default function LoadingRoadMap() {
         ? Math.round((completedProblems.length / totalProblems) * 100)
         : 0;
 
+      console.log('🎯 LoadingRoadMap: Completion stats:', {
+        totalProblems,
+        completedProblems: completedProblems.length,
+        percentage
+      });
+
       // Prepare data for roadmap screen
       const roadmapData = {
         problems,
@@ -102,6 +116,7 @@ export default function LoadingRoadMap() {
       // Wait for animations to complete
       await new Promise(resolve => setTimeout(resolve, 3000));
 
+      console.log('🎯 LoadingRoadMap: Navigating to roadmaptopic with data');
       // Navigate to roadmap screen with pre-fetched data
       router.replace({
         pathname: '/screens/roadmaptopic',
@@ -116,6 +131,7 @@ export default function LoadingRoadMap() {
       console.error('Error loading roadmap data:', error);
       // For errors, still wait for animations
       await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('🎯 LoadingRoadMap: Error occurred, navigating without data');
       // Navigate to roadmap screen without pre-fetched data
       router.replace({
         pathname: '/screens/roadmaptopic',
@@ -184,10 +200,10 @@ export default function LoadingRoadMap() {
     };
   }, []);
 
-  // Watch for 95% progress to trigger bird flight
+  // Watch for 100% progress to trigger bird flight
   useEffect(() => {
-    if (fetchProgress >= 95 && !birdFlightStarted) {
-      console.log('🦅 95% progress reached! Bird starting to fly away...');
+    if (fetchProgress >= 100 && !birdFlightStarted) {
+      console.log('🦅 100% progress reached! Bird starting to fly away...');
       setBirdFlightStarted(true);
 
       Animated.timing(birdFlyAnim, {

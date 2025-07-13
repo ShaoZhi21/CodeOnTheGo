@@ -194,6 +194,57 @@ Evaluate the submission as follows:
   3) Suggestion 3 (reasoning 15 words max STRICTLY)
   DO NOT INCLUDE ANYTHING ELSE. NO EXTRA EXPLANATION.
 
+7. Structured Explanation - Provide detailed explanations of data structures and algorithms used:
+
+📦 Data Structure Used: [Name of the primary data structure]
+
+1) What it is and how it works  
+   - [Explain in simple terms]
+
+2) When and why it's used in this problem  
+   - [Explain how it helps optimize or simplify the problem]
+
+3) Key operations used  
+   - [List 2-3 key operations like Lookup, insert, delete]
+
+4) Efficiency  
+   - Insert: O(?) | Delete: O(?) | Lookup: O(?)  
+   - Space Complexity: O(?)
+
+⚙️ Algorithm Used: [Name] (e.g., Two Pointers, Binary Search)
+[Only include if algorithm is non-trivial - not just a simple loop]
+
+1) How to approach  
+   - [What type of algorithm this is - ONE bullet point only]
+
+2) Core steps  
+   - [Step-by-step explanation of the algorithm logic - as many bullets as needed]
+
+8. Multiple Choice Questions (MCQs) - Generate MCQs based on complexity:
+
+CASE 1: Both data structure and algorithm are non-trivial
+→ Generate 8 MCQs: 4 for data structure + 4 for algorithm
+
+CASE 2: Trivial algorithm (just a loop)
+→ Generate 4 MCQs for data structure + 1-2 MCQs for algorithm logic
+
+CASE 3: Trivial data structure (just array/list)
+→ Generate 1-2 MCQs for data structure + 4 MCQs for algorithm
+
+For each MCQ, provide:
+- One correct answer
+- Two distractors (plausible but incorrect)
+- Short explanation for correct choice
+- Focus on LOGIC and UNDERSTANDING, not syntax
+
+MCQ Format:
+Question: [Question text]
+A) [Option A]
+B) [Option B]
+C) [Option C]
+Correct Answer: [A/B/C]
+Explanation: [Why correct answer is right]
+
 Scoring  
 Rate the solution out of 100 using the following scale:
 
@@ -1154,8 +1205,105 @@ app.post('/api/quiz-completion', async (req, res) => {
   }
 });
 
+// Function to detect relevant data structure image
+const detectDataStructureImage = async (lessonContent) => {
+  if (!geminiModel) {
+    return null;
+  }
+
+  try {
+    // Available data structure images
+    const availableImages = [
+      'array', 'linkedlist', 'hashmap', 'binarytree', 'queue', 
+      'priorityqueue', 'matrix', 'trie', 'undirectedgraph', 
+      'directedgraph', 'weightedgraph'
+    ];
+
+    const detectionPrompt = `Analyze this lesson content and determine the PRIMARY data structure being taught.
+
+Available data structure images: ${availableImages.join(', ')}
+
+Lesson content: ${JSON.stringify(lessonContent)}
+
+Rules:
+- Return ONLY the exact name from the available list if there's a clear match
+- If no clear primary data structure match, return "none"
+- Be conservative - only return a match if you're confident it's the main focus
+- For example: if it mentions "hash table" or "hash map", return "hashmap"
+- If it mentions "binary tree" or "tree", return "binarytree"
+- If it mentions "linked list", return "linkedlist"
+- If it mentions "array" as the main structure, return "array"
+
+Respond with ONLY one word: either the exact data structure name or "none".`;
+
+    const result = await geminiModel.generateContent(detectionPrompt);
+      const response = await result.response;
+    const detectedStructure = response.text().trim().toLowerCase();
+
+    // Verify the response is valid
+    if (availableImages.includes(detectedStructure)) {
+      return detectedStructure;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error detecting data structure image:', error);
+    return null;
+  }
+};
+
 // Generate Topic Lesson Endpoint
 app.post('/api/generate-topic-lesson', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
+  }
+
+  try {
+    const { topicName, problemId, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
+
+    if (!topicName || !problemId) {
+      return res.status(400).json({ error: 'Topic name and problem ID are required.' });
+    }
+
+    // Fetch user skill level
+    let userSkillLevel = 'Beginner'; // Default to Beginner
+    if (userId) {
+      try {
+        const { getUserProfile } = require('./services/profileService');
+        const userProfile = await getUserProfile(userId);
+        if (userProfile && userProfile.skill_level) {
+          userSkillLevel = userProfile.skill_level;
+        }
+      } catch (error) {
+        console.log('Could not fetch user profile, defaulting to Beginner skill level');
+      }
+    }
+
+    console.log(`User skill level: ${userSkillLevel}`);
+
+    // Route to appropriate lesson generation based on skill level
+    if (userSkillLevel === 'Beginner') {
+      // Call the easy lesson API
+      console.log('🎯 Routing to BEGINNER lesson generation (generateEasyLesson)');
+      return await generateEasyLesson(req, res);
+    } else {
+      // Call the harder lesson API for Intermediate and Professional
+      console.log(`🎯 Routing to HARDER lesson generation (generateHarderLesson) for skill level: ${userSkillLevel}`);
+      return await generateHarderLesson(req, res);
+    }
+
+  } catch (err) {
+    console.error('Lesson generation routing error:', err);
+    return res.status(500).json({ error: 'Failed to generate lesson', details: err.message });
+  }
+});
+
+// Generate Easy Lesson Endpoint (for Beginners)
+app.post('/api/generate-easy-lesson', generateEasyLesson);
+
+async function generateEasyLesson(req, res) {
+  console.log('📚 EXECUTING generateEasyLesson - BEGINNER version with super simple language');
+  
   if (!geminiModel) {
     return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
   }
@@ -1179,33 +1327,102 @@ app.post('/api/generate-topic-lesson', async (req, res) => {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
-    // Handle fast structured lesson generation (all parts in one call)
+    // Handle fast structured lesson generation (all parts in one call) - EASY VERSION
     if (fastStructuredLesson) {
-      const fastPrompt = `You are an expert programming tutor. For the problem "${problemData.title}" in the topic "${topicName}", follow these steps:
+      const easyPrompt = `You are an expert programming tutor teaching ABSOLUTE BEGINNERS who have NEVER coded before. For the problem "${problemData.title}" in the topic "${topicName}", follow these steps:
 
 STEP 1: First, mentally solve the problem and identify the IDEAL solution approach.
-STEP 2: Identify the MOST IMPORTANT data structure or algorithm needed for this ideal solution.
-STEP 3: Create a lesson that teaches this key concept WITHOUT revealing the solution steps.
+STEP 2: Identify the MOST IMPORTANT data structure and algorithm needed for this ideal solution.
+STEP 3: Create a lesson that teaches these key concepts WITHOUT revealing the solution steps.
 
-TEACHING APPROACH:
-- Teach the concept/data structure in isolation
-- Explain why it's powerful and when to use it
-- Give examples that illustrate the concept but don't solve the target problem
-- DO NOT reveal the step-by-step solution to "${problemData.title}"
-- DO NOT show code that solves the specific problem
+CRITICAL: This is for someone who has NEVER touched code before - imagine explaining to your grandparent or a 10-year-old child.
 
-IMPORTANT: For each MCQ, write actual questions and answers based on your content, not templates or placeholders. The questions should test LOGIC and UNDERSTANDING of concepts, NOT code syntax. Focus on testing conceptual understanding, when to use the concept, and why it works.
+TEACHING APPROACH FOR COMPLETE BEGINNERS:
+- Start with what they already know from daily life
+- Use stories, analogies, and examples from everyday activities
+- Explain EVERYTHING as if it's their first time hearing these words
+- Break down complex ideas into tiny, digestible pieces
+- Use encouraging, friendly language that makes coding feel approachable
+- Connect programming concepts to things they do every day
+- Make it feel like a fun discovery, not intimidating technical stuff
 
-CRITICAL: RANDOMIZE the correct answer position! Don't always put the correct answer as option A (index 0). Mix it up - sometimes use B (index 1), C (index 2), or D (index 3) as the correct answer.
+LANGUAGE REQUIREMENTS - SIMPLE BUT ACCURATE:
+- Use words like "imagine you're...", "think about when you...", "it's exactly like..."
+- Keep technical terms but ALWAYS pair them with everyday analogies:
+  * "Array (or list)" → "like a shopping list where each item has a number"
+  * "Hash map (or hash table)" → "like a magic address book where each name maps to a phone number"
+  * "Binary search" → "like the number guessing game where you guess the middle - this algorithm cuts the search space in half"
+  * "Two pointers" → "like using both hands to point at different things in your list"
+  * "Stack (data structure)" → "like a pile of dinner plates - you can only add or remove from the top"
+  * "Queue (data structure)" → "like waiting in line at the movies - first person in line gets served first"
+  * "Tree (data structure)" → "like a family tree with parents and children nodes"
+  * "Graph (data structure)" → "like a map showing how cities connect with edges"
+  * "Recursion" → "like looking in a mirror that reflects another mirror - the function calls itself"
+  * "Loop (or iteration)" → "doing the same thing over and over, like checking each item in your list"
+  * "Algorithm" → "a recipe or step-by-step instructions to solve a problem"
+  * "Variable" → "a box with a label that stores a value"
+  * "Function" → "a machine that takes input and produces output"
+
+STORYTELLING APPROACH:
+- Start each explanation with a relatable scenario
+- Use characters or situations they can visualize
+- Make the explanation feel like a conversation with a friend
+- Add emotional context - why would someone WANT to use this?
+- Use "you" language to make it personal
+
+COMPLEXITY EXPLANATIONS FOR BEGINNERS:
+- ALWAYS mention the technical notation (O(1), O(n), etc.) but immediately explain with everyday comparisons
+- Instead, use technical terms WITH everyday speed and storage comparisons:
+  * Fast operations: "O(1) - instant like speed dial", "O(log n) - quick like finding a word in a dictionary"
+  * Slow operations: "O(n) - slow like checking every house on a street", "O(n²) - very slow like comparing every person with every other person"
+  * Space usage: "O(1) space - uses just one sticky note", "O(n) space - needs a filing cabinet that grows with your data"
+- Make it relatable to daily activities but always include the technical terms
+- Focus on WHY the speed/storage matters in practical programming terms
+- Example: "Hash table lookup is O(1) time complexity - that means it's instant like speed dial, no matter if you have 10 contacts or 10 million!"
 
 CRITICAL REQUIREMENTS:
 - Each part must be EXACTLY 3-4 sentences maximum
-- Be concise, direct, and educational
+- Use the simplest possible words - avoid any jargon
 - Focus ONLY on the most important concept/data structure for the IDEAL solution
-- Generate MCQs that test the SPECIFIC content you wrote in each part
-- MCQ questions must be directly related to what you explained in that section
-- Make wrong answers plausible but clearly incorrect
-- The last part "Relevance to this question" should explain WHY this concept is perfect for this type of problem WITHOUT revealing how to use it
+- Make it feel encouraging and achievable, not scary
+- The "Relevance to this question" should feel like "Oh, that makes perfect sense!"
+
+FOR DEFINITION CONTENT:
+- MUST be exactly 3 numbered points: "1) What it is: [explanation] 2) How it works: [explanation] 3) Advantages: [explanation]"
+- Each point should be 1-2 sentences using the SIMPLEST possible language
+- Use analogies from home, cooking, shopping, organizing, or playing games
+- Make it sound like explaining to a curious child
+- Follow this EXACT format without deviation
+
+CRITICAL: For the definition content, you MUST use EXACTLY this format:
+"1) What it is: [Start with analogy then connect to actual concept - e.g., 'It's like a magic phone book where you say a name and instantly find the number. This is exactly what a hash map does - it lets you use a key to instantly find the corresponding value.'] 2) How it works: [Explain the mechanism using both analogy and technical terms] 3) Advantages: [Benefits explained with both everyday examples and programming advantages]"
+
+EXAMPLES OF BEGINNER-FRIENDLY EXPLANATIONS:
+
+Bad (too technical): "A hash map provides O(1) lookup time complexity"
+Good: "A hash map (like a magic phone book) provides O(1) lookup time - that means it's instant, just like speed dial where you press one button and immediately get your friend's number"
+
+Bad (avoiding terms): "This magic list stores things in order"
+Good: "An array (or list) stores elements in order, like a numbered shopping list where each item has its own position"
+
+Bad (too technical): "Binary search reduces the search space by half each iteration"
+Good: "Binary search is like the number guessing game - this algorithm cuts the search space in half each time, making it O(log n) which means it's super fast even with huge lists"
+
+Bad (avoiding terms): "This is slow"
+Good: "This has O(n) time complexity - it's like checking every house on a street one by one, so if there are more houses (larger input), it takes longer"
+
+Bad (avoiding terms): "This only needs one sticky note"
+Good: "This has O(1) space complexity - it only needs one sticky note to remember things, no matter how big the problem gets"
+
+Bad (too technical): "Hash table lookup is O(1)"
+Good: "Hash table lookup is O(1) time complexity - it's instant like having speed dial, where the key maps to a value just like how a name maps to a phone number"
+
+STORY-DRIVEN EXAMPLES:
+- "Imagine you're organizing your bookshelf..."
+- "Think about when you're looking for your keys..."
+- "Picture yourself at the grocery store..."
+- "It's like when you're dealing cards to friends..."
+- "Imagine you're a detective solving a mystery..."
 
 Respond with ONLY a JSON object in this exact format:
 {
@@ -1213,176 +1430,112 @@ Respond with ONLY a JSON object in this exact format:
   "parts": [
     {
       "title": "Definition",
-      "content": "3-4 sentences max explaining what the key concept/data structure is",
-      "mcq": {
-        "id": 1,
-        "question": "Write a question testing UNDERSTANDING of the concept you defined (focus on logic, not syntax)",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
-        "explanation": "Write why the correct answer is right"
-      }
+      "cards": [
+        {
+          "type": "definition",
+          "title": "What is [concept name in simple words]?",
+          "content": "1) What it is: [Start with analogy then connect to actual concept - e.g., 'It's like a magic phone book where you say a name and instantly find the number. This is exactly what a hash map does - it lets you use a key to instantly find the corresponding value.'] 2) How it works: [Explain the mechanism using both analogy and technical terms] 3) Advantages: [Benefits explained with both everyday examples and programming advantages]",
+          "icon": "📚"
+        }
+      ]
     },
     {
-      "title": "How to use",
-      "content": "3-4 sentences max explaining how to use this concept with basic examples",
-      "mcq": {
-        "id": 2,
-        "question": "Write a question about WHEN or WHY to use this concept (focus on logic, not code)",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
-        "explanation": "Write why the correct answer is right"
-      }
+      "title": "When to use",
+      "cards": [
+        {
+          "type": "usage",
+          "title": "When do we use this?",
+          "content": "Explain scenarios where this data structure/algorithm is perfect. Start with everyday situations then connect to programming problems. Always mention the technical context - e.g., 'Just like you'd use a phone book when you need to find someone's number quickly, programmers use hash maps when they need fast lookups by key.'",
+          "icon": "✨"
+        }
+      ]
     },
     {
-      "title": "Operations and efficiency",
-      "content": "3-4 sentences max listing key operations with time/space complexity",
-      "mcq": {
-        "id": 3,
-        "question": "Write a question about WHY this concept has certain efficiency characteristics",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
-        "explanation": "Write why the correct answer is right"
-      }
+      "title": "Efficiency of operations",
+      "cards": [
+        {
+          "type": "complexity",
+          "title": "How fast and efficient is this?",
+          "content": "Explain time complexity and space complexity using everyday analogies. Start with time complexity first, then space complexity. Structure it as: 'Time complexity: [explanation with O(?) notation]. Space complexity: [explanation with O(?) notation].' For example: 'Time complexity: Finding something in a hash map is O(1) - instant like speed dial, no matter how many contacts you have. Space complexity: Hash maps need O(n) space - like having a filing cabinet that grows with your data.'",
+          "icon": "⚡"
+        }
+      ]
     },
     {
-      "title": "Relevance to this question",
-      "content": "3-4 sentences max explaining WHY this is the most efficient solution for ${problemData.title}. This is the MOST IMPORTANT part.",
-      "mcq": {
-        "id": 4,
-        "question": "Write a question about WHY this concept is ideal for this type of problem (test logical reasoning)",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3 - don't always use 0",
-        "explanation": "Write why the correct answer is right"
-      }
+      "title": "Relevance to question",
+      "cards": [
+        {
+          "type": "advantages",
+          "title": "Why is this useful for solving problems?",
+          "content": "Connect the concept to real problem-solving scenarios and hint at the approach WITHOUT revealing the full solution. For example: 'Just like having a phone book organized by name saves you from checking every page, using a hash map in programming saves time when you need to find, store, or check if data exists. For problems like finding pairs or checking existence, you might store values as you go and look them up instantly instead of searching repeatedly.'",
+          "icon": "🎯"
+        }
+      ]
+    },
+    {
+      "title": "Algorithm Deep Dive",
+      "cards": [
+        {
+          "type": "usage",
+          "title": "How to approach",
+          "content": "Explain the general algorithmic thinking and strategy using simple, friendly terms. Provide sufficient hints and clues about the approach without revealing the complete solution. For example: 'Think step-by-step: as you look at each item, ask yourself what you need to find and use your data structure to help you remember what you've seen before. The key insight is to store information as you go, so you can quickly check if you've encountered what you need.'",
+          "icon": "🎯"
+        }
+      ]
     }
   ],
-  "keyConcepts": ["Key concept 1", "Key concept 2", "Key concept 3"],
-  "example": "Brief example",
-  "hint": "Brief hint",
-  "commonMistake": "Brief common mistake"
+  "keyConcepts": ["Simple everyday concept 1", "Simple everyday concept 2", "Simple everyday concept 3"],
+  "example": "Brief example using a story or everyday scenario",
+  "hint": "Encouraging hint using simple, friendly language",
+  "commonMistake": "Common mistake explained like a friendly warning from a friend"
 }
+
+IMPORTANT NOTES:
+- ALWAYS include BOTH the 4 main lesson parts AND the Algorithm Deep Dive section (5 total parts)
+- The Algorithm Deep Dive should be the 5th and final part with exactly 1 card: "How to approach"
+- Focus on the most important concepts for the IDEAL solution
+- Make everything feel approachable and not intimidating
+- Use encouraging language throughout
+- For the Algorithm Deep Dive, teach the general technique with sufficient hints without revealing the specific solution
+
+
 
 Generate ONLY the JSON object, no other text.`;
 
-      const result = await geminiModel.generateContent(fastPrompt);
+      const result = await geminiModel.generateContent(easyPrompt);
       const response = await result.response;
       let text = response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const lessonData = JSON.parse(text);
       
+      // Detect relevant data structure image
+      const detectedImage = await detectDataStructureImage(lessonData);
+      if (detectedImage) {
+        lessonData.dataStructureImage = detectedImage;
+      }
+      
       return res.json(lessonData);
     }
 
-    // Handle structured lesson parts (legacy - individual parts)
-    if (structuredLesson && lessonPart && specificPrompt) {
-      const structuredPrompt = `You are an expert programming tutor. For the problem "${problemData.title}" in the topic "${topicName}", provide a brief response to this specific lesson section:
-
-LESSON SECTION: ${lessonPart}
-SPECIFIC REQUEST: ${specificPrompt}
-
-IMPORTANT GUIDELINES:
-1. Focus ONLY on the concept/data structure most relevant to solving "${problemData.title}"
-2. Be educational and beginner-friendly
-3. Use concrete examples and analogies
-4. For "Application to This Problem" section, explain WHY this concept is the most efficient solution
-5. Include time/space complexity when discussing operations
-6. Keep response VERY SHORT: exactly 5 sentences maximum total
-7. Be concise and direct - no fluff or unnecessary explanations
-
-Respond with ONLY the educational content, no JSON formatting needed.`;
-
-      const result = await geminiModel.generateContent(structuredPrompt);
-      const response = await result.response;
-      const content = response.text().trim();
-      
-      return res.json({ content });
-    }
-
-    // Original lesson generation for backward compatibility
-    const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
-
-CONTEXT:
-- Topic: ${topicName}
-- Target Problem: ${problemData.title}
-
-INSTRUCTIONS:
-1. **DO NOT** explain how to solve the specific problem
-2. **DO** teach the fundamental concepts and data structures that would be useful
-3. **DO** provide examples that illustrate the concepts without solving the target problem
-4. **DO** make the content beginner-friendly but comprehensive
-5. **DO** break content into digestible chunks with clear sections
-6. **DO** include a fun fact at the end
-
-For example, if the problem involves hash maps:
-- Teach WHAT a hash map is and how it works
-- Explain why hash map lookups are O(1)
-- Show simple examples of hash map usage
-- Explain collision resolution concepts
-- DO NOT show how to use hash maps to solve the specific problem
-
-Your lesson should be structured and include:
-
-1. **Definition Box** (for Easy problems only): A concise definition of the main data structure or concept, formatted as a highlighted box.
-
-2. **Main Content**: Break this into 3-4 digestible sections with clear headings:
-   - **What is [Concept]?** - Basic introduction
-   - **How does it work?** - Step-by-step explanation
-   - **Why is it useful?** - Real-world applications
-   - **Key Operations** - Common operations and their complexity
-
-3. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
-
-4. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
-
-5. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
-
-6. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
-
-7. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
-
-8. **Fun Fact**: Include an interesting, relevant fact about the concept, its history, or real-world applications.
-
-Respond with ONLY a JSON object in this exact format:
-{
-  "title": "Specific Lesson Title for ${problemData.title}",
-  "definitionBox": "For Easy problems: A concise definition of the main concept",
-  "content": "Detailed explanation broken into digestible sections with clear headings like 'What is [Concept]?', 'How does it work?', 'Why is it useful?', 'Key Operations'",
-  "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
-  "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
-  "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
-  "pitfalls": ["Common mistake 1", "Common mistake 2"],
-  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"],
-  "funFact": "An interesting, relevant fact about the concept, its history, or real-world applications"
+  } catch (err) {
+    console.error('Easy lesson generation error:', err);
+    return res.status(500).json({ error: 'Failed to generate easy lesson', details: err.message });
+  }
 }
 
-Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
+// Generate Harder Lesson Endpoint (for Intermediate/Professional)
+app.post('/api/generate-harder-lesson', generateHarderLesson);
 
-    const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
-    console.log('RAW Gemini lesson output:', text); // Log raw Gemini output
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const lessonData = JSON.parse(text);
-    
-    console.log('Generated lesson data:', lessonData);
-    res.json(lessonData);
-  } catch (error) {
-    console.error('Error generating lesson with Gemini:', error);
-    res.status(500).json({ error: 'Failed to generate lesson.' });
-  }
-});
-
-// Generate Topic Quiz Endpoint
-app.post('/api/generate-topic-quiz', async (req, res) => {
+async function generateHarderLesson(req, res) {
   if (!geminiModel) {
-    return res.status(500).json({ error: 'Quiz generation is not configured on the server.' });
+    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
   }
 
   try {
-    const { topicName, problemId, lessonContent } = req.body;
+    const { topicName, problemId, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
 
-    if (!topicName || !problemId || !lessonContent) {
-      return res.status(400).json({ error: 'Topic name, problem ID, and lesson content are required.' });
+    if (!topicName || !problemId) {
+      return res.status(400).json({ error: 'Topic name and problem ID are required.' });
     }
 
     // Get problem details from database
@@ -1397,154 +1550,430 @@ app.post('/api/generate-topic-quiz', async (req, res) => {
       return res.status(404).json({ error: 'Problem not found' });
     }
 
-    const prompt = `You are an expert programming tutor creating a FINAL QUIZ to test understanding of the lesson content. This quiz should be DIFFERENT from any MCQs that were part of the lesson itself.
+    // Handle fast structured lesson generation (all parts in one call) - HARDER VERSION
+    if (fastStructuredLesson) {
+      const harderPrompt = `You are an expert programming tutor. For the problem "${problemData.title}" in the topic "${topicName}", follow these steps:
 
-CONTEXT:
-- Topic: ${topicName}
-- Target Problem: ${problemData.title}
-- Lesson Content: ${lessonContent}
+STEP 1: First, mentally solve the problem and identify the IDEAL solution approach.
+STEP 2: Identify the MOST IMPORTANT data structure and algorithm needed for this ideal solution.
+STEP 3: Create a lesson that teaches these key concepts WITHOUT revealing the solution steps.
 
-CRITICAL INSTRUCTIONS:
-1. Create 5 NEW multiple-choice questions that test understanding of the concepts taught in the lesson
-2. These questions should be DIFFERENT from any MCQs embedded in the lesson content
-3. Focus on broader understanding and application of the concepts
-4. Each question should have 4 options (A, B, C, D)
-5. Only one option should be correct
-6. Questions should test deeper understanding and practical application
-7. Include explanations for why the correct answer is right
-8. DO NOT ask questions about the specific problem solution
-9. Focus on testing understanding of the underlying concepts, data structures, and when/why to use them
-10. RANDOMIZE correct answer positions - don't always use index 0! Mix between 0, 1, 2, and 3
+TEACHING APPROACH:
+- Teach the concept/data structure and algorithm in isolation
+- Explain why they're powerful and when to use them
+- Give examples that illustrate the concepts but don't solve the target problem
+- DO NOT reveal the step-by-step solution to "${problemData.title}"
+- DO NOT show code that solves the specific problem
+
+IMPORTANT: Focus on creating clear, educational content that teaches the concepts effectively.
+
+CRITICAL REQUIREMENTS:
+- Each part must be EXACTLY 3-4 sentences maximum
+- Be concise, direct, and educational
+- Focus ONLY on the most important concept/data structure for the IDEAL solution
+- Focus on clear, educational explanations
+- The "Relevance to this question" should explain WHY this concept is perfect for this type of problem and give a ROUGH hint about the approach WITHOUT revealing the complete solution steps
+
+FOR DEFINITION CONTENT:
+- MUST be exactly 3 numbered points: "1) What it is: [explanation] 2) How it works: [explanation] 3) Advantages: [explanation]"
+- Each point should be 1-2 sentences maximum
+- Follow this EXACT format without deviation
+- Do NOT add extra text or formatting
+
+CRITICAL: For the definition content, you MUST use EXACTLY this format:
+"1) What it is: [your explanation] 2) How it works: [your explanation] 3) Advantages: [your explanation]"
 
 Respond with ONLY a JSON object in this exact format:
 {
-  "questions": [
+  "title": "Lesson for ${problemData.title}",
+  "parts": [
     {
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3",
-      "explanation": "Explanation of why this answer is correct"
+      "title": "Definition",
+      "cards": [
+        {
+          "type": "definition",
+          "title": "What is [concept name]?",
+          "content": "1) What it is: [your explanation] 2) How it works: [your explanation] 3) Advantages: [your explanation]",
+          "icon": "📚"
+        }
+      ]
     },
     {
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correctAnswer": "RANDOMIZE: Pick 0, 1, 2, or 3",
-      "explanation": "Explanation of why this answer is correct"
+      "title": "When to use",
+      "cards": [
+        {
+          "type": "usage",
+          "title": "When do we use this?",
+          "content": "Brief explanation of when this concept is useful. This is the MOST IMPORTANT part.",
+          "icon": "✨"
+        }
+      ]
+    },
+    {
+      "title": "Efficiency of operations", 
+      "cards": [
+        {
+          "type": "complexity",
+          "title": "How fast and efficient is this?",
+          "content": "Explain time complexity and space complexity clearly and concisely. Structure it as: 'Time complexity: [explanation with O(?) notation]. Space complexity: [explanation with O(?) notation].' For example: 'Time complexity: Hash table operations are O(1) on average, making lookups extremely fast. Space complexity: O(n) as we need storage proportional to the number of elements.'",
+          "icon": "⚡"
+        }
+      ]
+    },
+    {
+      "title": "Relevance to question",
+      "cards": [
+        {
+          "type": "advantages",
+          "title": "Why is this useful for solving problems?",
+          "content": "Brief explanation connecting the concept to problem-solving scenarios and hint at the general approach WITHOUT revealing the complete solution. Explain why programmers choose this approach for certain types of problems and give a rough idea of how it might be applied.",
+          "icon": "🎯"
+        }
+      ]
+    },
+    {
+      "title": "Algorithm Deep Dive",
+      "cards": [
+        {
+          "type": "usage",
+          "title": "How to approach",
+          "content": "Explain the general algorithmic thinking and strategy using technical terminology. Provide sufficient hints and clues about the approach without revealing the complete solution to this specific problem. Focus on the overall methodology and key insights that make this approach effective.",
+          "icon": "🎯"
+        }
+      ]
     }
   ],
-  "lessonSummary": "A brief 2-3 sentence summary of what was learned in this lesson"
+  "keyConcepts": ["Key concept 1", "Key concept 2", "Key concept 3"],
+  "example": "Brief example",
+  "hint": "Brief hint",
+  "commonMistake": "Brief common mistake",
+
 }
 
-Create exactly 5 questions. Do not include any other text, only the JSON object.`;
+IMPORTANT NOTES:
+- ALWAYS include BOTH the 4 main lesson parts AND the Algorithm Deep Dive section (5 total parts)
+- The Algorithm Deep Dive should be the 5th and final part with exactly 1 card: "How to approach"
+- Focus on the most important concepts for the IDEAL solution
+- Make everything feel approachable and not intimidating
+- Use encouraging language throughout
+- For the Algorithm Deep Dive, teach the general technique with sufficient hints without revealing the specific solution
 
-    const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const quizData = JSON.parse(text);
-    
-    console.log('Generated quiz data:', quizData);
-    res.json(quizData);
-  } catch (error) {
-    console.error('Error generating quiz with Gemini:', error);
-    res.status(500).json({ error: 'Failed to generate quiz.' });
+
+Generate ONLY the JSON object, no other text.`;
+
+      const result = await geminiModel.generateContent(harderPrompt);
+      const response = await result.response;
+      let text = response.text();
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const lessonData = JSON.parse(text);
+      
+      // Detect relevant data structure image
+      const detectedImage = await detectDataStructureImage(lessonData);
+      if (detectedImage) {
+        lessonData.dataStructureImage = detectedImage;
+      }
+      
+      return res.json(lessonData);
+    }
+
+  } catch (err) {
+    console.error('Harder lesson generation error:', err);
+    return res.status(500).json({ error: 'Failed to generate harder lesson', details: err.message });
   }
-});
+}
 
-// Test Lesson Generation Endpoint (for development)
-app.post('/api/test-lesson-generation', async (req, res) => {
+// Generate Quiz Endpoint
+app.post('/api/generate-quiz', async (req, res) => {
   if (!geminiModel) {
-    return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
-  }
-
-  const { topicName, problemTitle, problemDescription } = req.body;
-
-  if (!topicName || !problemTitle || !problemDescription) {
-    return res.status(400).json({ error: 'Topic name, problem title, and problem description are required.' });
+    return res.status(500).json({ error: 'Quiz generation is not configured on the server.' });
   }
 
   try {
-    const prompt = `You are an expert programming tutor specializing in data structures and algorithms. Create a comprehensive educational lesson for a beginner programmer about the following LeetCode problem. The lesson should teach the fundamental concepts needed to solve this problem WITHOUT revealing the complete solution.
+    const { problemId, topicName, lessonData } = req.body;
 
-CONTEXT:
-- Topic: ${topicName}
-- Target Problem: ${problemTitle}
-- Problem Description: ${problemDescription}
+    if (!problemId || !topicName) {
+      return res.status(400).json({ error: 'Problem ID and topic name are required' });
+    }
 
-INSTRUCTIONS:
-1. **DO NOT** explain how to solve the specific problem
-2. **DO** teach the fundamental concepts and data structures that would be useful
-3. **DO** provide examples that illustrate the concepts without solving the target problem
-4. **DO** make the content beginner-friendly but comprehensive
+    // Get problem details from database - fetch full details including description
+    const { data: problemData, error: problemError } = await supabase
+      .from('leetcode_problems')
+      .select('leetcode_id, title, description, description_text, examples, constraints, difficulty, tags')
+      .eq('leetcode_id', problemId)
+      .single();
 
-For example, if the problem involves hash maps:
-- Teach WHAT a hash map is and how it works
-- Explain why hash map lookups are O(1)
-- Show simple examples of hash map usage
-- Explain collision resolution concepts
-- DO NOT show how to use hash maps to solve the specific problem
+    if (problemError || !problemData) {
+      console.error('Error fetching problem:', problemError);
+      return res.status(404).json({ error: 'Problem not found' });
+    }
 
-Your lesson should be structured and include:
+    // First, analyze the problem to identify the ideal solution approach
+    const analysisPrompt = `You are an expert competitive programmer. Analyze this LeetCode problem and identify the OPTIMAL solution approach.
 
-1. **Main Content**: A clear, step-by-step explanation of the key concepts and algorithms needed. Focus on the problem-solving approach and the underlying data structures or algorithms that would be useful.
+PROBLEM: "${problemData.title}"
+DIFFICULTY: ${problemData.difficulty}
+DESCRIPTION: ${problemData.description_text || problemData.description || 'No description available'}
+EXAMPLES: ${JSON.stringify(problemData.examples || [])}
+CONSTRAINTS: ${JSON.stringify(problemData.constraints || [])}
+TAGS: ${JSON.stringify(problemData.tags || [])}
 
-2. **Key Concepts**: List 3-5 specific concepts that are essential for understanding this problem type. Be specific about data structures, algorithms, or techniques.
+TASK: Identify the IDEAL solution approach for this problem. Respond with ONLY a JSON object:
 
-3. **Examples**: Provide 2-3 simple, concrete examples that illustrate the concepts without solving the actual problem. Use small, manageable examples.
-
-4. **Problem-Solving Hints**: Give 2-3 specific hints about the approach without revealing the solution. Focus on the thought process and strategy.
-
-5. **Common Pitfalls**: Mention 1-2 common mistakes or misconceptions students might have.
-
-6. **Visual Aids**: Suggest 1-2 visual representations or analogies that would help understand the concepts.
-
-Respond with ONLY a JSON object in this exact format:
 {
-  "title": "Specific Lesson Title for ${problemTitle}",
-  "content": "Detailed explanation of the concepts, step-by-step approach, and problem-solving strategy...",
-  "keyConcepts": ["Specific concept 1", "Specific concept 2", "Specific concept 3", "Specific concept 4"],
-  "examples": ["Concrete example 1 with explanation", "Concrete example 2 with explanation", "Concrete example 3 with explanation"],
-  "hints": ["Hint 1 about approach", "Hint 2 about strategy", "Hint 3 about implementation"],
-  "pitfalls": ["Common mistake 1", "Common mistake 2"],
-  "visualAids": ["Visual aid 1 description", "Visual aid 2 description"]
+  "primaryDataStructure": "Name of the primary data structure needed (e.g., 'Hash Map', 'Array', 'Binary Tree', 'Stack', 'Queue', 'Graph', etc.)",
+  "primaryAlgorithm": "Name of the primary algorithm/technique (e.g., 'Two Pointers', 'Binary Search', 'Dynamic Programming', 'DFS', 'BFS', 'Sliding Window', 'Greedy', etc.)",
+  "keyInsight": "The main insight needed to solve this problem efficiently",
+  "timeComplexity": "Time complexity of optimal solution (e.g., 'O(n)', 'O(log n)', 'O(n log n)')",
+  "spaceComplexity": "Space complexity of optimal solution (e.g., 'O(1)', 'O(n)', 'O(h)')",
+  "criticalEdgeCases": ["Edge case 1", "Edge case 2", "Edge case 3"],
+  "whyThisApproach": "Why this data structure/algorithm combination is optimal for this problem"
+}`;
+
+    console.log('🔍 Analyzing problem to identify optimal solution approach...');
+    const analysisResult = await geminiModel.generateContent(analysisPrompt);
+    const analysisResponse = await analysisResult.response;
+    let analysisText = analysisResponse.text();
+    analysisText = analysisText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let solutionAnalysis;
+    try {
+      solutionAnalysis = JSON.parse(analysisText);
+      console.log('✅ Solution analysis:', solutionAnalysis);
+    } catch (parseError) {
+      console.error('Failed to parse solution analysis, using fallback');
+      solutionAnalysis = {
+        primaryDataStructure: "Hash Map",
+        primaryAlgorithm: "Linear Scan",
+        keyInsight: "Use efficient data structure for lookups",
+        timeComplexity: "O(n)",
+        spaceComplexity: "O(n)",
+        criticalEdgeCases: ["Empty input", "Single element", "No valid solution"],
+        whyThisApproach: "Provides optimal time complexity for this problem type"
+      };
+    }
+
+    const quizPrompt = `Create a quiz for LeetCode problem "${problemData.title}" with detailed explanations for every option.
+
+🎯 CRITICAL REQUIREMENT: Every option (A, B, C, D) MUST have a detailed explanation in optionExplanations.
+
+🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for BEGINNERS who are learning programming concepts. 
+ALL time/space complexity notations (O(1), O(n), O(log n), etc.) mentioned ANYWHERE in the quiz (including option explanations) MUST be immediately explained in simple, beginner-friendly terms. For example, if you write 'O(n)', you must immediately say 'O(n) means linear time - the algorithm takes time proportional to the size n of the input.' This is a strict requirement for every mention, not just the main explanation.
+
+🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be roughly the same length and level of detail (±20% difference). Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
+
+SOLUTION DATA:
+- Primary Data Structure: ${solutionAnalysis.primaryDataStructure}
+- Algorithm: ${solutionAnalysis.primaryAlgorithm}  
+- Time/Space Complexity: ${solutionAnalysis.timeComplexity}, ${solutionAnalysis.spaceComplexity}
+- Key Insight: ${solutionAnalysis.keyInsight}
+- Why Optimal: ${solutionAnalysis.whyThisApproach}
+
+BEGINNER-FRIENDLY TIME COMPLEXITY EXPLANATIONS:
+When explaining time complexity, ALWAYS include what the notation means:
+- O(1): "O(1) means constant time - the algorithm takes the same amount of time regardless of input size"
+- O(n): "O(n) means linear time - the algorithm takes time proportional to the size n of the input"
+- O(log n): "O(log n) means logarithmic time - the algorithm's time grows very slowly as input size increases"
+- O(n log n): "O(n log n) means the algorithm does n operations, each taking log n time - it's like sorting a list"
+- O(n²): "O(n²) means quadratic time - the algorithm takes time proportional to the square of input size"
+- O(n³): "O(n³) means cubic time - the algorithm takes time proportional to the cube of input size"
+
+EXPLANATION REQUIREMENTS:
+✅ CORRECT answers: Explain WHY it's correct and what concept it demonstrates (2-3 sentences)
+❌ WRONG answers: Exactly 2 sentences:
+  1. What would happen if this approach was used (specific technical consequence)
+  2. What programming misconception this represents
+
+🚫 FORBIDDEN phrases: "not optimal", "doesn't work", "incorrect", "inefficient"
+✅ REQUIRED: Specific technical reasoning with complexity analysis and educational insights
+
+🎯 EXPLANATION FORMAT REQUIREMENTS:
+- DO NOT start explanations with "Correct!" or "Wrong!" - these are redundant
+- Keep ALL explanations under 3 sentences and 40 words maximum
+- Focus on the technical reasoning, not the correctness label
+- Be concise and direct in explaining the concept or misconception
+
+EXAMPLES OF BEGINNER-FRIENDLY EXPLANATIONS:
+❌ Bad: "This has O(n²) complexity"
+✅ Good: "This has O(n²) time complexity - meaning the algorithm takes time proportional to the square of input size, like comparing every person with every other person in a room"
+
+❌ Bad: "Hash table lookup is O(1)"
+✅ Good: "Hash table lookup is O(1) time complexity - meaning it's constant time, like having speed dial where you press one button and immediately get your friend's number"
+
+❌ Bad: "Binary search is O(log n)"
+✅ Good: "Binary search is O(log n) time complexity - meaning it's logarithmic time, like finding a word in a dictionary by always checking the middle and eliminating half the remaining pages"
+
+QUIZ STRUCTURE (6-7 questions):
+1. Data structure definition and how it works
+2. Algorithm usage - when and why to use it  
+3. Time/space complexity of optimal solution (MUST explain what the notation means)
+4. Why this approach is optimal for this problem
+5. Key insight: "${solutionAnalysis.keyInsight}"
+6. Critical edge cases handling
+7. Alternative approaches comparison
+
+FORMAT REQUIREMENTS:
+- Each question has exactly 4 options (A, B, C, D)
+- Only ONE correct answer per question
+- MANDATORY: optionExplanations for ALL options (A, B, C, D)
+- Questions should be concise and clear
+- Focus on understanding, not memorization
+- ALL time complexity mentions MUST include beginner-friendly explanations
+- 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be roughly the same length (±20% difference) to avoid making the correct answer obvious
+- 🎯 RANDOM POSITIONING: The correct answer must be randomly positioned across A, B, C, D - do NOT always put it as option A
+- 🚨 CRITICAL: You MUST use different positions (0, 1, 2, 3) for correctAnswer across different questions. DO NOT default to 0.
+
+Response format:
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "Question text here",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Why the correct answer is right",
+      "optionExplanations": {
+        "A": "Explanation for option A (why correct or why wrong)",
+        "B": "Explanation for option B (why correct or why wrong)", 
+        "C": "Explanation for option C (why correct or why wrong)",
+        "D": "Explanation for option D (why correct or why wrong)"
+      },
+      "category": "definition|usage|efficiency|relevance|problem-specific"
+    }
+  ]
 }
 
-Make the content specific to this exact problem type and topic. Do not include any other text, only the JSON object.`;
+CRITICAL FORMATTING NOTES:
+- correctAnswer should be randomly 0, 1, 2, or 3 (not always 0)
+- All options must have similar length to avoid making the answer obvious
+- Ensure the correct answer is in the position indicated by correctAnswer index
+- 🚨 MANDATORY: Use different correctAnswer positions across questions (0, 1, 2, 3)
+- 🚨 MANDATORY: Do NOT default to position 0 (option A) for all questions
 
-    const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
-    let text = response.text();
-    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const lessonData = JSON.parse(text);
-    res.json(lessonData);
-  } catch (error) {
-    console.error('Error generating test lesson with Gemini:', error);
-    res.status(500).json({ error: 'Failed to generate lesson.' });
+Generate ONLY the JSON object, no other text.`;
+
+    const result = await geminiModel.generateContent(quizPrompt);
+      const response = await result.response;
+      let text = response.text();
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let quizData;
+    try {
+      quizData = JSON.parse(text);
+      
+      // Post-process to ensure random positioning of correct answers
+      if (quizData.questions && Array.isArray(quizData.questions)) {
+        quizData.questions.forEach((question, questionIndex) => {
+          // Check if correctAnswer is always 0 (option A)
+          if (question.correctAnswer === 0) {
+            // Randomly reposition the correct answer
+            const correctOption = question.options[0];
+            const correctExplanation = question.optionExplanations?.A;
+            
+            // Shuffle options and update correctAnswer
+            const shuffledOptions = [...question.options];
+            const shuffledExplanations = { ...question.optionExplanations };
+            
+            // Remove correct answer from first position
+            shuffledOptions.splice(0, 1);
+            delete shuffledExplanations.A;
+            
+            // Insert correct answer at random position
+            const randomPosition = Math.floor(Math.random() * 4);
+            shuffledOptions.splice(randomPosition, 0, correctOption);
+            
+            // Update explanations
+            const optionKeys = ['A', 'B', 'C', 'D'];
+            const newExplanations = {};
+            optionKeys.forEach((key, index) => {
+              if (index === randomPosition) {
+                newExplanations[key] = correctExplanation;
+              } else if (index < randomPosition) {
+                newExplanations[key] = shuffledExplanations[optionKeys[index]];
+              } else {
+                newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
+              }
+            });
+            
+            // Update the question
+            question.options = shuffledOptions;
+            question.correctAnswer = randomPosition;
+            question.optionExplanations = newExplanations;
+            
+            console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
+          }
+        });
+      }
+    } catch (parseError) {
+      console.error('Failed to parse quiz JSON:', parseError);
+      return res.status(500).json({ error: 'Failed to generate quiz questions' });
+    }
+
+
+
+    console.log(`✅ Generated quiz with ${quizData.questions?.length || 0} questions for problem ${problemId}`);
+    res.json(quizData);
+
+  } catch (err) {
+    console.error('Quiz generation error:', err);
+    return res.status(500).json({ error: 'Failed to generate quiz', details: err.message });
   }
 });
 
-// --- Existing Service Endpoints ---
-app.get('/topics', async (req, res) => {
-    try {
-      const topics = await getAllTopics();
-      res.json(topics);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch topics' });
+// Quiz Completion Endpoint
+app.post('/api/quiz-completion', async (req, res) => {
+  try {
+    const { questionId, score, completed } = req.body;
+    
+    if (!questionId || score === undefined || completed === undefined) {
+      return res.status(400).json({ error: 'Question ID, score, and completion status are required' });
     }
-  });
-  
-app.get('/topic-problems', async (req, res) => {
-try {
-    const { topic } = req.query;
-    const problems = await getTopicProblems(topic);
-    res.json(problems);
-} catch (error) {
-    res.status(500).json({ error: 'Failed to fetch topic problems' });
-}
+
+    // Get the authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    // Verify the token and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error('Authentication error:', authError);
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Save quiz completion to database
+    const { error } = await supabase
+      .from('user_lesson_completion')
+      .upsert({
+        user_id: user.id,
+        problem_id: questionId,
+        quiz_completed: completed,
+        quiz_score: score,
+        completed_at: new Date().toISOString()
+      });
+
+    if (error) {
+      console.error('Error saving quiz completion:', error);
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return res.status(500).json({ error: 'Failed to save quiz completion', details: error.message });
+    }
+
+    res.json({ success: true, message: 'Quiz completion saved successfully' });
+  } catch (error) {
+    console.error('Error in quiz completion endpoint:', error);
+    res.status(500).json({ error: 'Failed to save quiz completion' });
+  }
 });
 
-// Start server
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Server is running on http://localhost:${port}`);
-  console.log('Press Ctrl+C to stop the server');
-}); 
+// Start the server
+app.listen(port, () => {
+  console.log(`🚀 Server is running on port ${port}`);
+});

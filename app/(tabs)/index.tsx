@@ -528,27 +528,27 @@ export default function HomeScreen() {
             >
               <View style={styles.dailyChallengeHeader}>
                 <View style={styles.dailyChallengeIconContainer}>
-                  <Image 
-                    source={require('../../assets/images/icons/fire-icon.png')} 
+                <Image 
+                  source={require('../../assets/images/icons/fire-icon.png')} 
                     style={styles.dailyChallengeIcon}
                     tintColor="#8B5CF6"
-                  />
-                </View>
+                />
+              </View>
                 <View style={styles.dailyChallengeInfo}>
                   <ThemedText style={styles.dailyChallengeTitle}>Daily Challenge</ThemedText>
                   <ThemedText style={styles.dailyChallengeStreak}>{dailyStats.streak} day streak</ThemedText>
-                </View>
+              </View>
                 <View style={styles.dailyChallengeStatus}>
-                  {challengeLoading ? (
+                {challengeLoading ? (
                     <ActivityIndicator size="small" color="#8B5CF6" />
-                  ) : dailyChallenge?.completed ? (
+                ) : dailyChallenge?.completed ? (
                     <View style={styles.completedBadge}>
                       <ThemedText style={styles.completedText}>✓</ThemedText>
                     </View>
-                  ) : (
+                ) : (
                     <ThemedText style={styles.pendingText}>•</ThemedText>
-                  )}
-                </View>
+                )}
+              </View>
                 <Image 
                   source={require('../../assets/images/icons/up-arrow.png')} 
                   style={[
@@ -557,8 +557,8 @@ export default function HomeScreen() {
                   ]}
                   tintColor="#8B5CF6"
                 />
-              </View>
-            </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
             
             {/* Expanded Daily Challenge Content */}
             {showDailyChallenge && (

@@ -2,7 +2,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
 import { markQuestionComplete } from '@/lib/services/userProgress';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

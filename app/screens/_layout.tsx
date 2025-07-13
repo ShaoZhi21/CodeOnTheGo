@@ -8,6 +8,7 @@ export default function ScreensLayout() {
       }}
     >
       <Stack.Screen name="lesson" />
+      <Stack.Screen name="LessonMCQ" />
       <Stack.Screen name="question" />
       <Stack.Screen name="quiz" />
       <Stack.Screen name="roadmaptopic" />

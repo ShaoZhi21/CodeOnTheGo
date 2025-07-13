@@ -149,17 +149,17 @@ export default function LoadingScreen({
       fetchProblemData();
     }
     
-    // Define progress steps with 2-second total duration
+    // Define progress steps with 1-second total duration
     const progressSteps = [
-      { time: 200, progress: 15 },   // Initial connection
-      { time: 400, progress: 30 },   // Database query/API call
-      { time: 600, progress: 45 },   // Data processing
-      { time: 800, progress: 60 },   // Content processing
-      { time: 1000, progress: 75 },  // Final processing
-      { time: 1200, progress: 85 },  // Storage
-      { time: 1400, progress: 90 },  // 90% - Bird should fly!
-      { time: 1600, progress: 95 },  // Almost done
-      { time: 2000, progress: 100 }, // Complete
+      { time: 100, progress: 15 },   // Initial connection
+      { time: 200, progress: 30 },   // Database query/API call
+      { time: 300, progress: 45 },   // Data processing
+      { time: 400, progress: 60 },   // Content processing
+      { time: 500, progress: 75 },   // Final processing
+      { time: 600, progress: 85 },   // Storage
+      { time: 700, progress: 90 },   // Almost done
+      { time: 800, progress: 95 },   // Almost done
+      { time: 1000, progress: 100 }, // Complete
     ];
 
     // Set up progress updates at each step
@@ -231,22 +231,17 @@ export default function LoadingScreen({
     };
   }, []);
 
-  // Watch for 90% progress to trigger bird flight
+  // Watch for 100% progress to trigger bird flight
   useEffect(() => {
-    if (fetchProgress >= 90 && !birdFlightStarted) {
-      console.log('🦅 90% progress reached! Bird starting to fly away...');
+    if (fetchProgress >= 100 && !birdFlightStarted) {
+      console.log('🦅 100% progress reached! Bird starting to fly away...');
       setBirdFlightStarted(true);
 
-      // Start the bird flight animation
       Animated.timing(birdFlyAnim, {
         toValue: 1,
         duration: 1000,
         useNativeDriver: true,
-      }).start(() => {
-        if (onLoadingComplete) {
-          onLoadingComplete();
-        }
-      });
+      }).start();
     }
   }, [fetchProgress, birdFlightStarted]);
 
