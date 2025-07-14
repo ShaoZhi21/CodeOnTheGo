@@ -11,6 +11,30 @@ export default function StreakAnimationScreen() {
   const params = useLocalSearchParams();
   const { currentStreakCount, hideStreakAnimation } = useStreak();
   
+  // Hardcoded streak messages
+  const getStreakMessage = (streakCount: number) => {
+    if (streakCount === 1) {
+      return "Streak Started!";
+    }
+    
+    const messages = [
+      "Keep it up!",
+      "You're on fire!",
+      "Amazing progress!",
+      "Unstoppable!",
+      "Incredible streak!",
+      "You're crushing it!",
+      "Consistency wins!",
+      "Pure dedication!",
+      "Legendary streak!",
+      "Unbelievable!"
+    ];
+    
+    // Use streak count to cycle through messages, but keep it within bounds
+    const messageIndex = (streakCount - 2) % messages.length;
+    return messages[messageIndex];
+  };
+  
   // Animation values
   const birdScale = new Animated.Value(0);
   const birdOpacity = new Animated.Value(0);
@@ -231,9 +255,12 @@ export default function StreakAnimationScreen() {
           { opacity: textOpacity }
         ]}
       >
-        <ThemedText style={styles.streakTitle}>Streak Started!</ThemedText>
+        <ThemedText style={styles.streakTitle}>{getStreakMessage(currentStreakCount)}</ThemedText>
+        <ThemedText style={styles.dayText}>
+          Day {currentStreakCount}
+        </ThemedText>
         <ThemedText style={styles.streakSubtitle}>
-          Day {currentStreakCount} of your coding journey
+          of your coding journey
         </ThemedText>
       </Animated.View>
         
@@ -335,21 +362,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    marginBottom: 80, // Move text down more
+    marginBottom: 80,
     marginTop: 300,
   },
   streakTitle: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#A855F7',
-    paddingTop: 100,
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#7C3AED',
     textAlign: 'center',
+    marginBottom: 8,
+    textShadowColor: 'rgba(124, 58, 237, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  dayText: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#FF6B35',
+    textAlign: 'center',
+    marginBottom: 8,
+    textShadowColor: 'rgba(255, 107, 53, 0.4)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 6,
   },
   streakSubtitle: {
-    fontSize: 20,
-    color: '#A855F7',
-    opacity: 0.8,
+    fontSize: 18,
+    color: '#6B7280',
+    fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 28,
+    lineHeight: 24,
   },
 }); 
