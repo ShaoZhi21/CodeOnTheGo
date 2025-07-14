@@ -1771,7 +1771,7 @@ TASK: Identify the IDEAL solution approach for this problem. Respond with ONLY a
 🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for BEGINNERS who are learning programming concepts. 
 ALL time/space complexity notations (O(1), O(n), O(log n), etc.) mentioned ANYWHERE in the quiz (including option explanations) MUST be immediately explained in simple, beginner-friendly terms. For example, if you write 'O(n)', you must immediately say 'O(n) means linear time - the algorithm takes time proportional to the size n of the input.' This is a strict requirement for every mention, not just the main explanation.
 
-🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly within 1 sentence and maximum 15 words each. Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
+🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly within 1 sentence and maximum 12 words each. Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
 
 SOLUTION DATA:
 - Primary Data Structure: ${solutionAnalysis.primaryDataStructure}
@@ -1830,7 +1830,7 @@ FORMAT REQUIREMENTS:
 - Questions should be concise and clear
 - Focus on understanding, not memorization
 - ALL time complexity mentions MUST include beginner-friendly explanations
-- 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly within 1 sentence and maximum 15 words each to avoid making the correct answer obvious
+- 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly within 1 sentence and maximum 12 words each to avoid making the correct answer obvious
 - 🎯 RANDOM POSITIONING: The correct answer must be randomly positioned across A, B, C, D - do NOT always put it as option A
 - 🚨 CRITICAL: You MUST use different positions (0, 1, 2, 3) for correctAnswer across different questions. DO NOT default to 0.
 
@@ -1872,48 +1872,52 @@ Generate ONLY the JSON object, no other text.`;
     try {
       quizData = JSON.parse(text);
       
-      // Post-process to ensure random positioning of correct answers
+      // Post-process to ensure completely random positioning of correct answers
       if (quizData.questions && Array.isArray(quizData.questions)) {
         quizData.questions.forEach((question, questionIndex) => {
-          // Check if correctAnswer is always 0 (option A)
-          if (question.correctAnswer === 0) {
-            // Randomly reposition the correct answer
-            const correctOption = question.options[0];
-            const correctExplanation = question.optionExplanations?.A;
-            
-            // Shuffle options and update correctAnswer
-            const shuffledOptions = [...question.options];
-            const shuffledExplanations = { ...question.optionExplanations };
-            
-            // Remove correct answer from first position
-            shuffledOptions.splice(0, 1);
-            delete shuffledExplanations.A;
-            
-            // Insert correct answer at random position
-            const randomPosition = Math.floor(Math.random() * 4);
-            shuffledOptions.splice(randomPosition, 0, correctOption);
-            
-            // Update explanations
-            const optionKeys = ['A', 'B', 'C', 'D'];
-            const newExplanations = {};
-            optionKeys.forEach((key, index) => {
-              if (index === randomPosition) {
-                newExplanations[key] = correctExplanation;
-              } else if (index < randomPosition) {
-                newExplanations[key] = shuffledExplanations[optionKeys[index]];
-              } else {
-                newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
-              }
-            });
-            
-            // Update the question
-            question.options = shuffledOptions;
-            question.correctAnswer = randomPosition;
-            question.optionExplanations = newExplanations;
-            
-            console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
-          }
+          // Always randomize the correct answer position
+          const correctOption = question.options[question.correctAnswer];
+          const correctExplanation = question.optionExplanations?.[Object.keys(question.optionExplanations)[question.correctAnswer]];
+          
+          // Shuffle options and update correctAnswer
+          const shuffledOptions = [...question.options];
+          const shuffledExplanations = { ...question.optionExplanations };
+          
+          // Remove correct answer from current position
+          shuffledOptions.splice(question.correctAnswer, 1);
+          const optionKeys = ['A', 'B', 'C', 'D'];
+          delete shuffledExplanations[optionKeys[question.correctAnswer]];
+          
+          // Completely random position (0, 1, 2, or 3)
+          const randomPosition = Math.floor(Math.random() * 4);
+          
+          // Insert correct answer at random position
+          shuffledOptions.splice(randomPosition, 0, correctOption);
+          
+          // Update explanations
+          const newExplanations = {};
+          optionKeys.forEach((key, index) => {
+            if (index === randomPosition) {
+              newExplanations[key] = correctExplanation;
+            } else if (index < randomPosition) {
+              newExplanations[key] = shuffledExplanations[optionKeys[index]];
+            } else {
+              newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
+            }
+          });
+          
+          // Update the question
+          question.options = shuffledOptions;
+          question.correctAnswer = randomPosition;
+          question.optionExplanations = newExplanations;
+          
+          console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
         });
+        
+        // Log the final distribution
+        const positionCounts = [0, 0, 0, 0];
+        quizData.questions.forEach(q => positionCounts[q.correctAnswer]++);
+        console.log(`📊 Final correct answer distribution: A=${positionCounts[0]}, B=${positionCounts[1]}, C=${positionCounts[2]}, D=${positionCounts[3]}`);
       }
     } catch (parseError) {
       console.error('Failed to parse quiz JSON:', parseError);
