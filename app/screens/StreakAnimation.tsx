@@ -120,6 +120,7 @@ export default function StreakAnimationScreen() {
         pathname: './QuizComplete',
         params: {
           problemTitle: params.problemTitle as string || '',
+          problemId: params.problemId as string || '',
           topicName: params.topicName as string || '',
           quizData: params.quizData as string || '', // Pass the quiz data
         }

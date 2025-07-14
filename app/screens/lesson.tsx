@@ -482,6 +482,7 @@ export default function LessonScreen() {
           params: {
             quizData: JSON.stringify(transformedData),
             questionTitle: Array.isArray(questionTitle) ? questionTitle[0] : questionTitle,
+            problemId: Array.isArray(actualProblemId) ? actualProblemId[0] : actualProblemId,
             topicName: Array.isArray(topicName) ? topicName[0] : topicName
           }
         });
@@ -559,6 +560,7 @@ export default function LessonScreen() {
         params: {
           quizData: JSON.stringify(lessonMCQData),
           questionTitle: Array.isArray(questionTitle) ? questionTitle[0] : questionTitle,
+          problemId: Array.isArray(actualProblemId) ? actualProblemId[0] : actualProblemId,
           topicName: Array.isArray(topicName) ? topicName[0] : topicName
         }
       });

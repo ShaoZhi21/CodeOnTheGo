@@ -117,6 +117,7 @@ export default function LoadingRoadMap() {
       await new Promise(resolve => setTimeout(resolve, 3000));
 
       console.log('🎯 LoadingRoadMap: Navigating to roadmaptopic with data');
+      console.log('🎯 LoadingRoadMap: from parameter:', from);
       // Navigate to roadmap screen with pre-fetched data
       router.replace({
         pathname: '/screens/roadmaptopic',

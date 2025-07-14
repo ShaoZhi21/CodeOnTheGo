@@ -224,15 +224,16 @@ export default function LessonMCQScreen() {
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        // No user, go directly to QuizComplete
-        router.push({
-          pathname: './QuizComplete',
-          params: {
-            problemTitle: finalProblemTitle,
-            topicName: params.topicName || '',
-            quizData: params.quizData || '', // Pass the quiz data
-          }
-        });
+              // No user, go directly to QuizComplete
+      router.push({
+        pathname: './QuizComplete',
+        params: {
+          problemTitle: finalProblemTitle,
+          problemId: params.problemId || '',
+          topicName: params.topicName || '',
+          quizData: params.quizData || '', // Pass the quiz data
+        }
+      });
         return;
       }
 
@@ -266,6 +267,7 @@ export default function LessonMCQScreen() {
           pathname: './StreakAnimation',
           params: {
             problemTitle: finalProblemTitle,
+            problemId: params.problemId || '',
             topicName: params.topicName || '',
             quizData: params.quizData || '', // Pass the quiz data
           }
@@ -289,6 +291,7 @@ export default function LessonMCQScreen() {
         pathname: './QuizComplete',
         params: {
           problemTitle: finalProblemTitle,
+          problemId: params.problemId || '',
           topicName: params.topicName || '',
           quizData: params.quizData || '', // Pass the quiz data
         }
@@ -339,7 +342,17 @@ export default function LessonMCQScreen() {
         problemId = problems && problems.length > 0 ? problems[0].leetcode_id : 0;
       }
 
-      // Save quiz completion to database
+      // Check if quiz completion already exists
+      const { data: existingCompletion } = await supabase
+        .from('user_lesson_completion')
+        .select('quiz_score, quiz_completed')
+        .eq('user_id', user.id)
+        .eq('problem_id', problemId)
+        .single();
+
+      console.log('🔍 Existing quiz completion:', existingCompletion);
+
+      // Save quiz completion to database (upsert will update if exists)
       const { error } = await supabase
         .from('user_lesson_completion')
         .upsert({
@@ -348,6 +361,8 @@ export default function LessonMCQScreen() {
           quiz_completed: passed,
           quiz_score: actualScore,
           completed_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,problem_id'
         });
 
       if (error) {

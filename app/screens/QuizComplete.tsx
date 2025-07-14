@@ -6,10 +6,11 @@ export default function QuizComplete() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const problemTitle = params.problemTitle as string || '';
+  const problemId = params.problemId as string || '';
   const topicName = params.topicName as string || '';
   const quizData = params.quizData as string || '';
 
-  console.log('QuizComplete params:', { problemTitle, topicName, quizData });
+  console.log('QuizComplete params:', { problemTitle, problemId, topicName, quizData });
 
   const handleRedo = () => {
     // Go back to quiz start (reset state) with the original quiz data
@@ -18,6 +19,7 @@ export default function QuizComplete() {
       params: {
         topicName,
         problemTitle,
+        problemId, // Pass the problemId back
         quizData, // Pass the original quiz data back
         redo: '1', // can be used to trigger reset if needed
       }
@@ -27,28 +29,24 @@ export default function QuizComplete() {
   const handleComplete = async () => {
     console.log('🎯 handleComplete called with topicName:', topicName);
     console.log('🎯 handleComplete called with problemTitle:', problemTitle);
+    console.log('🎯 handleComplete called with problemId:', problemId);
     // Unlock pseudocode for this problem (mark as solved in user_problem_progress)
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && problemTitle) {
-        // Find the problem ID by title and topic
-        const { data: problems } = await supabase
-          .from('problems')
-          .select('leetcode_id')
-          .eq('title', problemTitle)
-          .limit(1);
-        const problemId = problems && problems.length > 0 ? problems[0].leetcode_id : null;
-        console.log('🎯 Found problemId:', problemId, 'for title:', problemTitle);
-        if (problemId) {
+      if (user && problemId) {
+        // Use the passed problemId directly (no need to query)
+        const leetcodeId = parseInt(problemId);
+        console.log('🎯 Using problemId:', leetcodeId, 'for title:', problemTitle);
+        if (leetcodeId) {
           await supabase
             .from('user_problem_progress')
             .upsert({
               user_id: user.id,
-              problem_id: problemId,
+              problem_id: leetcodeId,
               is_solved: true,
               updated_at: new Date().toISOString(),
             });
-          console.log('🎯 Successfully unlocked pseudocode for problemId:', problemId);
+          console.log('🎯 Successfully unlocked pseudocode for problemId:', leetcodeId);
         }
       }
     } catch (error) {

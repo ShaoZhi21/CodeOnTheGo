@@ -46,6 +46,7 @@ export default function QuestionActionModal({
       pathname: '/screens/LoadingLesson',
       params: {
         questionId: questionId.toString(),
+        problemId: questionId.toString(), // Add problemId (leetcode_id) for consistency
         questionTitle: questionTitle,
         questionDescription: questionDescription,
         topicName: topicName,

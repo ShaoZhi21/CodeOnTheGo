@@ -117,10 +117,19 @@ export default function RoadmapTopic() {
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      if (topicString && !preFetchedData) {
-        loadTopicData();
+      if (topicString) {
+        // Always refresh lesson completion data when coming back to roadmap
+        refreshLessonCompletionData();
+        
+        // Force refresh if coming from quizcomplete, otherwise only if no preFetchedData
+        if (fromPage === 'quizcomplete' || !preFetchedData) {
+          console.log('RoadmapTopic: Force refreshing data - from quizcomplete or no preFetchedData');
+          loadTopicData();
+        } else {
+          console.log('RoadmapTopic: Using preFetchedData, only refreshing lesson completion');
+        }
       }
-    }, [topicString, preFetchedData])
+    }, [topicString, preFetchedData, fromPage])
   );
 
   // Scroll to bottom when questions load
@@ -132,6 +141,33 @@ export default function RoadmapTopic() {
       }, 100);
     }
   }, [questions]);
+
+  const refreshLessonCompletionData = async () => {
+    console.log('RoadmapTopic: refreshLessonCompletionData called');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get lesson completion status from database
+      const { data: lessonData, error: lessonError } = await supabase
+        .from('user_lesson_completion')
+        .select('problem_id, quiz_completed')
+        .eq('user_id', user.id);
+      
+      console.log('RoadmapTopic: Refreshed lesson completion data:', { lessonData, lessonError });
+      
+      if (lessonData) {
+        const lessonProgressMap: Record<number, boolean> = {};
+        lessonData.forEach(lesson => {
+          lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
+        });
+        setLessonProgress(lessonProgressMap);
+        console.log('RoadmapTopic: Updated lesson progress map:', lessonProgressMap);
+      }
+    } catch (error) {
+      console.error('Error refreshing lesson completion data:', error);
+    }
+  };
 
   const loadTopicData = async () => {
     console.log('RoadmapTopic: loadTopicData called');

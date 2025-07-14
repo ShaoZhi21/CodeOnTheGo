@@ -218,6 +218,7 @@ export default function LoadingLesson({
           pathname: '/screens/lesson',
           params: {
             questionId: questionId as string,
+            problemId: questionId as string, // Add problemId for consistency
             questionTitle: questionTitle as string,
             questionDescription: questionDescription as string,
             topicName: topicName as string,

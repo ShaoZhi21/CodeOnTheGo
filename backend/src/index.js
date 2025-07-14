@@ -1176,7 +1176,17 @@ app.post('/api/quiz-completion', async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    // Save quiz completion to database
+    // Check if quiz completion already exists
+    const { data: existingCompletion } = await supabase
+      .from('user_lesson_completion')
+      .select('quiz_score, quiz_completed')
+      .eq('user_id', user.id)
+      .eq('problem_id', questionId)
+      .single();
+
+    console.log('🔍 Backend - Existing quiz completion:', existingCompletion);
+
+    // Save quiz completion to database (upsert will update if exists)
     const { error } = await supabase
       .from('user_lesson_completion')
       .upsert({
@@ -1185,6 +1195,8 @@ app.post('/api/quiz-completion', async (req, res) => {
         quiz_completed: completed,
         quiz_score: score,
         completed_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,problem_id'
       });
 
     if (error) {
@@ -1759,7 +1771,7 @@ TASK: Identify the IDEAL solution approach for this problem. Respond with ONLY a
 🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for BEGINNERS who are learning programming concepts. 
 ALL time/space complexity notations (O(1), O(n), O(log n), etc.) mentioned ANYWHERE in the quiz (including option explanations) MUST be immediately explained in simple, beginner-friendly terms. For example, if you write 'O(n)', you must immediately say 'O(n) means linear time - the algorithm takes time proportional to the size n of the input.' This is a strict requirement for every mention, not just the main explanation.
 
-🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be roughly the same length and level of detail (±20% difference). Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
+🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly under 2 sentences and maximum 18 words each. Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
 
 SOLUTION DATA:
 - Primary Data Structure: ${solutionAnalysis.primaryDataStructure}
@@ -1818,7 +1830,7 @@ FORMAT REQUIREMENTS:
 - Questions should be concise and clear
 - Focus on understanding, not memorization
 - ALL time complexity mentions MUST include beginner-friendly explanations
-- 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be roughly the same length (±20% difference) to avoid making the correct answer obvious
+- 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly under 2 sentences and maximum 18 words each to avoid making the correct answer obvious
 - 🎯 RANDOM POSITIONING: The correct answer must be randomly positioned across A, B, C, D - do NOT always put it as option A
 - 🚨 CRITICAL: You MUST use different positions (0, 1, 2, 3) for correctAnswer across different questions. DO NOT default to 0.
 
