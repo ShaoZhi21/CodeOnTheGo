@@ -104,6 +104,7 @@ export default function RoadmapTopic() {
   const [progress, setProgress] = useState<Record<number, UserProgress>>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
+  const hasScrolledToBottom = useRef(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -113,6 +114,17 @@ export default function RoadmapTopic() {
   const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
   console.log('RoadmapTopic: Component initialized');
+
+  // Scroll to bottom only on first load
+  useEffect(() => {
+    if (questions && questions.length > 0 && !hasScrolledToBottom.current) {
+      hasScrolledToBottom.current = true;
+      // Add a small delay to ensure content is rendered
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 100);
+    }
+  }, [questions]);
 
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
@@ -132,15 +144,7 @@ export default function RoadmapTopic() {
     }, [topicString, preFetchedData, fromPage])
   );
 
-  // Scroll to bottom when questions load
-  useEffect(() => {
-    if (questions && questions.length > 0) {
-      // Add a small delay to ensure content is rendered
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: false });
-      }, 100);
-    }
-  }, [questions]);
+  // Removed automatic scroll to bottom to prevent jumping behavior
 
   const refreshLessonCompletionData = async () => {
     console.log('RoadmapTopic: refreshLessonCompletionData called');
@@ -602,7 +606,7 @@ export default function RoadmapTopic() {
           ref={scrollViewRef}
           style={styles.roadmapContainer}
           contentContainerStyle={[styles.roadmapContent, { 
-            paddingBottom: 120, // Add more padding at bottom for better visibility
+            paddingBottom: 60, // Reduced padding at bottom
           }]}
           showsVerticalScrollIndicator={false}
           maintainVisibleContentPosition={{ // This helps maintain scroll position when content changes

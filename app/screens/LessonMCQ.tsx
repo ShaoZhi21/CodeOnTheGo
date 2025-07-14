@@ -1,4 +1,5 @@
 import { useStreak } from '@/contexts/StreakContext';
+import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -44,6 +45,16 @@ export default function LessonMCQScreen() {
     ? JSON.parse(params.quizData as string) 
     : null;
 
+  console.log('🎯 LessonMCQ: Quiz data parsed:', {
+    hasQuizData: !!quizData,
+    quizLength: quizData?.quiz?.length || 0,
+    quizDataKeys: quizData ? Object.keys(quizData) : [],
+    firstQuestion: quizData?.quiz?.[0] ? {
+      question: quizData.quiz[0].question?.substring(0, 50) + '...',
+      optionsCount: quizData.quiz[0].options?.length || 0
+    } : null
+  });
+
   // Reset state if this is a redo
   useEffect(() => {
     if (params.redo === '1') {
@@ -87,6 +98,7 @@ export default function LessonMCQScreen() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
+  const [isLoading, setIsLoading] = useState(!quizData); // Loading state if no quiz data
   
   // Animation values
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -98,6 +110,14 @@ export default function LessonMCQScreen() {
 
   const currentQuestion = quizData?.quiz[currentQuestionIndex];
   const totalQuestions = quizData?.quiz.length || 0;
+
+  // Update loading state when quiz data becomes available
+  useEffect(() => {
+    if (quizData && isLoading) {
+      console.log('✅ Quiz data loaded, setting loading to false');
+      setIsLoading(false);
+    }
+  }, [quizData, isLoading]);
 
   // Bounce animation when question appears
   useEffect(() => {
@@ -219,52 +239,14 @@ export default function LessonMCQScreen() {
 
   const checkDailyStreakAndNavigate = async () => {
     try {
-      // First, save quiz completion to database
-      await handleQuizCompletion();
+      console.log('🎯 checkDailyStreakAndNavigate: Starting...');
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-              // No user, go directly to QuizComplete
-      router.push({
-        pathname: './QuizComplete',
-        params: {
-          problemTitle: finalProblemTitle,
-          problemId: params.problemId || '',
-          topicName: params.topicName || '',
-          quizData: params.quizData || '', // Pass the quiz data
-        }
-      });
-        return;
-      }
-
-      // Check if this is the first activity of the day
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // Check both problem progress and lesson completion for today's activity
-      const [problemProgress, lessonCompletion] = await Promise.all([
-        supabase
-          .from('user_problem_progress')
-          .select('created_at')
-          .eq('user_id', user.id)
-          .gte('created_at', today.toISOString())
-          .limit(1),
-        supabase
-          .from('user_lesson_completion')
-          .select('completed_at')
-          .eq('user_id', user.id)
-          .gte('completed_at', today.toISOString())
-          .limit(1)
-      ]);
-
-      const hasActivityToday = (problemProgress.data && problemProgress.data.length > 0) ||
-                              (lessonCompletion.data && lessonCompletion.data.length > 0);
-
-      // If no activity today, show streak animation first
-      if (!hasActivityToday) {
-        console.log('🎯 First activity of the day! Showing streak animation');
+        console.log('❌ No user found, going to QuizComplete');
+        // No user, go directly to QuizComplete
         router.push({
-          pathname: './StreakAnimation',
+          pathname: './QuizComplete',
           params: {
             problemTitle: finalProblemTitle,
             problemId: params.problemId || '',
@@ -272,9 +254,69 @@ export default function LessonMCQScreen() {
             quizData: params.quizData || '', // Pass the quiz data
           }
         });
-      } else {
-        // Not first activity, go directly to QuizComplete
-        console.log('🎯 Not first activity of the day, going directly to QuizComplete');
+        return;
+      }
+
+      // Get today and yesterday at 12am
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const now = new Date(); // Current time for comparison
+
+      console.log('📅 Date check:', {
+        today: today.toISOString(),
+        yesterday: yesterday.toISOString(),
+        currentTime: now.toISOString()
+      });
+
+      // Get activities BEFORE the current quiz completion (exclude the quiz we just completed)
+      const [{ data: problemData }, { data: lessonData }] = await Promise.all([
+        supabase
+          .from('user_problem_progress')
+          .select('created_at')
+          .eq('user_id', user.id)
+          .lt('created_at', now.toISOString()) // Only activities before now
+          .order('created_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('user_lesson_completion')
+          .select('completed_at')
+          .eq('user_id', user.id)
+          .lt('completed_at', now.toISOString()) // Only activities before now
+          .order('completed_at', { ascending: false })
+          .limit(1)
+      ]);
+
+      console.log('🔍 Activity data (before current quiz):', {
+        problemData: problemData,
+        lessonData: lessonData
+      });
+
+      // Find the latest activity date (excluding current quiz)
+      let lastActivity: Date | null = null;
+      if (problemData && problemData.length > 0) {
+        lastActivity = new Date(problemData[0].created_at);
+        console.log('📊 Last problem activity (before current):', lastActivity.toISOString());
+      }
+      if (lessonData && lessonData.length > 0) {
+        const lessonDate = new Date(lessonData[0].completed_at);
+        console.log('📊 Last lesson activity (before current):', lessonDate.toISOString());
+        if (!lastActivity || lessonDate > lastActivity) {
+          lastActivity = lessonDate;
+          console.log('📊 Updated last activity to lesson (before current):', lastActivity.toISOString());
+        }
+      }
+
+      console.log('🎯 Final last activity (before current quiz):', lastActivity ? lastActivity.toISOString() : 'None');
+
+      // Now save the current quiz completion
+      await handleQuizCompletion();
+
+      // Check if user had already done activity today (before this quiz)
+      if (lastActivity && lastActivity >= today) {
+        console.log('❌ Already did activity today (before this quiz), going to QuizComplete');
+        // Already did activity today, go to QuizComplete
         router.push({
           pathname: './QuizComplete',
           params: {
@@ -283,9 +325,45 @@ export default function LessonMCQScreen() {
             quizData: params.quizData || '', // Pass the quiz data
           }
         });
+        return;
       }
+
+      // If last activity was exactly yesterday, increment streak
+      if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
+        console.log('✅ Consecutive day detected, incrementing streak');
+        // Consecutive day, increment streak
+        const updatedProfile = await ProfileService.updateStreak(user.id, true);
+        if (updatedProfile) {
+          console.log('✅ Streak incremented:', updatedProfile.current_streak);
+        } else {
+          console.error('❌ Failed to increment streak');
+        }
+      } else {
+        console.log('🔄 Missed a day or first activity, resetting streak to 1');
+        // Missed a day or first activity ever, reset streak to 1
+        const updatedProfile = await ProfileService.updateStreak(user.id, false); // reset to 0
+        if (updatedProfile) {
+          // Now increment to 1 for today
+          const finalProfile = await ProfileService.updateStreak(user.id, true);
+          console.log('✅ Streak reset and started at 1:', finalProfile?.current_streak);
+        } else {
+          console.error('❌ Failed to reset streak');
+        }
+      }
+
+      console.log('🎬 Navigating to StreakAnimation...');
+      // Show streak animation
+      router.push({
+        pathname: './StreakAnimation',
+        params: {
+          problemTitle: finalProblemTitle,
+          problemId: params.problemId || '',
+          topicName: params.topicName || '',
+          quizData: params.quizData || '', // Pass the quiz data
+        }
+      });
     } catch (error) {
-      console.error('Error checking daily streak:', error);
+      console.error('❌ Error in checkDailyStreakAndNavigate:', error);
       // On error, go directly to QuizComplete
       router.push({
         pathname: './QuizComplete',
@@ -593,6 +671,33 @@ export default function LessonMCQScreen() {
     );
   };
 
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackToLesson} style={styles.backButton}>
+            <Image 
+              source={require('../../assets/images/icons/back-icon.png')} 
+              style={styles.backIcon} 
+            />
+          </TouchableOpacity>
+          
+          <View style={styles.headerCenter}>
+            <View style={styles.headerTitleBubble}>
+              <View style={styles.quizDot} />
+              <Text style={styles.headerTitle}>Loading Quiz...</Text>
+            </View>
+          </View>
+          
+          <View style={styles.headerSpacer} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Loading quiz data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!quizData) {
     return (
       <SafeAreaView style={styles.container}>
@@ -615,6 +720,12 @@ export default function LessonMCQScreen() {
         </View>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>No quiz data available</Text>
+          <Text style={styles.errorSubtext}>
+            Quiz data was not passed correctly. Please try again.
+          </Text>
+          <Text style={styles.errorSubtext}>
+            Debug: quizData param exists: {params.quizData ? 'Yes' : 'No'}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -1020,6 +1131,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
   },
   allExplanations: {
     marginVertical: 12,

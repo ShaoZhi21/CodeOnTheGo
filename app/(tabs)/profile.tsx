@@ -3,8 +3,8 @@ import { NotificationService } from '@/lib/services/notificationService';
 import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
@@ -26,10 +26,14 @@ export default function ProfileScreen() {
     Advanced: '#F44336'
   };
 
-  useEffect(() => {
-    loadProfile();
-    loadNotificationSettings();
-  }, []);
+  // Refresh data when screen comes into focus (e.g., returning from lesson completion)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 ProfileScreen: Screen focused, refreshing data');
+      loadProfile();
+      loadNotificationSettings();
+    }, [])
+  );
 
   const loadProfile = async () => {
     try {

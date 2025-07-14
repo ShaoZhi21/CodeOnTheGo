@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import CircularProgress from '../../components/CircularProgress';
 import { ThemedText } from '../../components/ThemedText';
 import { useStreak } from '../../contexts/StreakContext';
@@ -85,12 +85,16 @@ export default function HomeScreen() {
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [showDailyChallenge, setShowDailyChallenge] = useState(false); // Control visibility
 
-  useEffect(() => {
-    loadProfile();
-    loadTopicsProgress();
-    loadAllTopics();
-    loadDailyChallenge();
-  }, []);
+  // Refresh data when screen comes into focus (e.g., after lesson/quiz completion)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 HomeScreen: Screen focused, refreshing data');
+      loadProfile();
+      loadTopicsProgress();
+      loadAllTopics();
+      loadDailyChallenge();
+    }, [])
+  );
 
   useEffect(() => {
     if (profile) {
@@ -117,13 +121,22 @@ export default function HomeScreen() {
 
   const loadProfile = async () => {
     try {
+      console.log('🔄 loadProfile: Starting...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ loadProfile: No user found');
+        return;
+      }
 
       const profileData = await ProfileService.getUserProfileStats(user.id);
+      console.log('📊 loadProfile: Profile data loaded:', {
+        current_streak: profileData?.current_streak,
+        longest_streak: profileData?.longest_streak,
+        total_xp: profileData?.total_xp
+      });
       setProfile(profileData);
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('❌ loadProfile: Error loading profile:', error);
     } finally {
       setLoading(false);
     }
@@ -131,8 +144,12 @@ export default function HomeScreen() {
 
   const loadDailyStats = async () => {
     try {
+      console.log('🔄 loadDailyStats: Starting...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ loadDailyStats: No user found');
+        return;
+      }
 
       // Get user's solved problems with problem details
       const { data: solvedData } = await supabase
@@ -178,7 +195,7 @@ export default function HomeScreen() {
         item.leetcode_problems && (item.leetcode_problems as any).difficulty === 'Hard'
       ).length || 0;
 
-      setDailyStats({
+      const newDailyStats = {
         streak: profile?.current_streak || 0,
         todayProblems,
         totalProblems,
@@ -186,9 +203,18 @@ export default function HomeScreen() {
         easyCount: userEasyCount,
         mediumCount: userMediumCount,
         hardCount: userHardCount
+      };
+
+      console.log('📊 loadDailyStats: Updated daily stats:', {
+        streak: newDailyStats.streak,
+        profile_streak: profile?.current_streak,
+        todayProblems: newDailyStats.todayProblems,
+        totalSolved: newDailyStats.totalSolved
       });
+
+      setDailyStats(newDailyStats);
     } catch (error) {
-      console.error('Error loading daily stats:', error);
+      console.error('❌ loadDailyStats: Error loading daily stats:', error);
     }
   };
 
@@ -470,6 +496,54 @@ export default function HomeScreen() {
     }
   };
 
+  // Reset daily streak for testing purposes
+  const resetDailyStreak = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Clear last activity from both tables to allow streak animation
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Delete today's activities from both tables
+      const [problemResult, lessonResult] = await Promise.all([
+        supabase
+          .from('user_problem_progress')
+          .delete()
+          .eq('user_id', user.id)
+          .gte('created_at', today.toISOString()),
+        supabase
+          .from('user_lesson_completion')
+          .delete()
+          .eq('user_id', user.id)
+          .gte('completed_at', today.toISOString())
+      ]);
+
+      if (problemResult.error) {
+        console.error('Error clearing problem progress:', problemResult.error);
+      }
+      if (lessonResult.error) {
+        console.error('Error clearing lesson completion:', lessonResult.error);
+      }
+
+      console.log('✅ Last activity cleared successfully');
+      
+      // Show alert to user
+      Alert.alert(
+        'Reset Complete! 🎯',
+        'Today\'s activities have been cleared.\n\nYou can now test the streak animation by completing a lesson or problem!',
+        [{ text: 'OK', style: 'default' }]
+      );
+      
+      // Refresh profile data
+      loadProfile();
+    } catch (error) {
+      console.error('Error clearing last activity:', error);
+      Alert.alert('Error', 'Failed to clear activities. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -491,6 +565,11 @@ export default function HomeScreen() {
         </TouchableOpacity>
         
         <View style={styles.statsContainer}>
+          {/* Reset Streak Button (for testing) */}
+          <TouchableOpacity style={styles.resetStreakButton} onPress={resetDailyStreak}>
+            <ThemedText style={styles.resetStreakText}>↺</ThemedText>
+          </TouchableOpacity>
+          
           <View style={styles.statItem}>
             <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statValue}>{dailyStats.streak}</ThemedText>
@@ -825,7 +904,21 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     marginRight: 6,
-    tintColor: '#FFFFFF',
+    // Removed tintColor to keep original icon colors
+  },
+  resetStreakButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resetStreakText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   statValue: {
     fontSize: 16,

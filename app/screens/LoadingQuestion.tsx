@@ -31,7 +31,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function LoadingScreen({ 
   onLoadingComplete, 
-  loadingDuration = 3000,
+  loadingDuration = 1000,
   onProgressUpdate,
   problemId,
   onDataFetched,
@@ -151,14 +151,10 @@ export default function LoadingScreen({
     
     // Define progress steps with 1-second total duration
     const progressSteps = [
-      { time: 100, progress: 15 },   // Initial connection
-      { time: 200, progress: 30 },   // Database query/API call
-      { time: 300, progress: 45 },   // Data processing
-      { time: 400, progress: 60 },   // Content processing
-      { time: 500, progress: 75 },   // Final processing
-      { time: 600, progress: 85 },   // Storage
-      { time: 700, progress: 90 },   // Almost done
-      { time: 800, progress: 95 },   // Almost done
+      { time: 200, progress: 30 },   // Initial connection
+      { time: 400, progress: 60 },   // Database query/API call
+      { time: 600, progress: 85 },   // Data processing
+      { time: 800, progress: 95 },   // Content processing
       { time: 1000, progress: 100 }, // Complete
     ];
 

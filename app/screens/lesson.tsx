@@ -400,7 +400,6 @@ export default function LessonScreen() {
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [quizData, setQuizData] = useState<QuizQuestion[] | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
-  const [waitingForQuiz, setWaitingForQuiz] = useState(false);
   
   // LessonMCQ Data State
   const [lessonMCQData, setLessonMCQData] = useState<LessonMCQData | null>(null);
@@ -474,25 +473,11 @@ export default function LessonScreen() {
       console.log('✅ Quiz prefetched successfully:', questions.length, 'questions');
       console.log('🔍 Setting quizData state to:', questions.length, 'questions');
       
-      // If user is waiting for quiz (clicked button while loading), navigate to it automatically
-      if (waitingForQuiz && questions.length > 0) {
-        const transformedData = transformQuizData(questions);
-        router.push({
-          pathname: '/screens/LessonMCQ',
-          params: {
-            quizData: JSON.stringify(transformedData),
-            questionTitle: Array.isArray(questionTitle) ? questionTitle[0] : questionTitle,
-            problemId: Array.isArray(actualProblemId) ? actualProblemId[0] : actualProblemId,
-            topicName: Array.isArray(topicName) ? topicName[0] : topicName
-          }
-        });
-        setWaitingForQuiz(false);
-        console.log('🎯 Auto-opening quiz for waiting user');
-      }
+      // Quiz data is ready, no need for waiting state
+      console.log('✅ Quiz data loaded successfully');
     } catch (error) {
       console.error('❌ Failed to prefetch quiz:', error);
-      // Reset waiting state on error
-      setWaitingForQuiz(false);
+      // Error occurred, but no waiting state to reset
     } finally {
       setQuizLoading(false);
       console.log('🔍 Setting quizLoading to false');
@@ -509,6 +494,9 @@ export default function LessonScreen() {
       const transformedData = transformQuizData(quizData);
       setLessonMCQData(transformedData);
       console.log('✅ Quiz data auto-transformed and ready for LessonMCQ');
+      
+      // Quiz data is ready
+      console.log('✅ Quiz data is ready for use');
     }
   }, [quizData, lessonMCQData]);
 
@@ -524,6 +512,13 @@ export default function LessonScreen() {
       console.warn('⚠️ Cannot start quiz prefetch - missing required params:', { actualProblemId, topicName });
     }
   }, []); // Empty dependency array to run only once on mount
+
+  // Quiz loading completed effect
+  useEffect(() => {
+    if (!quizLoading && quizData && quizData.length > 0) {
+      console.log('✅ Quiz loading completed with data');
+    }
+  }, [quizLoading, quizData]);
 
   // Start glowing animation when we reach the last part
   useEffect(() => {
@@ -566,13 +561,24 @@ export default function LessonScreen() {
       });
       console.log('🎯 Opening quiz with', quizData.length, 'questions');
     } else if (quizLoading) {
-      // Quiz is still loading, show waiting state
-      console.log('⏳ Quiz is still generating, user is waiting...');
-      setWaitingForQuiz(true);
+      // Quiz is still loading, show bounce animation and do nothing
+      console.log('⏳ Quiz is still loading, button bounce - no action');
+      // Create a bounce animation
+      Animated.sequence([
+        Animated.timing(glowAnimation, {
+          toValue: 0.8,
+          duration: 100,
+          useNativeDriver: false,
+        }),
+        Animated.timing(glowAnimation, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: false,
+        }),
+      ]).start();
     } else {
       // No quiz data available, try to fetch it now
       console.warn('⚠️ No quiz data available, attempting to fetch...');
-      setWaitingForQuiz(true);
       prefetchQuiz();
     }
   };
@@ -823,23 +829,15 @@ export default function LessonScreen() {
               <TouchableOpacity 
                 style={styles.completeButtonInner} 
                 onPress={handleCompleteLesson}
-                disabled={waitingForQuiz}
               >
-                {waitingForQuiz ? (
-                  <View style={styles.waitingContainer}>
-                    <ActivityIndicator size="small" color="#FFFFFF" style={styles.loadingSpinner} />
-                    <ThemedText style={styles.nextButtonText}>Waiting...</ThemedText>
-                  </View>
-                ) : (
-                  <ThemedText style={styles.nextButtonText}>
-                    {(() => {
-                      console.log('🔍 Quiz button state:', { quizLoading, quizDataLength: quizData?.length, lessonMCQData: !!lessonMCQData });
-                      return quizLoading && !quizData 
-                        ? '⏳ Loading...' 
-                        : '🎉 Quiz Time!';
-                    })()}
-                  </ThemedText>
-                )}
+                <ThemedText style={styles.nextButtonText}>
+                  {(() => {
+                    console.log('🔍 Quiz button state:', { quizLoading, quizDataLength: quizData?.length, lessonMCQData: !!lessonMCQData });
+                    return quizLoading && !quizData 
+                      ? '⏳ Loading...' 
+                      : '🎉 Quiz Time!';
+                  })()}
+                </ThemedText>
               </TouchableOpacity>
             </Animated.View>
             )}
@@ -1395,14 +1393,5 @@ const styles = StyleSheet.create({
     color: '#444',
   },
 
-  // New styles for waiting container
-  waitingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  loadingSpinner: {
-    marginRight: 8,
-  },
+
 }); 
