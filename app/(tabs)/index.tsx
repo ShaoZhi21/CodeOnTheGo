@@ -82,7 +82,6 @@ export default function HomeScreen() {
   });
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
-  const [showDailyChallenge, setShowDailyChallenge] = useState(false); // Control visibility
 
   // Refresh data when screen comes into focus (e.g., after lesson/quiz completion)
   useFocusEffect(
@@ -573,76 +572,37 @@ export default function HomeScreen() {
             </View>
           </View>
           
-          {/* Daily Challenge - Compact and Collapsible */}
-          <View style={styles.dailyChallengeContainer}>
-            <TouchableOpacity 
-              style={styles.dailyChallengeToggle} 
-              onPress={() => setShowDailyChallenge(!showDailyChallenge)}
-            >
-              <View style={styles.dailyChallengeHeader}>
-                <View style={styles.dailyChallengeIconContainer}>
+          {/* Daily Challenge - Simplified Header Only */}
+          <TouchableOpacity 
+            style={styles.dailyChallengeContainer} 
+            onPress={handleRandomQuestion}
+            disabled={challengeLoading}
+          >
+            <View style={styles.dailyChallengeHeader}>
+              <View style={styles.dailyChallengeIconContainer}>
                 <Image 
                   source={require('../../assets/images/icons/fire-icon.png')} 
-                    style={styles.dailyChallengeIcon}
-                    tintColor="#8B5CF6"
-                />
-              </View>
-                <View style={styles.dailyChallengeInfo}>
-                  <ThemedText style={styles.dailyChallengeTitle}>Daily Challenge</ThemedText>
-                  <ThemedText style={styles.dailyChallengeStreak}>{dailyStats.streak} day streak</ThemedText>
-              </View>
-                <View style={styles.dailyChallengeStatus}>
-                {challengeLoading ? (
-                    <ActivityIndicator size="small" color="#8B5CF6" />
-                ) : dailyChallenge?.completed ? (
-                    <View style={styles.completedBadge}>
-                      <ThemedText style={styles.completedText}>✓</ThemedText>
-                    </View>
-                ) : (
-                    <ThemedText style={styles.pendingText}>•</ThemedText>
-                )}
-              </View>
-                <Image 
-                  source={require('../../assets/images/icons/up-arrow.png')} 
-                  style={[
-                    styles.expandIcon, 
-                    { transform: [{ rotate: showDailyChallenge ? '180deg' : '0deg' }] }
-                  ]}
+                  style={styles.dailyChallengeIcon}
                   tintColor="#8B5CF6"
                 />
-            </View>
-          </TouchableOpacity>
-            
-            {/* Expanded Daily Challenge Content */}
-            {showDailyChallenge && (
-              <View style={styles.dailyChallengeExpanded}>
-                {dailyChallenge?.completed ? (
-                  <View style={styles.completedChallengeContent}>
-                    <ThemedText style={styles.completedChallengeText}>
-                      Challenge completed! Come back tomorrow for a new one.
-                    </ThemedText>
-                  </View>
+              </View>
+              <View style={styles.dailyChallengeInfo}>
+                <ThemedText style={styles.dailyChallengeTitle}>Daily Challenge</ThemedText>
+                <ThemedText style={styles.dailyChallengeStreak}>{dailyStats.streak} day streak</ThemedText>
+              </View>
+              <View style={styles.dailyChallengeStatus}>
+                {challengeLoading ? (
+                  <ActivityIndicator size="small" color="#8B5CF6" />
                 ) : (
-                  <View style={styles.pendingChallengeContent}>
-                    <ThemedText style={styles.challengeTitle}>
-                      {dailyChallenge ? dailyChallenge.problemTitle : 'No challenge available'}
-                    </ThemedText>
-                    <TouchableOpacity 
-                      style={styles.startChallengeButton} 
-                      onPress={handleRandomQuestion}
-                      disabled={challengeLoading}
-                    >
-                      {challengeLoading ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <ThemedText style={styles.startChallengeText}>Start Challenge</ThemedText>
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
                 )}
               </View>
-            )}
-          </View>
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.quickActionsGrid}>
             <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/allquestions')}>
@@ -957,8 +917,6 @@ const styles = StyleSheet.create({
     elevation: 6,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-  },
-  dailyChallengeToggle: {
     padding: 16,
   },
   dailyChallengeHeader: {
@@ -1018,12 +976,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#6B7280',
   },
-  expandIcon: {
-    width: 16,
-    height: 16,
-    marginLeft: 10,
-  },
-  dailyChallengeExpanded: {
+  dailyChallengeContent: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
