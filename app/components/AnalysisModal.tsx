@@ -1,14 +1,21 @@
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
+import { apiCall } from '@/lib/api-config';
+import { createClient } from '@supabase/supabase-js';
 import React from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
+
+// Supabase configuration
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
@@ -37,17 +44,71 @@ interface AnalysisModalProps {
   onClose: () => void;
   analysis: Analysis | null;
   onTryForHigherScore?: () => void;
-  onMarkComplete?: () => void;
   onWritePseudocode?: () => void;
   onRemark?: () => Promise<Analysis | null>;
+  problemId?: number;
+  problemTitle?: string;
+  descriptionBoxes?: any[];
 }
 
-export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore, onMarkComplete, onWritePseudocode, onRemark }: AnalysisModalProps) {
+export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore, onWritePseudocode, onRemark, problemId, problemTitle, descriptionBoxes }: AnalysisModalProps) {
   const translateY = useSharedValue(MAX_MODAL_HEIGHT);
   const opacity = useSharedValue(0);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = React.useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [isRemarking, setIsRemarking] = React.useState(false);
   const [remarkError, setRemarkError] = React.useState(false);
+
+  // Save progress function
+  const saveProgress = async (analysis: Analysis) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('User not authenticated');
+        return;
+      }
+
+      // Determine if the solution is completed based on score
+      const isCompleted = analysis.score >= 50; // Consider completed if score >= 50
+      const stars = analysis.stars || 0;
+
+      console.log('Saving progress:', {
+        userId: user.id,
+        problemId: problemId,
+        score: analysis.score,
+        stars: stars,
+        completed: isCompleted
+      });
+
+      const response = await apiCall(`/api/user-progress/${user.id}/general/${problemId}/answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: descriptionBoxes?.map(block => {
+            if (block.type === 'text') return block.value;
+            if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
+            if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
+            if (block.type === 'else') return `else:\n${block.body}`;
+            if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
+            if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
+            return '';
+          }).join('\n') || '',
+          result: analysis.correctness,
+          completed: isCompleted,
+          stars: stars
+        }),
+      });
+
+      if (response.ok) {
+        console.log('Progress saved successfully');
+      } else {
+        console.error('Failed to save progress:', response.status);
+      }
+    } catch (error) {
+      console.error('Error saving progress:', error);
+    }
+  };
 
   const handleClose = () => {
     translateY.value = withSpring(MAX_MODAL_HEIGHT, {
@@ -234,8 +295,8 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
               >
                 <Image 
                   source={
-                    analysis.correctness === '✓' 
-                      ? require('@/assets/images/icons/correct-icon.png')
+                    analysis.score >= 50
+                      ? require('@/assets/images/icons/complete-icon.png')
                       : require('@/assets/images/icons/wrong-icon.png')
                   } 
                   style={styles.correctnessIcon}
@@ -336,11 +397,15 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={styles.completeButton} 
-                        onPress={() => {
-                          if (onMarkComplete) {
-                            onMarkComplete();
+                        onPress={async () => {
+                          try {
+                            if (analysis && problemId) {
+                              await saveProgress(analysis);
+                              handleClose();
+                            }
+                          } catch (error) {
+                            console.error('❌ Error marking question complete from modal:', error);
                           }
-                          handleClose();
                         }}
                       >
                         <Image 

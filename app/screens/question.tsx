@@ -1321,9 +1321,7 @@ export default function QuestionScreen() {
         console.log(data.rawResponse);
         console.log('=====================\n');
         setAnalysis(data.analysis);
-        
-        // Save progress to database
-        await saveProgress(data.analysis);
+      
         
         // Verify analysis was set correctly
         setTimeout(() => {
@@ -1352,56 +1350,7 @@ export default function QuestionScreen() {
     }
   }
 
-  async function saveProgress(analysis: Analysis) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('User not authenticated');
-        return;
-      }
 
-      // Determine if the solution is completed based on score
-      const isCompleted = analysis.score >= 50; // Consider completed if score >= 50
-      const stars = analysis.stars || 0;
-
-      console.log('Saving progress:', {
-        userId: user.id,
-        problemId: id,
-        score: analysis.score,
-        stars: stars,
-        completed: isCompleted
-      });
-
-      const response = await apiCall(`/api/user-progress/${user.id}/general/${id}/answer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: descriptionBoxes.map(block => {
-            if (block.type === 'text') return block.value;
-            if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
-            if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
-            if (block.type === 'else') return `else:\n${block.body}`;
-            if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
-            if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
-            return '';
-          }).join('\n'),
-          result: analysis.correctness,
-          completed: isCompleted,
-          stars: stars
-        }),
-      });
-
-      if (response.ok) {
-        console.log('Progress saved successfully');
-      } else {
-        console.error('Failed to save progress:', response.status);
-      }
-    } catch (error) {
-      console.error('Error saving progress:', error);
-    }
-  }
 
   function handleDescriptionBoxChange(index: number, text: string) {
     setDescriptionBoxes(prev => prev.map((block, i) =>
@@ -1562,7 +1511,7 @@ export default function QuestionScreen() {
       const { markQuestionComplete } = await import('@/lib/services/userProgress');
       
       const completeParams = {
-        problemId: problem.leetcode_id,
+        problemId: problem?.leetcode_id ?? 0,
         score: analysis.score,
         stars: analysis.stars
       };
@@ -1646,31 +1595,41 @@ export default function QuestionScreen() {
 
   const handleRemark = async (): Promise<Analysis | null> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/analyze-solution`, {
+      // Convert blocks to numbered solution (same format as handleSolveProblem)
+      const numberedSolution = descriptionBoxes.map((block, index) => {
+        if (block.type === 'text') {
+          return `${index + 1}. ${block.value}`;
+        } else if (block.type === 'if') {
+          return `${index + 1}. if ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'elseif') {
+          return `${index + 1}. elif ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'else') {
+          return `${index + 1}. else:\n   ${block.body}`;
+        } else if (block.type === 'while') {
+          return `${index + 1}. while ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'for') {
+          return `${index + 1}. for ${block.condition}:\n   ${block.body}`;
+        }
+        return '';
+      }).join('\n');
+
+      const response = await apiCall('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          problemId: id,
-          solution: descriptionBoxes.map(box => {
-            if (box.type === 'text') return box.value;
-            if (box.type === 'if') return `If ${box.condition}: ${box.body}`;
-            if (box.type === 'else') return `Else: ${box.body}`;
-            if (box.type === 'elseif') return `Else if ${box.condition}: ${box.body}`;
-            if (box.type === 'while') return `While ${box.condition}: ${box.body}`;
-            if (box.type === 'for') return `For ${box.condition}: ${box.body}`;
-            return '';
-          }).join('\n'),
+          code: numberedSolution,
+          question: problem?.description || 'Solve the problem'
         }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        return data.analysis;
+      } else {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      const data = await response.json();
-      return data;
     } catch (error) {
       console.error('Error analyzing solution:', error);
       return null;
@@ -1803,7 +1762,7 @@ export default function QuestionScreen() {
       >
         <ScrollView 
           style={[styles.content, { flex: 1 }]} 
-          contentContainerStyle={{ paddingBottom: 200 }}
+          contentContainerStyle={{ paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
@@ -2174,9 +2133,11 @@ export default function QuestionScreen() {
             onClose={() => setShowAnalysis(false)}
             analysis={analysis}
             onTryForHigherScore={handleTryForHigherScore}
-            onMarkComplete={handleMarkComplete}
             onWritePseudocode={handleWritePseudocode}
             onRemark={handleRemark}
+            problemId={problem?.leetcode_id ?? 0}
+            problemTitle={problem?.title ?? ''}
+            descriptionBoxes={descriptionBoxes}
           />
         </KeyboardAvoidingView>
     </SafeAreaView>

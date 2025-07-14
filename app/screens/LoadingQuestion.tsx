@@ -67,22 +67,44 @@ export default function LoadingScreen({
     try {
       console.log('🔄 LoadingScreen: Fetching lesson data for ID:', questionId);
       
-      // Get current user
+      // Get current user and session
       const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
       
-      const lessonResponse = await apiCall('/api/generate-topic-lesson', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-        body: JSON.stringify({
-          topicName: topicName,
-          problemId: parseInt(questionId),
-          userId: user?.id,
-          fastStructuredLesson: true,
-        }),
-      });
+      let lessonResponse;
+      
+      // Check if user is authenticated and has a valid session
+      if (!user || !session?.access_token) {
+        console.log('⚠️ User not authenticated, proceeding without auth header and userId');
+        // Proceed without authentication header and userId
+        lessonResponse = await apiCall('/api/generate-topic-lesson', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            topicName: topicName,
+            problemId: parseInt(questionId),
+            // Don't send userId when user is not authenticated
+            fastStructuredLesson: true,
+          }),
+        });
+      } else {
+        // User is authenticated, include auth header and userId
+        lessonResponse = await apiCall('/api/generate-topic-lesson', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            topicName: topicName,
+            problemId: parseInt(questionId),
+            userId: user?.id,
+            fastStructuredLesson: true,
+          }),
+        });
+      }
 
       if (!lessonResponse.ok) {
         throw new Error('Failed to generate lesson');

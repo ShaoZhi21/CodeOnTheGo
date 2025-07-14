@@ -103,13 +103,13 @@ app.post('/api/analyze', async (req, res) => {
     You must always include a score out of 100 and explain the reasoning. 
     Be clear and structured.
 
-    Mark primarily based on the clarity and correctness of the algorithmic idea, not on syntax, 
-    language-specific features, type safety or indexing related issues.
-    Ignore minor syntax issues unless they affect logic or understanding.
-
-    Award more marks for clearer and longer explanations that accurately justify the approach.
-    Short or vague answers, even if correct, should not receive high scores without sufficient reasoning.
-    Gibberish answers should be marked as ✗ and given a score of 0.
+    Mark primarily based on the GENERAL IDEA and APPROACH, not on specific implementation details.
+    Be GENEROUS and focus on whether the user understands the core concept.
+    Ignore minor details, syntax issues, or missing steps unless they completely break the logic.
+    
+    Award marks for showing understanding of the problem and having a reasonable approach.
+    Even brief explanations that show the right idea should get decent scores.
+    Only mark as completely wrong if the approach is fundamentally flawed or shows no understanding.
 
     Before scoring, do the following:
     - Step 1: Generate your own ideal pseudocode in step-by-step point form (in natural language) that explains the intended algorithm fully.
@@ -156,11 +156,11 @@ Evaluate the submission as follows:
    
    Continue for ALL lines in the user's solution above. DO NOT skip any line numbers.
 
-2. Correctness (✓ or ✗) – Be strict. Only mark ✓ if the logic fully and precisely solves the problem.  
-   - Do not assume steps the user left out (e.g. sorting, bounds checks, loop conditions).  
-   - If the code omits or fails to explain something critical, mark it as ✗ and include that in Suggestions.
-   - Ensure the user has included all the steps in the explanation.
-   - Ensure the user explains how it reaches the final answer clearly. If not stated, wrong.
+2. Correctness (✓ or ✗) – Be GENEROUS. Mark ✓ if the general approach and logic would work conceptually.  
+   - Focus on whether the user understands the problem and has a reasonable solution approach.
+   - Don't penalize for missing minor details or implementation specifics.
+   - If the core idea is sound, mark as ✓ even if some steps are missing.
+   - Only mark as ✗ if the approach is fundamentally wrong or shows no understanding.
 3. Efficiency – 
    Time: [state time complexity clearly]  
    Space: [state space complexity]  
@@ -169,29 +169,32 @@ Evaluate the submission as follows:
   - What corner cases could break this code? 
     Write concisely. Give at least 1 and at most 3 strictly.
     Ignore large input cases unless the time complexity is O(n^2) or O(n^3) or worse.
-  Give it in the format of:
+  
+  CRITICAL: You MUST format edge cases exactly like this:
+  Edge Cases:
   1) Corner case 1 (reasoning 5 words max STRICTLY)
   2) Corner case 2 (reasoning 5 words max STRICTLY)
   3) Corner case 3 (reasoning 5 words max STRICTLY)
+
 5. Track Assessment –
   Based on correctness and score, determine if the user is on the right track:
   - Right Track: Correctness is ✓ AND score ≥ 60
   - Wrong Track: Correctness is ✗ OR score < 60
+
 6. Suggestions – 
-  Give at least 1 and at most 3 specific ways to improve the code strictly. 
+  Give at least 1 and MAXIMUM 3 specific ways to improve the code strictly. 
   Write concisely only one sentence.
   No need to tell them to explain time or space complexity.
   If logic is ✓, suggest what was missing (e.g. "no sorting step included").
   If logic is ✗, suggest what was missing (e.g. "no sorting step included").
   Include suggestions to include more details in explanation, clarity, performance, or robustness.
   
-  Format based on track assessment:
-  - If Right Track: "You are on the right track!"
-  - If Wrong Track: "You are on the wrong track!"
-  
+  CRITICAL: You MUST format suggestions exactly like this:
+  Suggestions:
   1) Suggestion 1 (reasoning 15 words max STRICTLY)
   2) Suggestion 2 (reasoning 15 words max STRICTLY)
   3) Suggestion 3 (reasoning 15 words max STRICTLY)
+  
   DO NOT INCLUDE ANYTHING ELSE. NO EXTRA EXPLANATION.
 
 7. Structured Explanation - Provide detailed explanations of data structures and algorithms used:
@@ -210,40 +213,6 @@ Evaluate the submission as follows:
 4) Efficiency  
    - Insert: O(?) | Delete: O(?) | Lookup: O(?)  
    - Space Complexity: O(?)
-
-⚙️ Algorithm Used: [Name] (e.g., Two Pointers, Binary Search)
-[Only include if algorithm is non-trivial - not just a simple loop]
-
-1) How to approach  
-   - [What type of algorithm this is - ONE bullet point only]
-
-2) Core steps  
-   - [Step-by-step explanation of the algorithm logic - as many bullets as needed]
-
-8. Multiple Choice Questions (MCQs) - Generate MCQs based on complexity:
-
-CASE 1: Both data structure and algorithm are non-trivial
-→ Generate 8 MCQs: 4 for data structure + 4 for algorithm
-
-CASE 2: Trivial algorithm (just a loop)
-→ Generate 4 MCQs for data structure + 1-2 MCQs for algorithm logic
-
-CASE 3: Trivial data structure (just array/list)
-→ Generate 1-2 MCQs for data structure + 4 MCQs for algorithm
-
-For each MCQ, provide:
-- One correct answer
-- Two distractors (plausible but incorrect)
-- Short explanation for correct choice
-- Focus on LOGIC and UNDERSTANDING, not syntax
-
-MCQ Format:
-Question: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-Correct Answer: [A/B/C]
-Explanation: [Why correct answer is right]
 
 Scoring  
 Rate the solution out of 100 using the following scale:
@@ -332,11 +301,14 @@ Stars: [number]
         analysis.efficiency.anyMoreOptimal = trimmedLine.replace('Any more optimal?', '').trim();
       } else if (trimmedLine.startsWith('Edge Cases:') || trimmedLine.startsWith('**Edge Cases:**')) {
         currentSection = 'edgeCases';
+        console.log('🎯 Entered Edge Cases section');
       } else if (trimmedLine.startsWith('Track Assessment:') || trimmedLine.startsWith('**Track Assessment:**')) {
         analysis.trackAssessment = trimmedLine.replace(/\*?\*?Track Assessment:\*?\*?/, '').trim();
         currentSection = '';
+        console.log('🎯 Exited Track Assessment section');
       } else if (trimmedLine.startsWith('Suggestions:') || trimmedLine.startsWith('**Suggestions:**')) {
         currentSection = 'suggestions';
+        console.log('🎯 Entered Suggestions section');
       } else if (trimmedLine && currentSection === 'lineByLine') {
         // Check if this is a line number header like "Line 3:"
         const lineHeaderMatch = trimmedLine.match(/^Line\s+(\d+):?$/i);
@@ -392,17 +364,62 @@ Stars: [number]
           pendingStatus = null;
         }
       } else if (trimmedLine && currentSection === 'edgeCases') {
+        console.log('🔍 Edge Cases section - processing line:', trimmedLine);
+        // Handle numbered edge cases format: "1) Corner case 1 (reasoning)"
+        const edgeCaseMatch = trimmedLine.match(/^\d+\)\s*(.+)/);
+        if (edgeCaseMatch) {
+          const edgeCase = edgeCaseMatch[1].trim();
+          analysis.edgeCases.push(edgeCase);
+          console.log('✅ Added numbered edge case:', edgeCase);
+        } else if (trimmedLine && !trimmedLine.startsWith('Edge Cases:') && !trimmedLine.startsWith('**Edge Cases:**')) {
+          // Fallback: add the line if it's not empty and not a header
         analysis.edgeCases.push(trimmedLine);
+          console.log('✅ Added fallback edge case:', trimmedLine);
+        } else {
+          console.log('⚠️ Skipped edge case line:', trimmedLine);
+        }
       } else if (trimmedLine && currentSection === 'suggestions') {
+        console.log('🔍 Suggestions section - processing line:', trimmedLine);
         // Don't add Score, Scoring, or Stars lines to suggestions
         const isScoreOrStarsLine = trimmedLine.match(/(?:score|scoring|stars?)[:\s]*\d+/i);
-        console.log('Suggestions section - checking line:', trimmedLine);
         console.log('Is score/stars line?', !!isScoreOrStarsLine);
-        if (!isScoreOrStarsLine) {
+        if (!isScoreOrStarsLine && analysis.suggestions.length < 3) { // MAX 3 suggestions
+          // Handle numbered suggestions format: "1) Suggestion 1 (reasoning)"
+          const suggestionMatch = trimmedLine.match(/^\d+\)\s*(.+)/);
+          if (suggestionMatch) {
+            const suggestion = suggestionMatch[1].trim();
+            analysis.suggestions.push(suggestion);
+            console.log('✅ Added numbered suggestion:', suggestion);
+          } else if (trimmedLine && !trimmedLine.startsWith('Suggestions:') && !trimmedLine.startsWith('**Suggestions:**')) {
+            // Fallback: add the line if it's not empty and not a header
           analysis.suggestions.push(trimmedLine);
-          console.log('Added to suggestions:', trimmedLine);
+            console.log('✅ Added fallback suggestion:', trimmedLine);
         } else {
-          console.log('Filtered out score/stars line from suggestions:', trimmedLine);
+            console.log('⚠️ Skipped suggestion line:', trimmedLine);
+          }
+        } else if (analysis.suggestions.length >= 3) {
+          console.log('🚫 Skipped suggestion - already have 3 suggestions maximum');
+        } else {
+          console.log('🚫 Filtered out score/stars line from suggestions:', trimmedLine);
+        }
+      }
+      
+      // Additional fallback parsing for edge cases and suggestions that might be in different formats
+      if (trimmedLine.toLowerCase().includes('edge case') && !currentSection.includes('edgeCases')) {
+        console.log('🔍 Found potential edge case in different format:', trimmedLine);
+        const edgeCaseText = trimmedLine.replace(/^.*?edge case[:\s]*/i, '').trim();
+        if (edgeCaseText && !analysis.edgeCases.includes(edgeCaseText)) {
+          analysis.edgeCases.push(edgeCaseText);
+          console.log('✅ Added edge case from fallback parsing:', edgeCaseText);
+        }
+      }
+      
+      if (trimmedLine.toLowerCase().includes('suggestion') && !currentSection.includes('suggestions') && analysis.suggestions.length < 3) {
+        console.log('🔍 Found potential suggestion in different format:', trimmedLine);
+        const suggestionText = trimmedLine.replace(/^.*?suggestion[:\s]*/i, '').trim();
+        if (suggestionText && !analysis.suggestions.includes(suggestionText)) {
+          analysis.suggestions.push(suggestionText);
+          console.log('✅ Added suggestion from fallback parsing:', suggestionText);
         }
       }
     }
@@ -417,7 +434,7 @@ Stars: [number]
       analysis.lineByLineAnalysis.push(lineAnalysis);
     }
 
-    console.log('Final analysis sent to frontend:');
+    console.log('\n📊 Final analysis sent to frontend:');
     console.log('Score:', analysis.score);
     console.log('Stars:', analysis.stars);
     console.log('Correctness:', analysis.correctness);
@@ -426,8 +443,14 @@ Stars: [number]
     analysis.lineByLineAnalysis.forEach(line => {
       console.log(`Line ${line.lineNumber}: ${line.status}${line.explanation ? ` (${line.explanation})` : ''}`);
     });
-    console.log('Edge cases:', analysis.edgeCases);
-    console.log('Suggestions:', analysis.suggestions);
+    console.log('\n🔍 Edge cases found:', analysis.edgeCases.length);
+    analysis.edgeCases.forEach((edgeCase, index) => {
+      console.log(`  ${index + 1}. ${edgeCase}`);
+    });
+    console.log('\n💡 Suggestions found:', analysis.suggestions.length);
+    analysis.suggestions.forEach((suggestion, index) => {
+      console.log(`  ${index + 1}. ${suggestion}`);
+    });
 
     res.json({ 
       analysis,
@@ -1277,7 +1300,7 @@ app.post('/api/generate-topic-lesson', async (req, res) => {
       return res.status(400).json({ error: 'Topic name and problem ID are required.' });
     }
 
-    // Fetch user skill level
+    // Fetch user skill level (optional - no authentication required)
     let userSkillLevel = 'Beginner'; // Default to Beginner
     if (userId) {
       try {
@@ -1285,10 +1308,15 @@ app.post('/api/generate-topic-lesson', async (req, res) => {
         const userProfile = await getUserProfile(userId);
         if (userProfile && userProfile.skill_level) {
           userSkillLevel = userProfile.skill_level;
+          console.log(`📊 Using user skill level: ${userSkillLevel}`);
+        } else {
+          console.log('📊 No user profile found, using default Beginner skill level');
         }
       } catch (error) {
-        console.log('Could not fetch user profile, defaulting to Beginner skill level');
+        console.log('⚠️ Could not fetch user profile, defaulting to Beginner skill level:', error.message);
       }
+    } else {
+      console.log('📊 No userId provided, using default Beginner skill level');
     }
 
     console.log(`User skill level: ${userSkillLevel}`);
@@ -1935,59 +1963,7 @@ Generate ONLY the JSON object, no other text.`;
   }
 });
 
-// Quiz Completion Endpoint
-app.post('/api/quiz-completion', async (req, res) => {
-  try {
-    const { questionId, score, completed } = req.body;
-    
-    if (!questionId || score === undefined || completed === undefined) {
-      return res.status(400).json({ error: 'Question ID, score, and completion status are required' });
-    }
 
-    // Get the authorization header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
-    }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    
-    // Verify the token and get user
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      console.error('Authentication error:', authError);
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    // Save quiz completion to database
-    const { error } = await supabase
-      .from('user_lesson_completion')
-      .upsert({
-        user_id: user.id,
-        problem_id: questionId,
-        quiz_completed: completed,
-        quiz_score: score,
-        completed_at: new Date().toISOString()
-      });
-
-    if (error) {
-      console.error('Error saving quiz completion:', error);
-      console.error('Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return res.status(500).json({ error: 'Failed to save quiz completion', details: error.message });
-    }
-
-    res.json({ success: true, message: 'Quiz completion saved successfully' });
-  } catch (error) {
-    console.error('Error in quiz completion endpoint:', error);
-    res.status(500).json({ error: 'Failed to save quiz completion' });
-  }
-});
 
 // Start the server
 app.listen(port, () => {
