@@ -572,25 +572,23 @@ export default function HomeScreen() {
             </View>
           </View>
           
-          {/* Daily Challenge - Simplified Header Only */}
-          <TouchableOpacity 
-            style={styles.dailyChallengeContainer} 
-            onPress={handleRandomQuestion}
-            disabled={challengeLoading}
-          >
-            <View style={styles.dailyChallengeHeader}>
-              <View style={styles.dailyChallengeIconContainer}>
+          <View style={styles.quickActionsGrid}>
+            {/* Daily Challenge Card */}
+            <TouchableOpacity 
+              style={styles.actionCard} 
+              onPress={handleRandomQuestion}
+              disabled={challengeLoading}
+            >
+              <View style={styles.actionIconContainer}>
                 <Image 
                   source={require('../../assets/images/icons/fire-icon.png')} 
-                  style={styles.dailyChallengeIcon}
+                  style={styles.actionIcon}
                   tintColor="#8B5CF6"
                 />
               </View>
-              <View style={styles.dailyChallengeInfo}>
-                <ThemedText style={styles.dailyChallengeTitle}>Daily Challenge</ThemedText>
-                <ThemedText style={styles.dailyChallengeStreak}>{dailyStats.streak} day streak</ThemedText>
-              </View>
-              <View style={styles.dailyChallengeStatus}>
+              <ThemedText style={styles.actionTitle}>Daily Challenge</ThemedText>
+              <ThemedText style={styles.actionSubtitle}>{dailyStats.streak} day streak</ThemedText>
+              <View style={styles.actionArrow}>
                 {challengeLoading ? (
                   <ActivityIndicator size="small" color="#8B5CF6" />
                 ) : (
@@ -601,45 +599,9 @@ export default function HomeScreen() {
                   />
                 )}
               </View>
-            </View>
-          </TouchableOpacity>
-
-          <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/allquestions')}>
-              <View style={styles.actionIconContainer}>
-                <Image 
-                  source={require('../../assets/images/icons/list-icon.png')} 
-                  style={styles.actionIcon}
-                  tintColor="#8B5CF6"
-                />
-              </View>
-              <ThemedText style={styles.actionTitle}>All Questions</ThemedText>
-              <View style={styles.actionSubtitleRow}>
-                <ThemedText style={styles.actionSubtitle}>{dailyStats.totalSolved}/{dailyStats.totalProblems} solved</ThemedText>
-                <View style={styles.difficultyBreakdown}>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#10B981' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.easyCount}</ThemedText>
-                  </View>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.mediumCount}</ThemedText>
-                  </View>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#EF4444' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.hardCount}</ThemedText>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.actionArrow}>
-                <Image 
-                  source={require('../../assets/images/icons/up-arrow.png')} 
-                  style={styles.smallArrowIcon}
-                  tintColor="#8B5CF6"
-                />
-              </View>
             </TouchableOpacity>
 
+            {/* Quiz Mode Card */}
             <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/quiz')}>
               <View style={styles.actionIconContainer}>
                 <Image 
@@ -905,115 +867,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Daily Challenge Card
-  dailyChallengeContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-  },
-  dailyChallengeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dailyChallengeIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F0FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  dailyChallengeIcon: {
-    width: 20,
-    height: 20,
-  },
-  dailyChallengeInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  dailyChallengeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  dailyChallengeStreak: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  dailyChallengeStatus: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 30,
-    flexShrink: 0,
-  },
-  completedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#10B981',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  completedText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  pendingText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  dailyChallengeContent: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  completedChallengeContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 20,
-  },
-  completedChallengeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  pendingChallengeContent: {
-    paddingVertical: 20,
-  },
-  challengeTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  startChallengeButton: {
-    backgroundColor: '#8B5CF6',
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  startChallengeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
+
 
   // Quick Actions
   quickActionsGrid: {
@@ -1058,31 +912,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  actionSubtitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  difficultyBreakdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  difficultyDot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  difficultyCount: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
+
   actionArrow: {
     position: 'absolute',
     top: 16,

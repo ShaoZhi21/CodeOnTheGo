@@ -1,8 +1,8 @@
 import { ThemedText } from '@/components/ThemedText';
 import { createClient } from '@supabase/supabase-js';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Animated, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Supabase configuration
@@ -62,28 +62,82 @@ export default function AllQuestionsScreen() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
   const [refreshingStatus, setRefreshingStatus] = useState(false);
+  
+  // Search functionality
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  
+  // Animation refs for loading dots
+  const dot1Anim = useRef(new Animated.Value(0.4)).current;
+  const dot2Anim = useRef(new Animated.Value(0.7)).current;
+  const dot3Anim = useRef(new Animated.Value(1)).current;
 
   const totalPages = Math.ceil(totalProblems / PROBLEMS_PER_PAGE);
 
-  // Fetch problems from Supabase
-  const fetchProblems = async (page: number) => {
+  // Animate loading dots
+  useEffect(() => {
+    if (isSearching) {
+      const animateDots = () => {
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(dot1Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot2Anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot3Anim, { toValue: 0.7, duration: 600, useNativeDriver: true }),
+          ]),
+          Animated.parallel([
+            Animated.timing(dot1Anim, { toValue: 0.7, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot2Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot3Anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+          ]),
+          Animated.parallel([
+            Animated.timing(dot1Anim, { toValue: 0.4, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot2Anim, { toValue: 0.7, duration: 600, useNativeDriver: true }),
+            Animated.timing(dot3Anim, { toValue: 1, duration: 600, useNativeDriver: true }),
+          ]),
+        ]).start(() => {
+          if (isSearching) {
+            animateDots();
+          }
+        });
+      };
+      animateDots();
+    } else {
+      // Reset dots when not searching
+      dot1Anim.setValue(0.4);
+      dot2Anim.setValue(0.7);
+      dot3Anim.setValue(1);
+    }
+  }, [isSearching, dot1Anim, dot2Anim, dot3Anim]);
+
+  // Fetch problems from Supabase with search
+  const fetchProblems = async (page: number, search: string = '') => {
     try {
       setLoading(true);
       setError(null);
 
       const offset = (page - 1) * PROBLEMS_PER_PAGE;
 
-      // Get total count
+      // Build query
+      let query = supabase
+        .from('leetcode_problems')
+        .select('id, leetcode_id, title, difficulty, tags, is_premium');
+
+      // Add search filter if provided
+      if (search.trim()) {
+        query = query.or(`title.ilike.%${search}%,leetcode_id.eq.${parseInt(search) || 0}`);
+      }
+
+      // Get total count with search
       const { count } = await supabase
         .from('leetcode_problems')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .or(search.trim() ? `title.ilike.%${search}%,leetcode_id.eq.${parseInt(search) || 0}` : '');
 
       setTotalProblems(count || 0);
 
-      // Get problems for current page
-      const { data, error } = await supabase
-        .from('leetcode_problems')
-        .select('id, leetcode_id, title, difficulty, tags, is_premium')
+      // Get problems for current page with search
+      const { data, error } = await query
         .order('leetcode_id', { ascending: true })
         .range(offset, offset + PROBLEMS_PER_PAGE - 1);
 
@@ -137,12 +191,41 @@ export default function AllQuestionsScreen() {
       setError('Failed to load problems. Please try again.');
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
   };
 
+  // Handle search with debouncing
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearching(true);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set new timeout for 0.75 second delay
+    const timeout = setTimeout(() => {
+      setCurrentPage(1); // Reset to first page when searching
+      fetchProblems(1, query);
+    }, 750);
+    
+    setSearchTimeout(timeout);
+  };
+
   useEffect(() => {
-    fetchProblems(currentPage);
+    fetchProblems(currentPage, searchQuery);
   }, [currentPage]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
 
   // Refresh problems when the screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
@@ -295,7 +378,7 @@ export default function AllQuestionsScreen() {
       const sorted = sortProblems(problems, column, newDirection);
       setProblems(sorted);
     } else {
-      fetchProblems(currentPage);
+      fetchProblems(currentPage, searchQuery);
     }
   };
 
@@ -323,7 +406,7 @@ export default function AllQuestionsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchProblems(currentPage)}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchProblems(currentPage, searchQuery)}>
             <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
           </TouchableOpacity>
         </View>
@@ -333,6 +416,33 @@ export default function AllQuestionsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <View style={styles.searchIconContainer}>
+            <ThemedText style={styles.searchIcon}>🔍</ThemedText>
+          </View>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search problems by title or ID..."
+            placeholderTextColor="#9CA3AF"
+            value={searchQuery}
+            onChangeText={handleSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={() => handleSearch('')}
+            >
+              <ThemedText style={styles.clearButtonText}>✕</ThemedText>
+            </TouchableOpacity>
+          )}
+        </View>
+
+      </View>
+
       <View style={styles.tableHeader}>
         <TouchableOpacity 
           style={[styles.headerCell, { flex: 1.3 }]} 
@@ -401,14 +511,6 @@ export default function AllQuestionsScreen() {
           </TouchableOpacity>
         ))}
       </ScrollView>
-
-      {/* Stats Container */}
-      <View style={styles.statsContainer}>
-        <ThemedText style={styles.statsText}>
-          Showing {((currentPage - 1) * PROBLEMS_PER_PAGE) + 1}-{Math.min(currentPage * PROBLEMS_PER_PAGE, totalProblems)} of {totalProblems} problems
-        </ThemedText>
-        <ThemedText style={styles.pageText}>Page {currentPage} of {totalPages}</ThemedText>
-      </View>
 
       {/* Pagination Controls */}
       <View style={styles.paginationContainer}>
@@ -624,23 +726,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
-  },
-  statsText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  pageText: {
-    fontSize: 14,
-    color: '#8B5CF6',
-    fontWeight: '600',
-  },
+
   tableContainer: {
     backgroundColor: '#F8F6FF',
     flexGrow: 1,
@@ -723,6 +809,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignSelf: 'center',
     minWidth: 75,
+    height: 28, // Fixed height for status badge
+    justifyContent: 'center', // Center text vertically
+    alignItems: 'center', // Center text horizontally
   },
   statusText: {
     color: '#fff',
@@ -761,6 +850,10 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+
+  refreshIndicator: {
+    marginLeft: 8,
   },
   paginationContainer: {
     flexDirection: 'row',
@@ -847,7 +940,86 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 12,
   },
-  refreshIndicator: {
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#8B5CF6',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  searchIconContainer: {
+    marginRight: 12,
+  },
+  searchIcon: {
+    fontSize: 18,
+    color: '#9CA3AF',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+    paddingVertical: 0,
+  },
+  clearButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginLeft: 8,
+  },
+  clearButtonText: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  searchingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8E6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  loadingDots: {
+    flexDirection: 'row',
+    marginRight: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#6564c7',
+    marginHorizontal: 2,
+  },
+  dot1: {
+    // opacity is controlled by animation
+  },
+  dot2: {
+    // opacity is controlled by animation
+  },
+  dot3: {
+    // opacity is controlled by animation
+  },
+  searchingText: {
+    fontSize: 14,
+    color: '#6564c7',
+    fontWeight: '600',
   },
 }); 
