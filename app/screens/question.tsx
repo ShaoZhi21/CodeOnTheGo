@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
-  const { id, name, difficulty, preFetchedData } = params;
+  const { id, name, difficulty, preFetchedData, source = 'allquestions' } = params; // Add source parameter
   const { showStreakAnimation } = useStreak();
   
   // Refs
@@ -1731,8 +1731,15 @@ export default function QuestionScreen() {
           // Clear any analysis data
           setAnalysis(null);
           setShowAnalysis(false);
-          // Navigate directly to questions list
-          router.replace('/(tabs)/questions');
+          
+          // Navigate based on source
+          if (source === 'roadmap') {
+            router.back(); // This will go back to the roadmap topic screen
+          } else if (source === 'allquestions') {
+            router.replace('/(tabs)/questions'); // Go to questions list
+          } else {
+            router.back(); // Default fallback
+          }
         }} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
@@ -2138,6 +2145,10 @@ export default function QuestionScreen() {
             problemId={problem?.leetcode_id ?? 0}
             problemTitle={problem?.title ?? ''}
             descriptionBoxes={descriptionBoxes}
+            topicName={source === 'roadmap' ? params.topicName as string : undefined}
+            difficulty={difficulty as string}
+            description={cleanedDescription}
+            source={source as 'roadmap' | 'allquestions'} // Pass source to AnalysisModal
           />
         </KeyboardAvoidingView>
     </SafeAreaView>

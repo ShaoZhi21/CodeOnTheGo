@@ -7,14 +7,13 @@ import { ThemedText } from '../../components/ThemedText';
 import { useStreak } from '../../contexts/StreakContext';
 import { DailyChallengeService } from '../../lib/services/dailyChallengeService';
 import { ProfileService } from '../../lib/services/profileService';
-import { RecentTopicsService } from '../../lib/services/recentTopicsService';
 import { TopicService } from '../../lib/services/topicService';
 import { supabase } from '../../lib/supabase';
 import type { UserProfileStats } from '../../lib/types/profile';
 
 interface TopicProgress {
   name: string;
-  percentage: number;
+  completion_percentage: number;
   lastEdited: string;
 }
 
@@ -220,95 +219,53 @@ export default function HomeScreen() {
 
   const loadTopicsProgress = useCallback(async () => {
     try {
-      console.log('Loading recent topics');
+      console.log('Loading topics progress');
 
-      // Get recent topics from the new service
-      const recentTopics = await RecentTopicsService.getRecentTopics();
-      console.log('Recent topics:', recentTopics);
+      // Get user ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
 
-      // Get progress for each recent topic (limit to 3 for compact view)
-      const progressPromises = recentTopics.slice(0, 3).map(async (topicName) => {
-        console.log('Loading progress for topic:', topicName);
-        
-        // Get all problems for this topic
-        const problems = await TopicService.getTopicProblems(topicName);
-        console.log(`Found ${problems.length} problems for topic ${topicName}`);
-        
-        // Get user's progress for these problems
-        const { data: { user } } = await supabase.auth.getUser();
-        let percentage = 0;
-        
-        if (user) {
-          const { data: progressData } = await supabase
-            .from('user_problem_progress')
-            .select('problem_id, is_solved')
-            .eq('user_id', user.id)
-            .in('problem_id', problems.map(p => p.leetcode_id));
+      // Get all topics and their stats
+      const { data: topicStats, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')
+        .eq('user_id', user.id);
 
-          // Calculate completion percentage
-          const completedProblems = progressData?.filter(p => p.is_solved) || [];
-          const totalProblems = problems.length;
-          percentage = totalProblems > 0 
-            ? Math.round((completedProblems.length / totalProblems) * 100)
-            : 0;
+      if (statsError) {
+        console.error('Error loading topic stats:', statsError);
+        return;
+      }
 
-          console.log(`Topic ${topicName}: ${completedProblems.length}/${totalProblems} completed (${percentage}%)`);
-        } else {
-          console.log(`Topic ${topicName}: No user found, showing 0% progress`);
-        }
-
-        return {
-          name: topicName,
-          percentage,
+      // Convert to TopicProgress format and sort by completion percentage
+      const progress = topicStats
+        .map((stat): TopicProgress => ({
+          name: stat.topic_name,
+          completion_percentage: stat.completion_percentage || 0,
           lastEdited: new Date().toISOString()
-        };
-      });
+        }))
+        .sort((a, b) => b.completion_percentage - a.completion_percentage)
+        .slice(0, 3); // Only take top 3 by completion percentage
 
-      const allProgress = await Promise.all(progressPromises);
-      console.log('All progress:', allProgress);
-      setTopicsInProgress(allProgress);
+      console.log('Topics progress loaded:', progress);
+      setTopicsInProgress(progress);
     } catch (error) {
       console.error('Error loading topics progress:', error);
-      // Fallback to default topics
-      const defaultTopics = ['Array', 'String', 'LinkedList'].slice(0, 3).map(topic => ({
-        name: topic,
-        percentage: 0,
-        lastEdited: new Date().toISOString()
-      }));
-      setTopicsInProgress(defaultTopics);
     }
   }, []);
 
   const handleTopicClick = async (topicName: string) => {
     console.log('handleTopicClick called with:', topicName);
-    try {
-      // Update recent topics using the new service
-      console.log('Updating recent topics for:', topicName);
-      await RecentTopicsService.updateRecentTopics(topicName);
-      console.log('Recent topics updated successfully');
-      
-      // Refresh the recent topics to show the new order
-      await loadTopicsProgress();
-      
-      // Navigate to loading screen first
-      router.replace({
-        pathname: '/screens/LoadingRoadMap',
-        params: {
-          topicName: topicName,
-          from: 'home'
-        }
-      });
-    } catch (error) {
-      console.error('Error handling topic click:', error);
-      // Still navigate to loading screen even if updating fails
-      router.replace({
-        pathname: '/screens/LoadingRoadMap',
-        params: {
-          topicName: topicName,
-          from: 'home'
-        }
-      });
-    }
+    // Navigate to loading screen
+    router.replace({
+      pathname: '/screens/LoadingRoadMap',
+      params: {
+        topicName: topicName,
+        from: 'home'
+      }
+    });
   };
 
   const loadDailyChallenge = async () => {
@@ -565,11 +522,6 @@ export default function HomeScreen() {
         </TouchableOpacity>
         
         <View style={styles.statsContainer}>
-          {/* Reset Streak Button (for testing) */}
-          <TouchableOpacity style={styles.resetStreakButton} onPress={resetDailyStreak}>
-            <ThemedText style={styles.resetStreakText}>↺</ThemedText>
-          </TouchableOpacity>
-          
           <View style={styles.statItem}>
             <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
             <ThemedText style={styles.statValue}>{dailyStats.streak}</ThemedText>
@@ -596,6 +548,28 @@ export default function HomeScreen() {
                 tintColor="#8B5CF6"
               />
               <ThemedText style={styles.sectionTitle}>Quick Practice</ThemedText>
+            </View>
+            <View style={styles.testButtonsContainer}>
+              {/* Reset Streak Button (for testing) */}
+              <TouchableOpacity style={styles.testButton} onPress={resetDailyStreak}>
+                <ThemedText style={styles.testButtonText}>Reset</ThemedText>
+              </TouchableOpacity>
+              
+              {/* Streak Animation Button (for testing) */}
+              <TouchableOpacity 
+                style={styles.testButton} 
+                onPress={() => {
+                  router.push({
+                    pathname: '/screens/StreakAnimation',
+                    params: {
+                      source: 'index',
+                      isTestStreak: 'true'
+                    }
+                  });
+                }}
+              >
+                <ThemedText style={styles.testButtonText}>Test Streak</ThemedText>
+              </TouchableOpacity>
             </View>
           </View>
           
@@ -754,8 +728,8 @@ export default function HomeScreen() {
                     style={styles.progressCard} 
                     onPress={() => handleTopicClick(topic.name)}
                   >
-                    <CircularProgress percentage={topic.percentage}>
-                      <ThemedText style={styles.progressPercentage}>{topic.percentage}%</ThemedText>
+                    <CircularProgress percentage={topic.completion_percentage}>
+                      <ThemedText style={styles.progressPercentage}>{topic.completion_percentage}%</ThemedText>
                     </CircularProgress>
                     <ThemedText style={styles.progressTopicName}>{topic.name}</ThemedText>
                   </TouchableOpacity>
@@ -1165,6 +1139,32 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     transform: [{ rotate: '90deg' }],
+  },
+
+  // Test Buttons Container
+  testButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 'auto',
+    marginRight: 16,
+  },
+  testButton: {
+    backgroundColor: '#F3F0FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+  },
+  testButtonIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#8B5CF6',
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B5CF6',
   },
 
   // Topic Roadmap

@@ -73,6 +73,21 @@ export default function LoadingRoadMap() {
         return;
       }
 
+      // Get topic stats directly from the view
+      const { data: topicStatsData, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')
+        .eq('topic_name', topicName)
+        .eq('user_id', user.id)
+        .single();
+
+      if (statsError) {
+        console.error('Error fetching topic stats:', statsError);
+        return;
+      }
+
+      console.log('Topic stats from view:', topicStatsData);
+
       // Fetch topic problems
       console.log('🎯 LoadingRoadMap: Fetching problems for topic:', topicName);
       const problems = await TopicService.getTopicProblems(topicName as string);
@@ -82,31 +97,47 @@ export default function LoadingRoadMap() {
       // Get user progress for these problems
       const { data: progressData } = await supabase
         .from('user_problem_progress')
-        .select('problem_id, is_solved')
+        .select('problem_id, is_solved, stars')
         .eq('user_id', user.id)
         .in('problem_id', problems.map(p => p.leetcode_id));
 
-      // Calculate completion percentage
-      const completedProblems = progressData?.filter(p => p.is_solved) || [];
-      const totalProblems = problems.length;
-      const percentage = totalProblems > 0 
-        ? Math.round((completedProblems.length / totalProblems) * 100)
-        : 0;
+      console.log('🎯 LoadingRoadMap: Progress data:', progressData);
 
-      console.log('🎯 LoadingRoadMap: Completion stats:', {
-        totalProblems,
-        completedProblems: completedProblems.length,
-        percentage
+      // Get lesson completion data
+      const { data: lessonData } = await supabase
+        .from('user_lesson_completion')
+        .select('problem_id, quiz_completed')
+        .eq('user_id', user.id)
+        .in('problem_id', problems.map(p => p.leetcode_id));
+
+      console.log('🎯 LoadingRoadMap: Lesson completion data:', lessonData);
+
+      // Create progress map
+      const progressMap: Record<number, { problem_id: number; completed: boolean; stars: number }> = {};
+      progressData?.forEach(p => {
+        progressMap[p.problem_id] = {
+          problem_id: p.problem_id,
+          completed: p.is_solved,
+          stars: p.stars
+        };
       });
 
       // Prepare data for roadmap screen
       const roadmapData = {
         problems,
-        progress: {
-          completed: completedProblems.length,
-          total: totalProblems,
-          percentage
-        }
+        progress: progressMap,
+        stats: {
+          total_problems: topicStatsData.total_problems,
+          completed_problems: topicStatsData.completed_problems,
+          total_stars: topicStatsData.total_stars,
+          percentage: topicStatsData.completion_percentage
+        },
+        lessonProgress: lessonData?.reduce((acc: Record<number, boolean>, lesson) => {
+          if (lesson.problem_id) {
+            acc[lesson.problem_id] = lesson.quiz_completed || false;
+          }
+          return acc;
+        }, {})
       };
 
       // Wait for animations to complete (including bird flight animation)

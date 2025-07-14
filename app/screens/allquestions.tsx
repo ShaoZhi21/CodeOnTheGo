@@ -387,7 +387,8 @@ export default function AllQuestionsScreen() {
             params: {
               id: clickedProblem.leetcode_id.toString(),
               name: clickedProblem.title,
-              difficulty: clickedProblem.difficulty
+              difficulty: clickedProblem.difficulty,
+              source: 'allquestions' // Add source parameter
             }
           });
         }}

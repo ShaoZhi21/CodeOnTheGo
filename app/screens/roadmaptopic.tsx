@@ -5,18 +5,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import QuestionActionModal from '../../components/QuestionActionModal';
 import { ThemedText } from '../../components/ThemedText';
-import { TopicProblem, TopicService } from '../../lib/services/topicService';
+import { TopicProblem } from '../../lib/services/topicService';
 import { supabase } from '../../lib/supabase';
+
+interface UserProgress {
+  completed: boolean;
+  stars: number;
+  score?: number; // Add optional score field
+}
 
 interface TopicProblemWithProgress extends TopicProblem {
   completed?: boolean;
   stars?: number;
-}
-
-interface UserProgress {
-  problem_id: number;
-  completed: boolean;
-  stars: number;
 }
 
 // Icons
@@ -97,21 +97,23 @@ export default function RoadmapTopic() {
 
   console.log('RoadmapTopic: topic param =', topicString);
   console.log('RoadmapTopic: from param =', fromPage);
+  console.log('RoadmapTopic: preFetchedData =', preFetchedData);
   
   const router = useRouter();
   const [questions, setQuestions] = useState<TopicProblemWithProgress[]>(preFetchedData?.problems || []);
-  const [topicStats, setTopicStats] = useState<any>(preFetchedData?.progress || null);
-  const [progress, setProgress] = useState<Record<number, UserProgress>>({});
+  const [topicStats, setTopicStats] = useState<any>(preFetchedData?.stats || null);
+  const [progress, setProgress] = useState<Record<number, UserProgress>>(preFetchedData?.progress || {});
+  const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>(preFetchedData?.lessonProgress || {});
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
   const hasScrolledToBottom = useRef(false);
+  const [needsRefresh, setNeedsRefresh] = useState(!preFetchedData);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
-  const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
   console.log('RoadmapTopic: Component initialized');
 
@@ -129,20 +131,35 @@ export default function RoadmapTopic() {
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      if (topicString) {
+      if (topicString && needsRefresh) {
+        console.log('🔄 Screen focused, needsRefresh:', needsRefresh);
+        console.log('🔄 fromPage:', fromPage);
+        
+        // Reset the refresh flag
+        setNeedsRefresh(false);
+        
         // Always refresh lesson completion data when coming back to roadmap
         refreshLessonCompletionData();
         
-        // Force refresh if coming from quizcomplete, otherwise only if no preFetchedData
-        if (fromPage === 'quizcomplete' || !preFetchedData) {
-          console.log('RoadmapTopic: Force refreshing data - from quizcomplete or no preFetchedData');
+        // Force refresh if coming from quizcomplete or pseudocomplete, otherwise only if no preFetchedData
+        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete' || !preFetchedData) {
+          console.log('🔄 Forcing data refresh');
           loadTopicData();
         } else {
-          console.log('RoadmapTopic: Using preFetchedData, only refreshing lesson completion');
+          console.log('🔄 Using preFetchedData, only refreshing lesson completion');
         }
       }
-    }, [topicString, preFetchedData, fromPage])
+    }, [topicString, preFetchedData, fromPage, needsRefresh])
   );
+
+  // Set needsRefresh to true when returning from a question or quiz
+  useEffect(() => {
+    console.log('🔄 fromPage changed:', fromPage);
+    if (fromPage === 'quizcomplete' || fromPage === 'question' || fromPage === 'pseudocomplete') {
+      console.log('🔄 Setting needsRefresh to true');
+      setNeedsRefresh(true);
+    }
+  }, [fromPage]);
 
   // Removed automatic scroll to bottom to prevent jumping behavior
 
@@ -150,79 +167,127 @@ export default function RoadmapTopic() {
     console.log('RoadmapTopic: refreshLessonCompletionData called');
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('RoadmapTopic: No user found, skipping lesson completion refresh');
+        return;
+      }
+
+      // Get lesson completion status only for the current topic's problems
+      const problemIds = questions.map(q => q.leetcode_id).filter(Boolean);
+      if (!problemIds.length) {
+        console.log('RoadmapTopic: No problem IDs found, skipping lesson completion refresh');
+        return;
+      }
 
       // Get lesson completion status from database
       const { data: lessonData, error: lessonError } = await supabase
         .from('user_lesson_completion')
         .select('problem_id, quiz_completed')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .in('problem_id', problemIds);
       
-      console.log('RoadmapTopic: Refreshed lesson completion data:', { lessonData, lessonError });
-      
-      if (lessonData) {
-        const lessonProgressMap: Record<number, boolean> = {};
-        lessonData.forEach(lesson => {
-          lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
-        });
-        setLessonProgress(lessonProgressMap);
-        console.log('RoadmapTopic: Updated lesson progress map:', lessonProgressMap);
+      if (lessonError) {
+        console.error('RoadmapTopic: Error fetching lesson completion:', lessonError);
+        return;
       }
+
+      // Update lesson progress state
+      const newLessonProgress: Record<number, boolean> = {};
+      lessonData?.forEach(lesson => {
+        if (lesson.problem_id) {
+          newLessonProgress[lesson.problem_id] = lesson.quiz_completed || false;
+        }
+      });
+
+      setLessonProgress(newLessonProgress);
+      console.log('RoadmapTopic: Lesson completion data updated successfully');
     } catch (error) {
-      console.error('Error refreshing lesson completion data:', error);
+      console.error('RoadmapTopic: Error in refreshLessonCompletionData:', error);
     }
   };
 
   const loadTopicData = async () => {
-    console.log('RoadmapTopic: loadTopicData called');
-    if (!topicString) {
-      console.log('RoadmapTopic: Aborting load, no topic string.');
-      return;
-    }
     try {
-      console.log('RoadmapTopic: Fetching problems for topic:', topicString);
-      
-      const problems = await TopicService.getTopicProblems(topicString);
-
-      console.log('RoadmapTopic: Problems fetched:', problems?.length || 0);
-      console.log('RoadmapTopic: First problem:', problems?.[0]);
-
-      // Get user progress for these problems
+      console.log('Loading topic data for:', topicString);
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('RoadmapTopic: User found:', !!user);
       
-      let progressMap: Record<number, UserProgress> = {};
-      let lessonProgressMap: Record<number, boolean> = {};
-      
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+
+      // Get topic stats from the view
+      const { data: topicStatsData, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')  // Select all fields to see what we're getting
+        .eq('topic_name', topicString)
+        .eq('user_id', user.id)
+        .single();
+
+      console.log('Raw topic stats data:', topicStatsData);
+      console.log('Stats error if any:', statsError);
+
+      if (statsError) {
+        console.error('Error fetching topic stats:', statsError);
+        // Provide default values if no stats found
+        setTopicStats({
+          total_stars: 0,
+          completion_percentage: 0,
+          total_problems: 0
+        });
+        return;
+      }
+
+      // Set topic stats directly from the view
+      setTopicStats({
+        total_stars: topicStatsData?.total_stars || 0,
+        completion_percentage: Number(topicStatsData?.completion_percentage || 0),
+        total_problems: topicStatsData?.total_problems || 0
+      });
+
+      console.log('Topic stats set to:', {
+        total_stars: topicStatsData?.total_stars,
+        completion_percentage: topicStatsData?.completion_percentage,
+        total_problems: topicStatsData?.total_problems
+      });
+
+      // Get problems for this topic
+      const { data: problems = [], error: problemsError } = await supabase
+        .from('topic_problems')
+        .select('*')
+        .eq('topic_name', topicString)
+        .order('difficulty_order');
+
+      if (problemsError) {
+        console.error('Error fetching problems:', problemsError);
+        return;
+      }
+
+      // Ensure problems is properly typed
+      const typedProblems = problems as TopicProblemWithProgress[];
+
+      // Get user's progress
+      const progressMap: Record<number, UserProgress> = {};
+      const lessonProgressMap: Record<number, boolean> = {};
+
       if (user) {
         // Get problem progress
-        const { data: progressData } = await supabase
+        const { data: progressData, error: progressError } = await supabase
           .from('user_problem_progress')
-          .select('problem_id, is_solved, stars')
-          .eq('user_id', user.id);
-        progressData?.forEach(p => {
-          progressMap[p.problem_id] = {
-            problem_id: p.problem_id,
-            completed: p.is_solved,
-            stars: p.stars
-          };
-        });
-
-        // Get user profile for skill level
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('skill_level')
+          .select('*')
           .eq('user_id', user.id)
-          .single();
-        
-        console.log('Profile query result:', { profileData, profileError });
-        
-        if (profileData?.skill_level) {
-          setUserSkillLevel(profileData.skill_level);
-          console.log('User skill level loaded:', profileData.skill_level);
-        } else {
-          console.log('No skill level found, defaulting to Beginner');
-          setUserSkillLevel('Beginner');
+          .in('problem_id', typedProblems.map(p => p.leetcode_id || 0));
+
+        if (progressError) {
+          console.error('Error fetching progress:', progressError);
+        } else if (progressData) {
+          progressData.forEach(p => {
+            progressMap[p.problem_id] = {
+              completed: p.is_solved,
+              stars: p.stars || 0,
+              score: p.best_score
+            };
+          });
         }
 
         // Get lesson completion status from database
@@ -241,21 +306,11 @@ export default function RoadmapTopic() {
       }
 
       // Update state with fetched data
-      setQuestions(problems || []);
+      setQuestions(typedProblems);
       setProgress(progressMap);
       setLessonProgress(lessonProgressMap);
 
-      // Calculate and set topic stats
-      const completedCount = Object.values(progressMap).filter(p => p.completed).length;
-      const totalStars = Object.values(progressMap).reduce((sum, p) => sum + (p.stars || 0), 0);
-      const completionPercentage = problems.length > 0 
-        ? Math.round((completedCount / problems.length) * 100) 
-        : 0;
-
-      setTopicStats({
-        total_stars: totalStars,
-        completion_percentage: completionPercentage
-      });
+      console.log('Topic stats updated from view:', topicStatsData);
 
     } catch (error) {
       console.error('Error loading topic data:', error);
@@ -263,7 +318,7 @@ export default function RoadmapTopic() {
   };
 
   const handleQuestionPress = (q: TopicProblemWithProgress, idx: number) => {
-    if (!q?.completed && !isUnlocked(q, idx)) return;
+    if (!isUnlocked(q, idx)) return;
     
     // Show the action modal instead of directly navigating
     setSelectedQuestion(q);
@@ -272,9 +327,58 @@ export default function RoadmapTopic() {
   };
 
   const handleCloseModal = () => {
-    console.log('Closing modal');
     setModalVisible(false);
     setSelectedQuestion(null);
+  };
+
+  const handleStartLesson = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/LoadingLesson',
+      params: {
+        questionId: selectedQuestion.leetcode_id?.toString(),
+        questionTitle: selectedQuestion.title,
+        questionDescription: selectedQuestion.description,
+        topicName: topicString,
+        questionDifficulty: selectedQuestion.difficulty
+      }
+    });
+  };
+
+  const handleStartPseudocode = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/pseudoToCode',
+      params: {
+        problemId: selectedQuestion.leetcode_id?.toString(),
+        problemTitle: selectedQuestion.title,
+        description: selectedQuestion.description,
+        difficulty: selectedQuestion.difficulty,
+        topicName: topicString,
+        source: 'roadmap'
+      }
+    });
+  };
+
+  const handleStartQuestion = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/LoadingQuestion',
+      params: {
+        id: selectedQuestion.leetcode_id?.toString(),
+        name: selectedQuestion.title,
+        difficulty: selectedQuestion.difficulty
+      }
+    });
   };
 
   const isUnlocked = (q: TopicProblemWithProgress, idx: number) => {
@@ -289,20 +393,31 @@ export default function RoadmapTopic() {
       return true;
     }
     
-    // Level unlocking: previous question must have 3+ stars (out of 5) for ALL users
+    // Previous question must be completed (both lesson and pseudocode)
     const previousQuestion = questions[idx - 1];
     console.log(`🔓 Previous question:`, previousQuestion ? {
       title: String(previousQuestion.title || '').substring(0, 30),
       stars: previousQuestion.stars,
-      completed: previousQuestion.completed
+      completed: previousQuestion.completed,
+      lessonCompleted: lessonProgress[previousQuestion.leetcode_id || 0],
+      pseudocodeCompleted: progress[previousQuestion.leetcode_id || 0]?.completed
     } : 'null');
     
-    if (!previousQuestion || (previousQuestion.stars || 0) < 3) {
-      console.log(`🔓 Previous question not cleared (need 3+ stars) - LOCKED`);
+    if (!previousQuestion) {
+      console.log(`🔓 No previous question - LOCKED`);
+      return false;
+    }
+
+    // Check if both lesson and pseudocode are completed for previous question
+    const prevLessonCompleted = lessonProgress[previousQuestion.leetcode_id || 0];
+    const prevPseudocodeCompleted = progress[previousQuestion.leetcode_id || 0]?.completed;
+
+    if (!prevLessonCompleted || !prevPseudocodeCompleted) {
+      console.log(`🔓 Previous question not fully completed (lesson: ${prevLessonCompleted}, pseudocode: ${prevPseudocodeCompleted}) - LOCKED`);
       return false;
     }
     
-    console.log(`🔓 Previous question cleared with ${previousQuestion.stars} stars - LEVEL UNLOCKED`);
+    console.log(`🔓 Previous question fully completed - UNLOCKED`);
     return true;
   };
 
@@ -378,8 +493,19 @@ export default function RoadmapTopic() {
     const actualIndex = (questions?.length || 0) - 1 - index;
     const isLeft = index % 2 === 0;
     const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
-    const unlocked = isUnlocked(question, actualIndex); // Call once and store result
+    const unlocked = isUnlocked(question, actualIndex);
     const isCompleted = question.stars && question.stars > 0;
+    
+    // Check both lesson and pseudocode completion
+    const hasCompletedLesson = lessonProgress[question.leetcode_id || 0];
+    const hasCompletedPseudocode = progress[question.leetcode_id || 0]?.completed;
+    const isFullyCompleted = hasCompletedLesson && hasCompletedPseudocode;
+    
+    console.log(`Question ${question.title} completion status:`, {
+      lessonCompleted: hasCompletedLesson,
+      pseudocodeCompleted: hasCompletedPseudocode,
+      fullyCompleted: isFullyCompleted
+    });
     
     // Safety checks for all properties with proper string conversion
     const safeTitle = decodedTitle;
@@ -390,6 +516,27 @@ export default function RoadmapTopic() {
     if (actualIndex % 4 === 1) icon = bookIcon;
     if (actualIndex % 4 === 3) icon = chestIcon;
     
+    const renderTitleWithCompletion = () => (
+      <View style={styles.titleContainer}>
+        <ThemedText 
+          style={[
+            styles.milestoneTitle,
+            !unlocked && styles.lockedText
+          ]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {safeTitle}
+        </ThemedText>
+        {isFullyCompleted && (
+          <Image 
+            source={require('../../assets/images/icons/correct-icon.png')} 
+            style={styles.titleCompletionIcon} 
+          />
+        )}
+      </View>
+    );
+
     return (
       <View key={String(safeLeetcodeId)} style={styles.milestoneWrapper}>
         <View style={[
@@ -401,16 +548,7 @@ export default function RoadmapTopic() {
             styles.textContainer,
             isLeft ? styles.textLeft : styles.textHidden
           ]}>
-            <ThemedText 
-              style={[
-                styles.milestoneTitle,
-                !unlocked && styles.lockedText
-              ]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {safeTitle}
-            </ThemedText>
+            {renderTitleWithCompletion()}
             {/* Difficulty indicator */}
             <View style={[
               styles.difficultyBadge,
@@ -473,16 +611,7 @@ export default function RoadmapTopic() {
             styles.textContainer,
             !isLeft ? styles.textRight : styles.textHidden
           ]}>
-            <ThemedText 
-              style={[
-                styles.milestoneTitle,
-                !unlocked && styles.lockedText
-              ]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {safeTitle}
-            </ThemedText>
+            {renderTitleWithCompletion()}
             {/* Difficulty indicator */}
             <View style={[
               styles.difficultyBadge,
@@ -596,8 +725,10 @@ export default function RoadmapTopic() {
               <ThemedText style={styles.statLabel}>Total Stars</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{String(topicStats.completion_percentage || 0)}%</ThemedText>
-              <ThemedText style={styles.statLabel}>Completed</ThemedText>
+              <ThemedText style={styles.statValue}>{topicStats.percentage !== undefined && topicStats.percentage !== null
+  ? String(topicStats.percentage)
+  : '0'}%</ThemedText>
+              <ThemedText style={styles.statLabel}>Completion</ThemedText>
             </View>
           </View>
         )}
@@ -733,11 +864,9 @@ export default function RoadmapTopic() {
               return String(selectedQuestion.description || 'Solve the problem: Untitled Problem');
             }
           })()}
-          isLessonRequired={isLessonRequired(selectedQuestion)}
-          isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
-          topicName={topicString || ''}
-          isQuestionOnLeft={selectedQuestionIndex % 2 === 0}
-          bubblePosition={{ x: 200, y: 300 + selectedQuestionIndex * 112 }}
+          topicName={topicString}
+          isLessonRequired={true}
+          isQuestionSolved={progress[selectedQuestion.leetcode_id || 0]?.completed || false}
         />
       )}
     </SafeAreaView>
@@ -1032,6 +1161,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6564c7',
     textAlign: 'center',
+    flexShrink: 1,
   },
   lockedText: {
     color: '#a0a0a0',
@@ -1099,5 +1229,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     textAlign: 'center',
+  },
+  titleCompletionIcon: {
+    width: 18,
+    height: 18,
+    marginLeft: 6,
+    resizeMode: 'contain',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
+    paddingHorizontal: 4,
   },
 });

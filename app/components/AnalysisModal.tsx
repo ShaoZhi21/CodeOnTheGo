@@ -1,9 +1,11 @@
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
-import { createClient } from '@supabase/supabase-js';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
+import { router } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -11,11 +13,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-
-// Supabase configuration
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = SCREEN_HEIGHT * 0.50;
@@ -49,29 +46,65 @@ interface AnalysisModalProps {
   problemId?: number;
   problemTitle?: string;
   descriptionBoxes?: any[];
+  topicName?: string; // Add topicName parameter
+  difficulty?: string; // Add difficulty parameter
+  description?: string; // Add description parameter
+  source?: 'roadmap' | 'allquestions'; // Add source parameter
 }
 
-export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore, onWritePseudocode, onRemark, problemId, problemTitle, descriptionBoxes }: AnalysisModalProps) {
+export function AnalysisModal({ 
+  visible, 
+  onClose, 
+  analysis, 
+  onTryForHigherScore, 
+  onWritePseudocode, 
+  onRemark, 
+  problemId, 
+  problemTitle, 
+  descriptionBoxes,
+  topicName,
+  difficulty,
+  description,
+  source = 'allquestions' // Default to allquestions if not specified
+}: AnalysisModalProps) {
   const translateY = useSharedValue(MAX_MODAL_HEIGHT);
   const opacity = useSharedValue(0);
   const [selectedAnalysisSection, setSelectedAnalysisSection] = React.useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [isRemarking, setIsRemarking] = React.useState(false);
   const [remarkError, setRemarkError] = React.useState(false);
-
-  // Save progress function
+  const [isCompletingTask, setIsCompletingTask] = React.useState(false);
+  
+  // Enhanced save progress function with better error handling
   const saveProgress = async (analysis: Analysis) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('User not authenticated');
-        return;
+      console.log('🔍 Attempting to save progress...');
+      
+      // Get current session first
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Failed to get user session');
+      }
+      
+      if (!session) {
+        console.error('No active session found');
+        throw new Error('User not logged in');
+      }
+      
+      // Get user from session
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('User authentication error:', userError);
+        throw new Error('User not authenticated');
       }
 
+      console.log('✅ User authenticated:', user.id);
+
       // Determine if the solution is completed based on score
-      const isCompleted = analysis.score >= 50; // Consider completed if score >= 50
+      const isCompleted = analysis.score >= 50;
       const stars = analysis.stars || 0;
 
-      console.log('Saving progress:', {
+      console.log('💾 Saving progress with params:', {
         userId: user.id,
         problemId: problemId,
         score: analysis.score,
@@ -83,6 +116,7 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           code: descriptionBoxes?.map(block => {
@@ -101,12 +135,16 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
       });
 
       if (response.ok) {
-        console.log('Progress saved successfully');
+        console.log('✅ Progress saved successfully');
+        return { success: true, user };
       } else {
-        console.error('Failed to save progress:', response.status);
+        const errorText = await response.text();
+        console.error('❌ Failed to save progress:', response.status, errorText);
+        throw new Error(`Failed to save progress: ${response.status}`);
       }
     } catch (error) {
-      console.error('Error saving progress:', error);
+      console.error('❌ Error saving progress:', error);
+      throw error;
     }
   };
 
@@ -141,6 +179,197 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
     } catch (error) {
       setRemarkError(true);
       setIsRemarking(false);
+    }
+  };
+
+  // Enhanced complete button handler with streak checking and navigation
+  const handleCompleteTask = async () => {
+    if (!analysis || !problemId) {
+      Alert.alert('Error', 'Missing analysis or problem information');
+      return;
+    }
+
+    setIsCompletingTask(true);
+
+    try {
+      console.log('🚀 handleCompleteTask: Starting...');
+      
+      // Step 1: Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get today and yesterday at 12am for streak checking
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const now = new Date();
+
+      console.log('📅 Date check:', {
+        today: today.toISOString(),
+        yesterday: yesterday.toISOString(),
+        currentTime: now.toISOString()
+      });
+
+      // Step 2: Check for previous activities before this completion
+      // Changed to check completed_at instead of created_at
+      const { data: previousActivities } = await supabase
+        .from('user_problem_progress')
+        .select('completed_at')
+        .eq('user_id', user.id)
+        .not('completed_at', 'is', null) // Only get actually completed activities
+        .lt('completed_at', now.toISOString())
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      console.log('🔍 Previous activities:', previousActivities);
+
+      // Step 3: Check if this problem was previously completed
+      const { data: existingProgress } = await supabase
+        .from('user_problem_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('problem_id', problemId)
+        .single();
+
+      console.log('🔍 Existing progress:', existingProgress);
+
+      // Step 4: Save/Update problem progress
+      const progressData = {
+        user_id: user.id,
+        problem_id: problemId,
+        is_solved: true, // This will mark both pseudocode and lesson as completed
+        score: analysis.score || 0,
+        stars: Math.min(analysis.stars || 0, 3), // Ensure stars is within 0-3 range
+        attempts: (existingProgress?.attempts || 0) + 1,
+        hints_used: existingProgress?.hints_used || 0,
+        time_spent_minutes: existingProgress?.time_spent_minutes || 0,
+        first_solved_at: existingProgress?.first_solved_at || now.toISOString(),
+        last_attempt_at: now.toISOString(),
+        completed_at: now.toISOString(),
+        best_score: Math.max(existingProgress?.best_score || 0, analysis.score || 0)
+      };
+
+      if (existingProgress) {
+        // Update existing progress
+        const { error: updateError } = await supabase
+          .from('user_problem_progress')
+          .update(progressData)
+          .eq('user_id', user.id)
+          .eq('problem_id', problemId);
+
+        if (updateError) {
+          console.error('Error updating progress:', updateError);
+          throw new Error('Failed to update progress');
+        }
+        console.log('✅ Updated existing progress with pseudocode completion');
+      } else {
+        // Insert new progress
+        const { error: insertError } = await supabase
+          .from('user_problem_progress')
+          .insert(progressData);
+
+        if (insertError) {
+          console.error('Error inserting progress:', insertError);
+          throw new Error('Failed to insert progress');
+        }
+        console.log('✅ Inserted new progress with pseudocode completion');
+      }
+
+      // Step 5: Check streak logic
+      let lastActivity = previousActivities && previousActivities.length > 0 
+        ? new Date(previousActivities[0].completed_at)
+        : null;
+
+      console.log('🎯 Last activity:', lastActivity ? lastActivity.toISOString() : 'None');
+
+      // Check if user had already done activity today
+      const isNewStreak = !lastActivity || lastActivity < today;
+      console.log('🎯 Is new streak?', isNewStreak);
+
+      if (isNewStreak) {
+        // If last activity was exactly yesterday, increment streak
+        if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
+          console.log('✅ Consecutive day detected, incrementing streak');
+          const updatedProfile = await ProfileService.updateStreak(user.id, true);
+          if (updatedProfile) {
+            console.log('✅ Streak incremented:', updatedProfile.current_streak);
+          } else {
+            console.error('❌ Failed to increment streak');
+          }
+        } else {
+          console.log('🔄 Missed a day or first activity, resetting streak to 1');
+          const updatedProfile = await ProfileService.updateStreak(user.id, false);
+          if (updatedProfile) {
+            const finalProfile = await ProfileService.updateStreak(user.id, true);
+            console.log('✅ Streak reset and started at 1:', finalProfile?.current_streak);
+          } else {
+            console.error('❌ Failed to reset streak');
+          }
+        }
+
+        // Navigate to streak animation for new streaks
+        console.log('🎬 Navigating to StreakAnimation...');
+        handleClose();
+        router.push({
+          pathname: './StreakAnimation',
+          params: {
+            problemTitle: problemTitle || '',
+            problemId: problemId?.toString() || '',
+            topicName: topicName || '',
+            quizData: '',
+            fromPseudocode: 'true',
+            difficulty: difficulty || '',
+            description: description || '',
+            code: descriptionBoxes?.map(block => {
+              if (block.type === 'text') return block.value;
+              if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
+              if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
+              if (block.type === 'else') return `else:\n${block.body}`;
+              if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
+              if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
+              return '';
+            }).join('\n') || '',
+            source: source // Pass the source parameter
+          }
+        });
+      } else {
+        // If not a new streak, go directly to PseudocodeComplete
+        console.log('📝 No streak animation needed, navigating to PseudocodeComplete');
+        handleClose();
+        router.push({
+          pathname: './PseudocodeComplete',
+          params: {
+            problemTitle: problemTitle || '',
+            problemId: problemId?.toString() || '',
+            topicName: topicName || '',
+            difficulty: difficulty || '',
+            description: description || '',
+            code: descriptionBoxes?.map(block => {
+              if (block.type === 'text') return block.value;
+              if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
+              if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
+              if (block.type === 'else') return `else:\n${block.body}`;
+              if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
+              if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
+              return '';
+            }).join('\n') || '',
+            source: source // Pass the source parameter
+          }
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ Error completing task:', error);
+      Alert.alert(
+        'Error', 
+        error instanceof Error ? error.message : 'Failed to complete task. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsCompletingTask(false);
     }
   };
 
@@ -396,22 +625,18 @@ export function AnalysisModal({ visible, onClose, analysis, onTryForHigherScore,
                         />
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={styles.completeButton} 
-                        onPress={async () => {
-                          try {
-                            if (analysis && problemId) {
-                              await saveProgress(analysis);
-                              handleClose();
-                            }
-                          } catch (error) {
-                            console.error('❌ Error marking question complete from modal:', error);
-                          }
-                        }}
+                        style={[styles.completeButton, isCompletingTask && { opacity: 0.6 }]} 
+                        onPress={handleCompleteTask}
+                        disabled={isCompletingTask}
                       >
-                        <Image 
-                          source={require('@/assets/images/icons/complete-icon.png')}
-                          style={styles.iconOnlyButton}
-                        />
+                        {isCompletingTask ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <Image 
+                            source={require('@/assets/images/icons/complete-icon.png')}
+                            style={styles.iconOnlyButton}
+                          />
+                        )}
                       </TouchableOpacity>
                       <TouchableOpacity 
                         style={styles.retryButton} 

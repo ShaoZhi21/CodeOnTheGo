@@ -77,14 +77,30 @@ async function getUserProfileStats(userId) {
     
     if (lessonError) throw lessonError;
     
-    const completedProblems = progressData?.filter(p => p.is_solved)?.length || 0;
-    const totalStars = progressData?.reduce((sum, p) => sum + (p.stars || 0), 0) || 0;
-    const completedLessons = lessonData?.filter(l => l.quiz_completed)?.length || 0;
+    // Only count problems and stars when both lesson and pseudocode are completed
+    const completedProblemsMap = new Map();
+    let totalStars = 0;
+
+    // First mark which problems have completed lessons
+    const completedLessons = new Set(
+      lessonData?.filter(l => l.quiz_completed).map(l => l.problem_id)
+    );
+
+    // Then process problem progress, only counting those with completed lessons
+    progressData?.forEach(p => {
+      if (p.is_solved && completedLessons.has(p.problem_id)) {
+        completedProblemsMap.set(p.problem_id, true);
+        totalStars += p.stars || 0;
+      }
+    });
+    
+    const completedProblems = completedProblemsMap.size;
+    const completedLessonsCount = completedLessons.size;
     
     return {
       completed_problems: completedProblems,
       total_stars: totalStars,
-      completed_lessons: completedLessons
+      completed_lessons: completedLessonsCount
     };
   } catch (error) {
     console.error('Error fetching user profile stats:', error);

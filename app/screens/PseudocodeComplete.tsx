@@ -1,51 +1,43 @@
-import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-export default function QuizComplete() {
+export default function PseudocodeComplete() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const problemTitle = params.problemTitle as string || '';
   const problemId = params.problemId as string || '';
   const topicName = params.topicName as string || '';
-  const quizData = params.quizData as string || '';
+  const difficulty = params.difficulty as string || '';
+  const description = params.description as string || '';
+  const code = params.code as string || '';
+  const source = params.source as 'roadmap' | 'allquestions' || 'allquestions';
 
-  console.log('QuizComplete params:', { problemTitle, problemId, topicName, quizData });
+  console.log('PseudocodeComplete params:', { 
+    problemTitle, 
+    problemId, 
+    topicName,
+    difficulty,
+    description,
+    codeLength: code.length,
+    source
+  });
 
-  const handleComplete = async () => {
-    console.log('🎯 handleComplete called with topicName:', topicName);
-    console.log('🎯 handleComplete called with problemTitle:', problemTitle);
-    console.log('🎯 handleComplete called with problemId:', problemId);
-    // Unlock pseudocode for this problem (mark as solved in user_problem_progress)
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && problemId) {
-        // Use the passed problemId directly (no need to query)
-        const leetcodeId = parseInt(problemId);
-        console.log('🎯 Using problemId:', leetcodeId, 'for title:', problemTitle);
-        if (leetcodeId) {
-          await supabase
-            .from('user_problem_progress')
-            .upsert({
-              user_id: user.id,
-              problem_id: leetcodeId,
-              is_solved: true,
-              updated_at: new Date().toISOString(),
-            });
-          console.log('🎯 Successfully unlocked pseudocode for problemId:', leetcodeId);
+  const handleContinue = () => {
+    // Navigate based on source
+    if (source === 'roadmap' && topicName) {
+      console.log('🎯 Navigating to LoadingRoadMap with topicName:', topicName);
+      router.replace({
+        pathname: '/screens/LoadingRoadMap',
+        params: { 
+          topicName,
+          from: 'pseudocomplete'
         }
-      }
-    } catch (error) {
-      console.error('Error unlocking pseudocode:', error);
+      });
+    } else {
+      // If source is allquestions or no topicName, go to all questions
+      console.log('🎯 Navigating to allquestions');
+      router.replace('/screens/allquestions');
     }
-    console.log('🎯 Navigating to LoadingRoadMap with topicName:', topicName);
-    router.replace({
-      pathname: '/screens/LoadingRoadMap',
-      params: { 
-        topicName,
-        from: 'quizcomplete'
-      },
-    });
   };
 
   return (
@@ -54,7 +46,7 @@ export default function QuizComplete() {
         {/* Completion Header */}
         <View style={styles.completionSection}>
           <Text style={styles.completionEmoji}>✨</Text>
-          <Text style={styles.completionTitle}>You&apos;ve completed the quiz for</Text>
+          <Text style={styles.completionTitle}>You&apos;ve completed the pseudocode for</Text>
         </View>
 
         {/* Problem Title Card */}
@@ -65,14 +57,14 @@ export default function QuizComplete() {
         {/* Success Message */}
         <View style={styles.successSection}>
           <Text style={styles.successText}>
-            Great job! You&apos;ve mastered this concept and are one step closer to becoming a coding expert.
+            Excellent work! Keep building your problem-solving skills!
           </Text>
         </View>
       </View>
 
       {/* Action Button - Fixed to bottom */}
       <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.continueButton} onPress={handleComplete}>
+        <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
           <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
       </View>
@@ -83,14 +75,14 @@ export default function QuizComplete() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3E8FF', // More vibrant purple background
+    backgroundColor: '#F3E8FF',
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60, // Add top margin
+    paddingTop: 60,
   },
   completionSection: {
     alignItems: 'center',
@@ -101,20 +93,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   completionTitle: {
-    color: '#7C3AED', // More vibrant purple text
-    fontSize: 22, // Reduced from 28
+    color: '#7C3AED',
+    fontSize: 22,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 28, // Reduced from 36
+    lineHeight: 28,
   },
   problemCard: {
-    backgroundColor: 'white', // Changed to white
+    backgroundColor: 'white',
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderRadius: 16,
     marginBottom: 32,
     borderWidth: 2,
-    borderColor: '#7C3AED', // More vibrant purple border
+    borderColor: '#7C3AED',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -123,7 +115,7 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   problemTitle: {
-    color: '#7C3AED', // More vibrant purple text on white background
+    color: '#7C3AED',
     fontSize: 24,
     fontWeight: '600',
     textAlign: 'center',
@@ -133,20 +125,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   successText: {
-    color: '#5B21B6', // Darker purple text for more color
+    color: '#5B21B6',
     fontSize: 18,
     textAlign: 'center',
     lineHeight: 26,
   },
   buttonContainer: {
     paddingHorizontal: 24,
-    paddingBottom: 40, // Push button to bottom
+    paddingBottom: 40,
     paddingTop: 20,
   },
   continueButton: {
-    backgroundColor: '#7C3AED', // More vibrant purple
+    backgroundColor: '#7C3AED',
     paddingVertical: 18,
-    paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: 'center',
     shadowColor: '#7C3AED',

@@ -140,13 +140,28 @@ export default function StreakAnimationScreen() {
     // Auto-navigate after 6 seconds
     const timer = setTimeout(() => {
       hideStreakAnimation();
+      
+      // Check if this was triggered from the Test Streak button on index.tsx
+      if (params.source === 'index' && params.isTestStreak === 'true') {
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Original navigation logic for all other cases
+      const fromPseudocode = params.fromPseudocode === 'true';
+      
       router.replace({
-        pathname: './QuizComplete',
+        pathname: fromPseudocode ? './PseudocodeComplete' : './QuizComplete',
         params: {
           problemTitle: params.problemTitle as string || '',
           problemId: params.problemId as string || '',
           topicName: params.topicName as string || '',
-          quizData: params.quizData as string || '', // Pass the quiz data
+          quizData: params.quizData as string || '',
+          difficulty: params.difficulty as string || '',
+          description: params.description as string || '',
+          code: params.code as string || '', // Pass the code for redoing
+          fromPseudocode: 'true',
+          source: params.source as string || 'allquestions' // Pass through the source parameter
         }
       });
     }, 6000);
@@ -198,7 +213,7 @@ export default function StreakAnimationScreen() {
     }),
     translateY: spark.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, Math.sin((index * 18) * Math.PI / 180) * (80 + Math.random() * 60)],
+      outputRange: [-80, Math.sin((index * 18) * Math.PI / 180) * (80 + Math.random() * 60) - 80], // Start higher and move up more
     }),
     opacity: spark.interpolate({
       inputRange: [0, 0.3, 0.7, 1],
@@ -248,22 +263,6 @@ export default function StreakAnimationScreen() {
           <ThemedText style={styles.fireEmoji}>🔥</ThemedText>
         </Animated.View>
 
-      {/* Streak text */}
-      <Animated.View 
-        style={[
-          styles.textContainer,
-          { opacity: textOpacity }
-        ]}
-      >
-        <ThemedText style={styles.streakTitle}>{getStreakMessage(currentStreakCount)}</ThemedText>
-        <ThemedText style={styles.dayText}>
-          Day {currentStreakCount}
-        </ThemedText>
-        <ThemedText style={styles.streakSubtitle}>
-          of your coding journey
-        </ThemedText>
-      </Animated.View>
-        
         {/* Confetti pieces */}
         {confettiAnimations.map((confetti, index) => (
           <Animated.View
@@ -300,6 +299,22 @@ export default function StreakAnimationScreen() {
             ]}
           />
         ))}
+
+        {/* Streak text */}
+        <Animated.View 
+          style={[
+            styles.textContainer,
+            { opacity: textOpacity }
+          ]}
+        >
+          <ThemedText style={styles.streakTitle}>{getStreakMessage(currentStreakCount)}</ThemedText>
+          <ThemedText style={styles.dayText}>
+            Day {currentStreakCount}
+          </ThemedText>
+          <ThemedText style={styles.streakSubtitle}>
+            of your coding journey
+          </ThemedText>
+        </Animated.View>
       </View>
     </View>
   );
@@ -309,15 +324,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    flexDirection: 'column',
-    marginBottom: 100,
+    paddingHorizontal: 20,
+    paddingTop: 40,
   },
   birdContainer: {
     position: 'absolute',
@@ -325,6 +338,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 180,
     height: 180,
+    top: height * 0.3,
+    zIndex: 2,
   },
   birdIcon: {
     width: 180,
@@ -336,13 +351,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 180,
     height: 180,
-    marginTop: 30,
-    marginBottom: 30,
-    marginRight: 15,
+    top: height * 0.28,
+    zIndex: 1,
   },
   fireEmoji: {
-    paddingTop: 100,
-    fontSize: 120,
+    fontSize: 140,
+    lineHeight: 180,
   },
   fireSpark: {
     position: 'absolute',
@@ -359,11 +373,13 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   textContainer: {
+    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    top: height * 0.55,
     paddingHorizontal: 20,
-    marginBottom: 80,
-    marginTop: 300,
+    height: 300,
   },
   streakTitle: {
     fontSize: 32,
@@ -374,6 +390,8 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(124, 58, 237, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
+    paddingVertical: 10,
+    lineHeight: 40,
   },
   dayText: {
     fontSize: 48,
@@ -381,9 +399,8 @@ const styles = StyleSheet.create({
     color: '#FF6B35',
     textAlign: 'center',
     marginBottom: 8,
-    textShadowColor: 'rgba(255, 107, 53, 0.4)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 6,
+    paddingVertical: 10,
+    lineHeight: 60,
   },
   streakSubtitle: {
     fontSize: 18,
@@ -391,5 +408,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     lineHeight: 24,
+    paddingVertical: 5,
   },
 }); 

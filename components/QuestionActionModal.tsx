@@ -72,7 +72,9 @@ export default function QuestionActionModal({
       params: {
         id: questionId.toString(),
         name: questionTitle,
-        difficulty: questionDifficulty
+        difficulty: questionDifficulty,
+        source: 'roadmap',
+        topicName: topicName
       },
     });
     onClose();
@@ -135,8 +137,16 @@ export default function QuestionActionModal({
                     source={require('../assets/images/icons/lesson-icon.png')} 
                     style={styles.buttonIcon} 
                   />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.squareButtonText}>Lesson</Text>
+                    {hasCompletedLesson && (
+                      <Image 
+                        source={require('../assets/images/icons/complete-icon.png')} 
+                        style={styles.completionIcon} 
+                      />
+                    )}
+                  </View>
                 </View>
-                <Text style={styles.squareButtonText}>Lesson</Text>
               </TouchableOpacity>
 
               {/* Pseudocode Button */}
@@ -157,8 +167,16 @@ export default function QuestionActionModal({
                     source={require('../assets/images/icons/pseudocode-icon.png')} 
                     style={styles.buttonIcon} 
                   />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.squareButtonText}>Pseudocode</Text>
+                    {isQuestionSolved && (
+                      <Image 
+                        source={require('../assets/images/icons/complete-icon.png')} 
+                        style={styles.completionIcon} 
+                      />
+                    )}
+                  </View>
                 </View>
-                <Text style={styles.squareButtonText}>Pseudocode</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -190,7 +208,9 @@ const styles = StyleSheet.create({
     elevation: 5,
     position: 'relative',
     minWidth: 280,
-    maxHeight: 200,
+    maxWidth: '90%',
+    minHeight: 180,
+    maxHeight: 300, // Increased max height
   },
   closeButton: {
     position: 'absolute',
@@ -229,13 +249,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
+    flexWrap: 'wrap', // Allow title to wrap
   },
   questionTitle: {
-    fontSize: 20,
+    fontSize: 18, // Slightly smaller font
     fontWeight: 'bold',
     color: '#333',
     flex: 1,
-    lineHeight: 24,
+    lineHeight: 22,
+    flexWrap: 'wrap', // Allow text to wrap
   },
   difficultyBadge: {
     paddingHorizontal: 10,
@@ -244,6 +266,7 @@ const styles = StyleSheet.create({
     minWidth: 50,
     alignItems: 'center',
     flexShrink: 0,
+    alignSelf: 'flex-start', // Align to top with text
   },
   difficultyText: {
     fontSize: 11,
@@ -254,6 +277,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 15,
     width: '100%',
+    marginTop: 'auto', // Push buttons to bottom
   },
   squareButton: {
     flex: 1,
@@ -281,7 +305,12 @@ const styles = StyleSheet.create({
   buttonContent: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+  },
+  textContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
   },
   lockedText: {
     color: '#FF0000',
@@ -302,5 +331,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     letterSpacing: 0.3,
+  },
+  completionBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  completionIcon: {
+    width: 16,
+    height: 16,
+    resizeMode: 'contain',
   },
 }); 
