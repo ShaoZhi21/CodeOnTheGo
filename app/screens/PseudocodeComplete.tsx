@@ -11,6 +11,7 @@ export default function PseudocodeComplete() {
   const description = params.description as string || '';
   const code = params.code as string || '';
   const source = params.source as 'roadmap' | 'allquestions' || 'allquestions';
+  const from = params.from as string || 'roadmap';
 
   console.log('PseudocodeComplete params:', { 
     problemTitle, 
@@ -23,9 +24,10 @@ export default function PseudocodeComplete() {
   });
 
   const handleContinue = () => {
-    // Navigate based on source
-    if (source === 'roadmap' && topicName) {
-      console.log('🎯 Navigating to LoadingRoadMap with topicName:', topicName);
+    console.log('PseudocodeComplete handleContinue:', { from, topicName });
+    
+    if (from === 'roadmap' && topicName) {
+      console.log('Navigating back to roadmap with topicName:', topicName);
       router.replace({
         pathname: '/screens/LoadingRoadMap',
         params: { 
@@ -33,10 +35,16 @@ export default function PseudocodeComplete() {
           from: 'pseudocomplete'
         }
       });
-    } else {
-      // If source is allquestions or no topicName, go to all questions
-      console.log('🎯 Navigating to allquestions');
+    } else if (from === 'allquestions') {
+      console.log('Navigating back to allquestions');
       router.replace('/screens/allquestions');
+    } else if (from === 'question') {
+      console.log('Navigating back to question');
+      router.replace('/screens/question');
+    } else {
+      console.log('Using fallback navigation to tabs');
+      // fallback
+      router.replace('/(tabs)');
     }
   };
 

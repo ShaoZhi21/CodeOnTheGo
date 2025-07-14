@@ -1165,34 +1165,18 @@ export default function QuestionScreen() {
 
   // Calculate which line numbers each block spans
   const getBlockLineRanges = () => {
-    let currentLineNumber = 1;
     const blockRanges: {blockIndex: number, startLine: number, endLine: number}[] = [];
     
     descriptionBoxes.forEach((block, idx) => {
-      const startLine = currentLineNumber;
-      let lineCount = 1; // Default to 1 line
+      // Each block corresponds to exactly one line number in the numbered solution
+      // because each block becomes one numbered line (e.g., "1. if condition: body")
+      const lineNumber = idx + 1;
       
-      // Calculate how many lines this block generates
-      if (block.type === 'text') {
-        // Text blocks are single line (filtered content)
-        const lines = block.value.split('\n').filter(line => line.trim() !== '');
-        lineCount = Math.max(1, lines.length);
-      } else if (block.type === 'if' || block.type === 'elseif' || block.type === 'while' || block.type === 'for') {
-        // These blocks generate 2 lines: condition + body
-        lineCount = 2;
-      } else if (block.type === 'else') {
-        // Else blocks generate 2 lines: else + body
-        lineCount = 2;
-      }
-      
-      const endLine = startLine + lineCount - 1;
       blockRanges.push({
         blockIndex: idx,
-        startLine,
-        endLine
+        startLine: lineNumber,
+        endLine: lineNumber
       });
-      
-      currentLineNumber = endLine + 1;
     });
     
     return blockRanges;

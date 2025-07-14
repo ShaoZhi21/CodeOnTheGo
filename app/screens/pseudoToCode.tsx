@@ -1,6 +1,6 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
-import { API_BASE_URL, apiCall } from '@/lib/api-config';
+import { API_BASE_URL } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -62,7 +62,6 @@ export default function PseudoToCode() {
   const [allStepsCompleted, setAllStepsCompleted] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [loadedMCQCount, setLoadedMCQCount] = useState(0);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
 
   // Parse the passed parameters
@@ -112,14 +111,14 @@ export default function PseudoToCode() {
     setAllStepsCompleted(allCompleted);
     
     // Auto-navigate to code summary when all steps are completed (only once)
-    if (allCompleted && pseudocodeSteps.length > 0 && !isGeneratingSummary && !hasNavigatedToSummary) {
+    if (allCompleted && pseudocodeSteps.length > 0 && !hasNavigatedToSummary) {
       setHasNavigatedToSummary(true);
       // Small delay to allow user to see the completion state
       setTimeout(() => {
         handleFinish();
       }, 1000);
     }
-  }, [pseudocodeSteps, isGeneratingSummary, hasNavigatedToSummary]);
+  }, [pseudocodeSteps, hasNavigatedToSummary]);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -283,7 +282,7 @@ export default function PseudoToCode() {
       if (isLastStep) {
         // Small delay to show the correct answer, then show loading
         setTimeout(() => {
-          setIsGeneratingSummary(true);
+          handleFinish();
         }, 800);
       }
     }
@@ -314,71 +313,27 @@ export default function PseudoToCode() {
   };
 
   const handleFinish = async () => {
-    // Show immediate feedback
-    setIsGeneratingSummary(true);
-    
-    // Collect MCQ answers for the summary
     const mcqAnswers = pseudocodeSteps.map((step, index) => ({
       step: step.text,
       selectedAnswer: step.selectedAnswer,
       correctAnswer: step.correctAnswer,
       completed: step.completed
     }));
-
-    try {
-      // Pre-generate the code summary for faster loading
-      const response = await apiCall('/api/generate-code-summary', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          problemTitle: title,
-          problemDescription: description,
-          pseudocode: pseudocode,
-          language: selectedLanguage,
-          mcqAnswers: mcqAnswers
-        }),
-      });
-
-      if (response.ok) {
-        const summaryData = await response.json();
-        
-        // Navigate with pre-generated summary
-        router.push({
-          pathname: '/screens/codeSummary',
-          params: {
-            problemId: problemId,
-            title: title,
-            difficulty: difficulty,
-            description: description,
-            pseudocode: pseudocode,
-            language: selectedLanguage,
-            mcqAnswers: JSON.stringify(mcqAnswers),
-            preGeneratedSummary: JSON.stringify(summaryData)
-          }
-        });
-    } else {
-        throw new Error('Failed to generate summary');
+    
+    // Navigate to LoadingCodeSummary with all params
+    router.push({
+      pathname: '/screens/LoadingCodeSummary',
+      params: {
+        problemId: problemId,
+        title: title,
+        difficulty: difficulty,
+        description: description,
+        pseudocode: pseudocode,
+        language: selectedLanguage,
+        mcqAnswers: JSON.stringify(mcqAnswers),
+        ...params // pass through any other params (e.g., from, topicName)
       }
-    } catch (error) {
-      console.error('Error pre-generating summary:', error);
-      // Fallback: navigate without pre-generated summary
-      router.push({
-        pathname: '/screens/codeSummary',
-        params: {
-          problemId: problemId,
-          title: title,
-          difficulty: difficulty,
-          description: description,
-          pseudocode: pseudocode,
-          language: selectedLanguage,
-          mcqAnswers: JSON.stringify(mcqAnswers)
-        }
-      });
-    } finally {
-      setIsGeneratingSummary(false);
-    }
+    });
   };
 
   const handleLanguageChange = (language: string) => {
@@ -733,47 +688,38 @@ export default function PseudoToCode() {
           ))}
             </View>
             
-        {/* MCQ Section or Code Summary Loading */}
-        {(!allStepsCompleted || isGeneratingSummary) && (
+        {/* MCQ Section */}
+        {(!allStepsCompleted) && (
           <View style={styles.mcqContainer}>
-            {!isGeneratingSummary && (
-              <View style={styles.currentStepHighlight}>
-                {/* Show code with nested structure */}
-                {(() => {
-                  const nextStep = currentStepIndex + 1 < pseudocodeSteps.length ? pseudocodeSteps[currentStepIndex + 1]?.text : undefined;
-                  const codeStructure = formatCodeWithNestedPseudocode(pseudocodeSteps[currentStepIndex]?.text || '', nextStep);
-                  
-                  if (codeStructure.hasNested) {
-                    return (
-                      <View style={styles.codeStructureContainer}>
-                        <ThemedText style={styles.currentStepTitle}>
-                          {codeStructure.mainCode}
-                      </ThemedText>
-                                               <View style={styles.nestedCodeContainer}>
-                           <ThemedText style={styles.nestedCodeText}>{codeStructure.nestedCode}</ThemedText>
-                    </View>
-                        <ThemedText style={styles.closingBrace}>{'}'}</ThemedText>
-                      </View>
-                    );
-                  } else {
-                    return (
+            <View style={styles.currentStepHighlight}>
+              {/* Show code with nested structure */}
+              {(() => {
+                const nextStep = currentStepIndex + 1 < pseudocodeSteps.length ? pseudocodeSteps[currentStepIndex + 1]?.text : undefined;
+                const codeStructure = formatCodeWithNestedPseudocode(pseudocodeSteps[currentStepIndex]?.text || '', nextStep);
+                
+                if (codeStructure.hasNested) {
+                  return (
+                    <View style={styles.codeStructureContainer}>
                       <ThemedText style={styles.currentStepTitle}>
                         {codeStructure.mainCode}
-                      </ThemedText>
-                    );
-                  }
-                })()}
+                    </ThemedText>
+                                             <View style={styles.nestedCodeContainer}>
+                       <ThemedText style={styles.nestedCodeText}>{codeStructure.nestedCode}</ThemedText>
+                </View>
+                      <ThemedText style={styles.closingBrace}>{'}'}</ThemedText>
                     </View>
-            )}
+                  );
+                } else {
+                  return (
+                    <ThemedText style={styles.currentStepTitle}>
+                      {codeStructure.mainCode}
+                    </ThemedText>
+                  );
+                }
+              })()}
+            </View>
 
-                        {isGeneratingSummary ? (
-              <View style={[styles.loadingContainer, { justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 100 }]}>
-                <ActivityIndicator size="large" color="#6564c7" />
-                <ThemedText style={styles.loadingText}>
-                  Code Summary Loading...
-                </ThemedText>
-                        </View>
-            ) : isLoadingMCQ || !currentMCQ ? (
+            {isLoadingMCQ || !currentMCQ ? (
               <View style={styles.mcqLoadingContent}>
                 <ActivityIndicator size="large" color="#6564c7" />
                 <ThemedText style={styles.mcqLoadingText}>
