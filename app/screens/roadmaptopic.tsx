@@ -1,22 +1,22 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import QuestionActionModal from '../../components/QuestionActionModal';
 import { ThemedText } from '../../components/ThemedText';
-import { TopicProblem, TopicService } from '../../lib/services/topicService';
+import { TopicProblem } from '../../lib/services/topicService';
 import { supabase } from '../../lib/supabase';
+
+interface UserProgress {
+  completed: boolean;
+  stars: number;
+  score?: number; // Add optional score field
+}
 
 interface TopicProblemWithProgress extends TopicProblem {
   completed?: boolean;
   stars?: number;
-}
-
-interface UserProgress {
-  problem_id: number;
-  completed: boolean;
-  stars: number;
 }
 
 // Icons
@@ -92,96 +92,202 @@ export default function RoadmapTopic() {
   const params = useLocalSearchParams();
   const topic = Array.isArray(params.topic) ? params.topic[0] : params.topic;
   const topicString = typeof topic === 'string' ? topic : '';
+  const fromPage = Array.isArray(params.from) ? params.from[0] : params.from;
+  const preFetchedData = params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
 
   console.log('RoadmapTopic: topic param =', topicString);
+  console.log('RoadmapTopic: from param =', fromPage);
+  console.log('RoadmapTopic: preFetchedData =', preFetchedData);
   
   const router = useRouter();
-  const [questions, setQuestions] = useState<TopicProblemWithProgress[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [topicStats, setTopicStats] = useState<any>(null);
-  const [progress, setProgress] = useState<Record<number, UserProgress>>({});
+  const [questions, setQuestions] = useState<TopicProblemWithProgress[]>(preFetchedData?.problems || []);
+  const [topicStats, setTopicStats] = useState<any>(preFetchedData?.stats || null);
+  const [progress, setProgress] = useState<Record<number, UserProgress>>(preFetchedData?.progress || {});
+  const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>(preFetchedData?.lessonProgress || {});
   const scrollViewRef = useRef<ScrollView>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
+  const hasScrolledToBottom = useRef(false);
+  const [needsRefresh, setNeedsRefresh] = useState(!preFetchedData);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
-  const [lessonProgress, setLessonProgress] = useState<Record<number, boolean>>({});
 
   console.log('RoadmapTopic: Component initialized');
+
+  // Scroll to bottom only on first load
+  useEffect(() => {
+    if (questions && questions.length > 0 && !hasScrolledToBottom.current) {
+      hasScrolledToBottom.current = true;
+      // Add a small delay to ensure content is rendered
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: false });
+      }, 100);
+    }
+  }, [questions]);
 
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      if (topicString) {
-        loadTopicData();
+      if (topicString && needsRefresh) {
+        console.log('🔄 Screen focused, needsRefresh:', needsRefresh);
+        console.log('🔄 fromPage:', fromPage);
+        
+        // Reset the refresh flag
+        setNeedsRefresh(false);
+        
+        // Always refresh lesson completion data when coming back to roadmap
+        refreshLessonCompletionData();
+        
+        // Force refresh if coming from quizcomplete or pseudocomplete, otherwise only if no preFetchedData
+        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete' || !preFetchedData) {
+          console.log('🔄 Forcing data refresh');
+          loadTopicData();
+        } else {
+          console.log('🔄 Using preFetchedData, only refreshing lesson completion');
+        }
       }
-    }, [topicString])
+    }, [topicString, preFetchedData, fromPage, needsRefresh])
   );
 
+  // Set needsRefresh to true when returning from a question or quiz
   useEffect(() => {
-    if (currentQuestionIndex !== null && !loading) {
-      setTimeout(() => {
-        // Scroll to the bottom (easiest question)
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+    console.log('🔄 fromPage changed:', fromPage);
+    if (fromPage === 'quizcomplete' || fromPage === 'question' || fromPage === 'pseudocomplete') {
+      console.log('🔄 Setting needsRefresh to true');
+      setNeedsRefresh(true);
     }
-  }, [currentQuestionIndex, loading]);
+  }, [fromPage]);
+
+  // Removed automatic scroll to bottom to prevent jumping behavior
+
+  const refreshLessonCompletionData = async () => {
+    console.log('RoadmapTopic: refreshLessonCompletionData called');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('RoadmapTopic: No user found, skipping lesson completion refresh');
+        return;
+      }
+
+      // Get lesson completion status only for the current topic's problems
+      const problemIds = questions.map(q => q.leetcode_id).filter(Boolean);
+      if (!problemIds.length) {
+        console.log('RoadmapTopic: No problem IDs found, skipping lesson completion refresh');
+        return;
+      }
+
+      // Get lesson completion status from database
+      const { data: lessonData, error: lessonError } = await supabase
+        .from('user_lesson_completion')
+        .select('problem_id, quiz_completed')
+        .eq('user_id', user.id)
+        .in('problem_id', problemIds);
+      
+      if (lessonError) {
+        console.error('RoadmapTopic: Error fetching lesson completion:', lessonError);
+        return;
+      }
+
+      // Update lesson progress state
+      const newLessonProgress: Record<number, boolean> = {};
+      lessonData?.forEach(lesson => {
+        if (lesson.problem_id) {
+          newLessonProgress[lesson.problem_id] = lesson.quiz_completed || false;
+        }
+      });
+
+      setLessonProgress(newLessonProgress);
+      console.log('RoadmapTopic: Lesson completion data updated successfully');
+    } catch (error) {
+      console.error('RoadmapTopic: Error in refreshLessonCompletionData:', error);
+    }
+  };
 
   const loadTopicData = async () => {
-    console.log('RoadmapTopic: loadTopicData called');
-    if (!topicString) {
-      console.log('RoadmapTopic: Aborting load, no topic string.');
-      setLoading(false);
-      return;
-    }
     try {
-      setLoading(true);
-      console.log('RoadmapTopic: Fetching problems for topic:', topicString);
-      
-      const problems = await TopicService.getTopicProblems(topicString);
-
-      console.log('RoadmapTopic: Problems fetched:', problems?.length || 0);
-      console.log('RoadmapTopic: First problem:', problems?.[0]);
-
-      // Get user progress for these problems
+      console.log('Loading topic data for:', topicString);
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('RoadmapTopic: User found:', !!user);
       
-      let progressMap: Record<number, UserProgress> = {};
-      let lessonProgressMap: Record<number, boolean> = {};
-      
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+
+      // Get topic stats from the view
+      const { data: topicStatsData, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')  // Select all fields to see what we're getting
+        .eq('topic_name', topicString)
+        .eq('user_id', user.id)
+        .single();
+
+      console.log('Raw topic stats data:', topicStatsData);
+      console.log('Stats error if any:', statsError);
+
+      if (statsError) {
+        console.error('Error fetching topic stats:', statsError);
+        // Provide default values if no stats found
+        setTopicStats({
+          total_stars: 0,
+          completion_percentage: 0,
+          total_problems: 0
+        });
+        return;
+      }
+
+      // Set topic stats directly from the view
+      setTopicStats({
+        total_stars: topicStatsData?.total_stars || 0,
+        completion_percentage: Number(topicStatsData?.completion_percentage || 0),
+        total_problems: topicStatsData?.total_problems || 0
+      });
+
+      console.log('Topic stats set to:', {
+        total_stars: topicStatsData?.total_stars,
+        completion_percentage: topicStatsData?.completion_percentage,
+        total_problems: topicStatsData?.total_problems
+      });
+
+      // Get problems for this topic
+      const { data: problems = [], error: problemsError } = await supabase
+        .from('topic_problems')
+        .select('*')
+        .eq('topic_name', topicString)
+        .order('difficulty_order');
+
+      if (problemsError) {
+        console.error('Error fetching problems:', problemsError);
+        return;
+      }
+
+      // Ensure problems is properly typed
+      const typedProblems = problems as TopicProblemWithProgress[];
+
+      // Get user's progress
+      const progressMap: Record<number, UserProgress> = {};
+      const lessonProgressMap: Record<number, boolean> = {};
+
       if (user) {
         // Get problem progress
-        const { data: progressData } = await supabase
+        const { data: progressData, error: progressError } = await supabase
           .from('user_problem_progress')
-          .select('problem_id, is_solved, stars')
-          .eq('user_id', user.id);
-        progressData?.forEach(p => {
-          progressMap[p.problem_id] = {
-            problem_id: p.problem_id,
-            completed: p.is_solved,
-            stars: p.stars
-          };
-        });
-
-        // Get user profile for skill level
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('skill_level')
+          .select('*')
           .eq('user_id', user.id)
-          .single();
-        
-        console.log('Profile query result:', { profileData, profileError });
-        
-        if (profileData?.skill_level) {
-          setUserSkillLevel(profileData.skill_level);
-          console.log('User skill level loaded:', profileData.skill_level);
-        } else {
-          console.log('No skill level found, defaulting to Beginner');
-          setUserSkillLevel('Beginner');
+          .in('problem_id', typedProblems.map(p => p.leetcode_id || 0));
+
+        if (progressError) {
+          console.error('Error fetching progress:', progressError);
+        } else if (progressData) {
+          progressData.forEach(p => {
+            progressMap[p.problem_id] = {
+              completed: p.is_solved,
+              stars: p.stars || 0,
+              score: p.best_score
+            };
+          });
         }
 
         // Get lesson completion status from database
@@ -196,99 +302,23 @@ export default function RoadmapTopic() {
           lessonData.forEach(lesson => {
             lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
           });
-        } else {
-          // Default to no quizzes completed for beginners
-          problems.forEach((problem, index) => {
-            lessonProgressMap[problem.leetcode_id] = false;
-          });
         }
-        setLessonProgress(lessonProgressMap);
-        console.log('Lesson progress set:', lessonProgressMap);
       }
-      
-      // Combine problems with progress
-      const problemsWithProgress: TopicProblemWithProgress[] = problems
-        .filter(problem => {
-          // Filter out undefined/null problems
-          if (!problem || !problem.leetcode_id) return false;
-          
-          // Filter out problems with invalid titles that cause text rendering errors
-          if (!problem.title || problem.title === null || problem.title === undefined) {
-            console.warn('RoadmapTopic: Filtering out problem with invalid title:', problem);
-            return false;
-          }
-          
-          // Check if title is a valid string or number
-          if (typeof problem.title !== 'string' && typeof problem.title !== 'number') {
-            console.warn('RoadmapTopic: Filtering out problem with non-string/non-number title:', problem);
-            return false;
-          }
-          
-          // Check if title is empty or just whitespace
-          const titleString = String(problem.title).trim();
-          if (!titleString || titleString === 'null' || titleString === 'undefined') {
-            console.warn('RoadmapTopic: Filtering out problem with empty/invalid title string:', problem);
-            return false;
-          }
-          
-          return true;
-        })
-        .map(problem => {
-          const safeTitle = String(problem.title).trim();
-          console.log(`RoadmapTopic: Processing problem - ID: ${problem.leetcode_id}, Title: "${safeTitle}"`);
-          console.log(`RoadmapTopic: Raw title: "${String(problem.title || '').substring(0, 50)}"`);
-          try {
-            const decodedTitle = decodeHtmlEntities(safeTitle);
-            console.log(`RoadmapTopic: Decoded title: "${decodedTitle.substring(0, 50)}"`);
-          } catch (error) {
-            console.log(`RoadmapTopic: Error decoding title: ${error}`);
-          }
-          return {
-            ...problem,
-            title: safeTitle, // Ensure title is never undefined
-            completed: progressMap[problem.leetcode_id]?.completed || false,
-            stars: progressMap[problem.leetcode_id]?.stars || 0,
-          };
-        });
 
-      // Calculate user-specific stats
-      const totalStars = problemsWithProgress.reduce((sum, problem) => {
-        const problemStars = problem.stars || 0;
-        const safeTitle = String(problem.title || '').substring(0, 30);
-        console.log(`RoadmapTopic: Problem ${problem.leetcode_id} "${safeTitle}" - stars: ${problemStars}, completed: ${problem.completed}`);
-        return sum + problemStars;
-      }, 0);
-      const completedProblems = problemsWithProgress.filter(problem => problem.completed).length;
-      const completionPercentage = problemsWithProgress.length > 0 ? Math.round((completedProblems / problemsWithProgress.length) * 100) : 0;
-      
-      const userStats = {
-        total_stars: totalStars,
-        completion_percentage: completionPercentage
-      };
+      // Update state with fetched data
+      setQuestions(typedProblems);
+      setProgress(progressMap);
+      setLessonProgress(lessonProgressMap);
 
-      console.log('RoadmapTopic: Problems with progress created:', problemsWithProgress.length);
-      console.log('RoadmapTopic: User stats calculated:', userStats);
-      console.log('RoadmapTopic: Progress map details:', progressMap);
-      console.log('RoadmapTopic: Problems with progress details:', problemsWithProgress.map(p => ({
-        id: p.leetcode_id,
-        title: String(p.title || '').substring(0, 30),
-        stars: p.stars,
-        completed: p.completed
-      })));
-      setQuestions(problemsWithProgress);
-      setTopicStats(userStats);
-      setCurrentQuestionIndex(problemsWithProgress.findIndex(q => !q.completed));
-      console.log('RoadmapTopic: Data loading completed successfully');
+      console.log('Topic stats updated from view:', topicStatsData);
+
     } catch (error) {
-      console.error('RoadmapTopic: Error loading topic data:', error);
-    } finally {
-      setLoading(false);
-      console.log('RoadmapTopic: Loading state set to false');
+      console.error('Error loading topic data:', error);
     }
   };
 
   const handleQuestionPress = (q: TopicProblemWithProgress, idx: number) => {
-    if (!q?.completed && !isUnlocked(q, idx)) return;
+    if (!isUnlocked(q, idx)) return;
     
     // Show the action modal instead of directly navigating
     setSelectedQuestion(q);
@@ -297,9 +327,58 @@ export default function RoadmapTopic() {
   };
 
   const handleCloseModal = () => {
-    console.log('Closing modal');
     setModalVisible(false);
     setSelectedQuestion(null);
+  };
+
+  const handleStartLesson = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/LoadingLesson',
+      params: {
+        questionId: selectedQuestion.leetcode_id?.toString(),
+        questionTitle: selectedQuestion.title,
+        questionDescription: selectedQuestion.description,
+        topicName: topicString,
+        questionDifficulty: selectedQuestion.difficulty
+      }
+    });
+  };
+
+  const handleStartPseudocode = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/pseudoToCode',
+      params: {
+        problemId: selectedQuestion.leetcode_id?.toString(),
+        problemTitle: selectedQuestion.title,
+        description: selectedQuestion.description,
+        difficulty: selectedQuestion.difficulty,
+        topicName: topicString,
+        source: 'roadmap'
+      }
+    });
+  };
+
+  const handleStartQuestion = async () => {
+    if (!selectedQuestion) return;
+    
+    handleCloseModal();
+    
+    router.push({
+      pathname: '/screens/LoadingQuestion',
+      params: {
+        id: selectedQuestion.leetcode_id?.toString(),
+        name: selectedQuestion.title,
+        difficulty: selectedQuestion.difficulty
+      }
+    });
   };
 
   const isUnlocked = (q: TopicProblemWithProgress, idx: number) => {
@@ -314,20 +393,31 @@ export default function RoadmapTopic() {
       return true;
     }
     
-    // Level unlocking: previous question must have 3+ stars (out of 5) for ALL users
+    // Previous question must be completed (both lesson and pseudocode)
     const previousQuestion = questions[idx - 1];
     console.log(`🔓 Previous question:`, previousQuestion ? {
       title: String(previousQuestion.title || '').substring(0, 30),
       stars: previousQuestion.stars,
-      completed: previousQuestion.completed
+      completed: previousQuestion.completed,
+      lessonCompleted: lessonProgress[previousQuestion.leetcode_id || 0],
+      pseudocodeCompleted: progress[previousQuestion.leetcode_id || 0]?.completed
     } : 'null');
     
-    if (!previousQuestion || (previousQuestion.stars || 0) < 3) {
-      console.log(`🔓 Previous question not cleared (need 3+ stars) - LOCKED`);
+    if (!previousQuestion) {
+      console.log(`🔓 No previous question - LOCKED`);
+      return false;
+    }
+
+    // Check if both lesson and pseudocode are completed for previous question
+    const prevLessonCompleted = lessonProgress[previousQuestion.leetcode_id || 0];
+    const prevPseudocodeCompleted = progress[previousQuestion.leetcode_id || 0]?.completed;
+
+    if (!prevLessonCompleted || !prevPseudocodeCompleted) {
+      console.log(`🔓 Previous question not fully completed (lesson: ${prevLessonCompleted}, pseudocode: ${prevPseudocodeCompleted}) - LOCKED`);
       return false;
     }
     
-    console.log(`🔓 Previous question cleared with ${previousQuestion.stars} stars - LEVEL UNLOCKED`);
+    console.log(`🔓 Previous question fully completed - UNLOCKED`);
     return true;
   };
 
@@ -403,8 +493,19 @@ export default function RoadmapTopic() {
     const actualIndex = (questions?.length || 0) - 1 - index;
     const isLeft = index % 2 === 0;
     const isCurrent = actualIndex === (currentQuestionIndex ?? -1);
-    const isLocked = !isUnlocked(question, actualIndex);
+    const unlocked = isUnlocked(question, actualIndex);
     const isCompleted = question.stars && question.stars > 0;
+    
+    // Check both lesson and pseudocode completion
+    const hasCompletedLesson = lessonProgress[question.leetcode_id || 0];
+    const hasCompletedPseudocode = progress[question.leetcode_id || 0]?.completed;
+    const isFullyCompleted = hasCompletedLesson && hasCompletedPseudocode;
+    
+    console.log(`Question ${question.title} completion status:`, {
+      lessonCompleted: hasCompletedLesson,
+      pseudocodeCompleted: hasCompletedPseudocode,
+      fullyCompleted: isFullyCompleted
+    });
     
     // Safety checks for all properties with proper string conversion
     const safeTitle = decodedTitle;
@@ -415,6 +516,27 @@ export default function RoadmapTopic() {
     if (actualIndex % 4 === 1) icon = bookIcon;
     if (actualIndex % 4 === 3) icon = chestIcon;
     
+    const renderTitleWithCompletion = () => (
+      <View style={styles.titleContainer}>
+        <ThemedText 
+          style={[
+            styles.milestoneTitle,
+            !unlocked && styles.lockedText
+          ]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {safeTitle}
+        </ThemedText>
+        {isFullyCompleted && (
+          <Image 
+            source={require('../../assets/images/icons/correct-icon.png')} 
+            style={styles.titleCompletionIcon} 
+          />
+        )}
+      </View>
+    );
+
     return (
       <View key={String(safeLeetcodeId)} style={styles.milestoneWrapper}>
         <View style={[
@@ -426,16 +548,7 @@ export default function RoadmapTopic() {
             styles.textContainer,
             isLeft ? styles.textLeft : styles.textHidden
           ]}>
-            <ThemedText 
-              style={[
-                styles.milestoneTitle,
-                isLocked && styles.lockedText
-              ]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {safeTitle}
-            </ThemedText>
+            {renderTitleWithCompletion()}
             {/* Difficulty indicator */}
             <View style={[
               styles.difficultyBadge,
@@ -454,12 +567,12 @@ export default function RoadmapTopic() {
               style={[
                 styles.milestoneIconWrapper,
                 isCurrent && styles.currentMilestone,
-                isLocked && styles.lockedMilestone
+                !unlocked && styles.lockedMilestone
               ]}
               onPress={() => handleQuestionPress(question, actualIndex)}
-              disabled={isLocked}
+              disabled={!unlocked}
             >
-              {isLocked ? (
+              {!unlocked ? (
                 <Image 
                   source={require('../../assets/images/icons/lock-icon.png')} 
                   style={[styles.lockIcon, { tintColor: '#fff' }]} 
@@ -471,13 +584,13 @@ export default function RoadmapTopic() {
                   source={icon} 
                   style={[
                     styles.milestoneIcon,
-                    isLocked && { tintColor: '#fff' }
+                    !unlocked && { tintColor: '#fff' }
                   ]} 
                 />
               )}
             </TouchableOpacity>
             {/* Concave stars below bubble: only show if unlocked and completed */}
-            {isUnlocked(question, actualIndex) && isCompleted && (
+            {unlocked && isCompleted && (
               <View style={styles.concaveStarsContainer} pointerEvents="none">
                 {[1, 2, 3, 4, 5].map((star, i) => {
                   const arcOffsets = [18, 9, 0, 9, 18];
@@ -498,16 +611,7 @@ export default function RoadmapTopic() {
             styles.textContainer,
             !isLeft ? styles.textRight : styles.textHidden
           ]}>
-            <ThemedText 
-              style={[
-                styles.milestoneTitle,
-                isLocked && styles.lockedText
-              ]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {safeTitle}
-            </ThemedText>
+            {renderTitleWithCompletion()}
             {/* Difficulty indicator */}
             <View style={[
               styles.difficultyBadge,
@@ -549,31 +653,19 @@ export default function RoadmapTopic() {
     return <ThemedText>Code-ing your way to greatness! 🚀</ThemedText>;
   };
 
-  if (loading || !topicString) {
-    console.log('RoadmapTopic: Rendering loading state');
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <View style={styles.loadingLogoContainer}>
-            <Image source={mascotIcon} style={styles.loadingLogo} />
-          </View>
-          {getTopicPun(topicString || '')}
-          <ThemedText style={styles.loadingText}>Loading...</ThemedText>
-          <ActivityIndicator size="large" color="#6564c7" style={styles.loadingSpinner} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  console.log('RoadmapTopic: Rendering main content, questions count:', questions?.length || 0);
-  console.log('RoadmapTopic: Current topicStats being displayed:', topicStats);
-  
   // Safety check: if no questions, show empty state
   if (!questions || questions.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => {
+            // Navigate back based on where we came from
+            if (fromPage === 'learn') {
+              router.replace('/(tabs)/learn');
+            } else {
+              router.replace('/(tabs)');
+            }
+          }} style={styles.backButton}>
             <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
           
@@ -597,7 +689,14 @@ export default function RoadmapTopic() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => {
+          // Navigate back based on where we came from
+          if (fromPage === 'learn') {
+            router.replace('/(tabs)/learn');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }} style={styles.backButton}>
           <Image source={require('../../assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         
@@ -624,114 +723,115 @@ export default function RoadmapTopic() {
               <ThemedText style={styles.statLabel}>Total Stars</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{String(topicStats.completion_percentage || 0)}%</ThemedText>
-              <ThemedText style={styles.statLabel}>Completed</ThemedText>
+              <ThemedText style={styles.statValue}>{topicStats.percentage !== undefined && topicStats.percentage !== null
+  ? String(topicStats.percentage)
+  : '0'}%</ThemedText>
+              <ThemedText style={styles.statLabel}>Completion</ThemedText>
             </View>
           </View>
         )}
 
         <ScrollView
-        ref={scrollViewRef}
-        style={styles.roadmapContainer}
-        contentContainerStyle={[styles.roadmapContent, { 
-          paddingBottom: 0
-        }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.verticalPathContainer}>
-          {/* Background Path */}
-          <View style={styles.backgroundPath}>
-            <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
-              {/* Regular path segments between bubbles */}
-              {(questions || []).map((_, index) => {
-                if (index === (questions?.length || 0) - 1) return null; // Skip the last item (which is the first question after reverse)
-                const MILESTONE_HEIGHT = BUBBLE_SIZE + 48; // Total height per milestone (64 + 48 = 112)
-                const CONTAINER_TOP_PADDING = 16; // Match verticalPathContainer paddingTop
-                const MILESTONE_VERTICAL_MARGIN = 24; // Match milestoneWrapper marginVertical
+          ref={scrollViewRef}
+          style={styles.roadmapContainer}
+          contentContainerStyle={[styles.roadmapContent, { 
+            paddingBottom: 60, // Reduced padding at bottom
+          }]}
+          showsVerticalScrollIndicator={false}
+          maintainVisibleContentPosition={{ // This helps maintain scroll position when content changes
+            minIndexForVisible: 0,
+          }}
+        >
+          <View style={styles.verticalPathContainer}>
+            {/* Background Path */}
+            <View style={styles.backgroundPath}>
+              <Svg height="100%" width="100%" style={StyleSheet.absoluteFill}>
+                {/* Regular path segments between bubbles */}
+                {(questions || []).map((_, index) => {
+                  if (index === (questions?.length || 0) - 1) return null;
+                  const MILESTONE_HEIGHT = BUBBLE_SIZE + 48;
+                  const CONTAINER_TOP_PADDING = 16;
+                  const MILESTONE_VERTICAL_MARGIN = 24;
+                  
+                  const ADDITIONAL_OFFSET = 4 * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2);
+                  const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  
+                  const isLeft = index % 2 === 0;
+                  const curveX = isLeft ? 40 : -40;
+                  
+                  const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
+                  const isPathCompleted = questions && 
+                    questions[reversedCurrentIndex] && 
+                    questions[reversedCurrentIndex].completed;
+                  
+                  return (
+                    <Path
+                      key={index}
+                      d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                      stroke={isPathCompleted ? "#6564c7" : "#C8B5FF"}
+                      strokeWidth={20}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
                 
-                // Calculate Y positions to align with actual milestone positions
-                // Push down by 4 more bubbles worth of space
-                const ADDITIONAL_OFFSET = 4 * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2);
-                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + ADDITIONAL_OFFSET + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                {/* Extended bendy path at the top */}
+                {questions && questions.length > 0 && Array.from({ length: 4 }, (_, index) => {
+                  const CONTAINER_TOP_PADDING = 16;
+                  const MILESTONE_VERTICAL_MARGIN = 24;
+                  const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
+                  
+                  const isLeft = index % 2 === 0;
+                  const curveX = isLeft ? 40 : -40;
+                  
+                  return (
+                    <Path
+                      key={`top-path-${index}`}
+                      d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                      stroke="#C8B5FF"
+                      strokeWidth={20}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
                 
-                const isLeft = index % 2 === 0;
-                const curveX = isLeft ? 40 : -40;
-                
-                // Determine if this path segment should be completed (darker)
-                // Since questions are reversed, we need to check the completion status correctly
-                const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
-                const isPathCompleted = questions && 
-                  questions[reversedCurrentIndex] && 
-                  questions[reversedCurrentIndex].completed;
-                
-                return (
+                {/* Extended path beyond the last bubble */}
+                {questions && questions.length > 0 && (
                   <Path
-                    key={index}
-                    d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
-                    stroke={isPathCompleted ? "#6564c7" : "#C8B5FF"}
-                    strokeWidth={20}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                );
-              })}
-              
-              {/* Extended bendy path at the top to reach first 4 bubbles */}
-              {questions && questions.length > 0 && Array.from({ length: 4 }, (_, index) => {
-                const CONTAINER_TOP_PADDING = 16;
-                const MILESTONE_VERTICAL_MARGIN = 24;
-                const startY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + index * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                const endY = CONTAINER_TOP_PADDING + MILESTONE_VERTICAL_MARGIN + (index + 1) * (BUBBLE_SIZE + MILESTONE_VERTICAL_MARGIN * 2) + BUBBLE_SIZE/2;
-                
-                const isLeft = index % 2 === 0;
-                const curveX = isLeft ? 40 : -40;
-                
-                return (
-                  <Path
-                    key={`top-path-${index}`}
-                    d={`M${ROADMAP_WIDTH/2},${startY} Q${ROADMAP_WIDTH/2 + curveX},${(startY + endY)/2} ${ROADMAP_WIDTH/2},${endY}`}
+                    key="bottom-extended-path"
+                    d={`M${ROADMAP_WIDTH/2},${
+                      16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2
+                    } L${ROADMAP_WIDTH/2},${
+                      16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2 + 120
+                    }`}
                     stroke="#C8B5FF"
                     strokeWidth={20}
                     fill="none"
                     strokeLinecap="round"
                   />
-                );
-              })}
-              
-              {/* Extended path beyond the last bubble to fill bottom space */}
-              {questions && questions.length > 0 && (
-                <Path
-                  key="bottom-extended-path"
-                  d={`M${ROADMAP_WIDTH/2},${
-                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2
-                  } L${ROADMAP_WIDTH/2},${
-                    16 + 24 + 4 * (BUBBLE_SIZE + 48) + (questions.length - 1) * (BUBBLE_SIZE + 48) + BUBBLE_SIZE/2 + 120
-                  }`}
-                  stroke="#C8B5FF"
-                  strokeWidth={20}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              )}
-            </Svg>
-          </View>
-
-          {/* Milestones */}
-          {[...(questions || [])].reverse().map((question, index) => {
-            return renderRoadmapItem(question, index);
-          })}
-          
-          {/* Starting text at the bottom */}
-          {questions && questions.length > 0 && (
-            <View style={styles.pathStartDecorator}>
-              <View style={styles.startTextBubble}>
-                <ThemedText style={styles.startText}>Start Your Journey!</ThemedText>
-              </View>
+                )}
+              </Svg>
             </View>
-          )}
-        </View>
-      </ScrollView>
+
+            {/* Milestones */}
+            {[...(questions || [])].reverse().map((question, index) => {
+              return renderRoadmapItem(question, index);
+            })}
+            
+            {/* Starting text at the bottom */}
+            {questions && questions.length > 0 && (
+              <View style={styles.pathStartDecorator}>
+                <View style={styles.startTextBubble}>
+                  <ThemedText style={styles.startText}>Start Your Journey!</ThemedText>
+                </View>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </View>
 
       {/* Question Action Modal */}
@@ -762,11 +862,9 @@ export default function RoadmapTopic() {
               return String(selectedQuestion.description || 'Solve the problem: Untitled Problem');
             }
           })()}
-          isLessonRequired={isLessonRequired(selectedQuestion)}
-          isQuestionSolved={(selectedQuestion.stars || 0) >= 3}
-          topicName={topicString || ''}
-          isQuestionOnLeft={selectedQuestionIndex % 2 === 0}
-          bubblePosition={{ x: 200, y: 300 + selectedQuestionIndex * 112 }}
+          topicName={topicString}
+          isLessonRequired={true}
+          isQuestionSolved={progress[selectedQuestion.leetcode_id || 0]?.completed || false}
         />
       )}
     </SafeAreaView>
@@ -776,7 +874,7 @@ export default function RoadmapTopic() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F6FF',
+    backgroundColor: '#F4EEFF',
   },
   header: {
     backgroundColor: '#6564c7',
@@ -1061,6 +1159,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6564c7',
     textAlign: 'center',
+    flexShrink: 1,
   },
   lockedText: {
     color: '#a0a0a0',
@@ -1129,48 +1228,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  loadingLogoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#E8E6FF',
-    borderWidth: 4,
-    borderColor: '#6564c7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 30,
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  loadingLogo: {
-    width: 80,
-    height: 80,
+  titleCompletionIcon: {
+    width: 18,
+    height: 18,
+    marginLeft: 6,
     resizeMode: 'contain',
   },
-  loadingPun: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6564c7',
-    textAlign: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  loadingSpinner: {
-    marginTop: 10,
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'nowrap',
+    paddingHorizontal: 4,
   },
 });

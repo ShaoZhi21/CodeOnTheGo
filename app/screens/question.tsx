@@ -7,7 +7,9 @@ import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
+import { useStreak } from '@/contexts/StreakContext';
 import { API_BASE_URL, apiCall } from '@/lib/api-config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -737,7 +739,8 @@ const styles = StyleSheet.create({
 
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
-  const { id, name, difficulty } = params;
+  const { id, name, difficulty, preFetchedData, source = 'allquestions' } = params; // Add source parameter
+  const { showStreakAnimation } = useStreak();
   
   // Refs
   const exampleScrollViewRef = useRef<ScrollView>(null);
@@ -766,8 +769,51 @@ export default function QuestionScreen() {
   const [simplifiedDescription, setSimplifiedDescription] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProblemData();
-  }, []);
+    // If we have pre-fetched data, use it immediately
+    if (preFetchedData) {
+      try {
+        const parsedData = JSON.parse(preFetchedData as string);
+        console.log('✅ Using pre-fetched data:', parsedData);
+        
+        // Parse examples from description HTML
+        const { examples: htmlExamples, cleanedHtml } = parseExamplesFromHtmlSimple(parsedData.description || '');
+        
+        let finalExamples: Example[] = [];
+        if (htmlExamples.length > 0) {
+          finalExamples = htmlExamples;
+        } else if (parsedData.examples) {
+          finalExamples = Array.isArray(parsedData.examples) ? parsedData.examples : [];
+        }
+        
+        if (finalExamples.length === 0) {
+          finalExamples = [
+            {
+              input: "No example available",
+              output: "No example available", 
+              explanation: "No example available for this problem."
+            }
+          ];
+        }
+
+        setParsedExamples(finalExamples);
+        setCleanedDescription(cleanedHtml || parsedData.description || '');
+        
+        setProblem({
+          ...parsedData,
+          examples: finalExamples,
+          constraints: parsedData.constraints || [],
+          hints: parsedData.hints || []
+        });
+        
+        setLoading(false);
+      } catch (error) {
+        console.error('Error parsing pre-fetched data:', error);
+        fetchProblemData();
+      }
+    } else {
+      fetchProblemData();
+    }
+  }, [preFetchedData]);
 
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
@@ -1011,13 +1057,17 @@ export default function QuestionScreen() {
 
   useEffect(() => {
     return () => {
+      // Cleanup when component unmounts
+      if (id) {
+        AsyncStorage.removeItem(`problem_${id}`);
+      }
       setSolution("");
       setIsAnalyzing(false);
       setAnalysis(null);
       setShowAnalysis(false);
       setSelectedAnalysisSection('correctness');
     };
-  }, []);
+  }, [id]);
 
   const getDifficultyColor = (diff: string) => {
     switch (diff) {
@@ -1115,34 +1165,18 @@ export default function QuestionScreen() {
 
   // Calculate which line numbers each block spans
   const getBlockLineRanges = () => {
-    let currentLineNumber = 1;
     const blockRanges: {blockIndex: number, startLine: number, endLine: number}[] = [];
     
     descriptionBoxes.forEach((block, idx) => {
-      const startLine = currentLineNumber;
-      let lineCount = 1; // Default to 1 line
+      // Each block corresponds to exactly one line number in the numbered solution
+      // because each block becomes one numbered line (e.g., "1. if condition: body")
+      const lineNumber = idx + 1;
       
-      // Calculate how many lines this block generates
-      if (block.type === 'text') {
-        // Text blocks are single line (filtered content)
-        const lines = block.value.split('\n').filter(line => line.trim() !== '');
-        lineCount = Math.max(1, lines.length);
-      } else if (block.type === 'if' || block.type === 'elseif' || block.type === 'while' || block.type === 'for') {
-        // These blocks generate 2 lines: condition + body
-        lineCount = 2;
-      } else if (block.type === 'else') {
-        // Else blocks generate 2 lines: else + body
-        lineCount = 2;
-      }
-      
-      const endLine = startLine + lineCount - 1;
       blockRanges.push({
         blockIndex: idx,
-        startLine,
-        endLine
+        startLine: lineNumber,
+        endLine: lineNumber
       });
-      
-      currentLineNumber = endLine + 1;
     });
     
     return blockRanges;
@@ -1271,9 +1305,7 @@ export default function QuestionScreen() {
         console.log(data.rawResponse);
         console.log('=====================\n');
         setAnalysis(data.analysis);
-        
-        // Save progress to database
-        await saveProgress(data.analysis);
+      
         
         // Verify analysis was set correctly
         setTimeout(() => {
@@ -1302,56 +1334,7 @@ export default function QuestionScreen() {
     }
   }
 
-  async function saveProgress(analysis: Analysis) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('User not authenticated');
-        return;
-      }
 
-      // Determine if the solution is completed based on score
-      const isCompleted = analysis.score >= 50; // Consider completed if score >= 50
-      const stars = analysis.stars || 0;
-
-      console.log('Saving progress:', {
-        userId: user.id,
-        problemId: id,
-        score: analysis.score,
-        stars: stars,
-        completed: isCompleted
-      });
-
-      const response = await apiCall(`/api/user-progress/${user.id}/general/${id}/answer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          code: descriptionBoxes.map(block => {
-            if (block.type === 'text') return block.value;
-            if (block.type === 'if') return `if ${block.condition}:\n${block.body}`;
-            if (block.type === 'elseif') return `elif ${block.condition}:\n${block.body}`;
-            if (block.type === 'else') return `else:\n${block.body}`;
-            if (block.type === 'while') return `while ${block.condition}:\n${block.body}`;
-            if (block.type === 'for') return `for ${block.condition}:\n${block.body}`;
-            return '';
-          }).join('\n'),
-          result: analysis.correctness,
-          completed: isCompleted,
-          stars: stars
-        }),
-      });
-
-      if (response.ok) {
-        console.log('Progress saved successfully');
-      } else {
-        console.error('Failed to save progress:', response.status);
-      }
-    } catch (error) {
-      console.error('Error saving progress:', error);
-    }
-  }
 
   function handleDescriptionBoxChange(index: number, text: string) {
     setDescriptionBoxes(prev => prev.map((block, i) =>
@@ -1506,21 +1489,13 @@ export default function QuestionScreen() {
   };
 
   const handleMarkComplete = async () => {
-    if (!problem || !analysis) {
-      console.error('Missing problem or analysis data');
-      return;
-    }
-
-    console.log('🔍 HANDLE MARK COMPLETE - Full Analysis Object:', JSON.stringify(analysis, null, 2));
-    console.log('🔍 HANDLE MARK COMPLETE - Score from analysis:', analysis.score, 'Type:', typeof analysis.score);
-    console.log('🔍 HANDLE MARK COMPLETE - Stars from analysis:', analysis.stars, 'Type:', typeof analysis.stars);
-
     try {
-      // Import the service function
+      if (!analysis) return;
+      
       const { markQuestionComplete } = await import('@/lib/services/userProgress');
       
       const completeParams = {
-        problemId: problem.leetcode_id,
+        problemId: problem?.leetcode_id ?? 0,
         score: analysis.score,
         stars: analysis.stars
       };
@@ -1531,6 +1506,30 @@ export default function QuestionScreen() {
 
       if (result.success) {
         console.log('Problem marked as complete!');
+        
+        // Check if this is a daily challenge completion
+        const isDailyChallenge = params.isDaily === 'true';
+        if (isDailyChallenge) {
+          console.log('🎯 Daily challenge completed! Triggering streak animation');
+          // Trigger streak animation for daily challenge completion
+          showStreakAnimation(1);
+          
+          // Mark daily challenge as completed in the service
+          try {
+            const { DailyChallengeService } = await import('@/lib/services/dailyChallengeService');
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await DailyChallengeService.markChallengeCompleted(user.id);
+              console.log('✅ Daily challenge marked as completed in database');
+            }
+          } catch (error) {
+            console.error('Error marking daily challenge as completed:', error);
+          }
+        } else {
+          // Regular question completion
+          showStreakAnimation(1);
+        }
+        
         // Show success message or animation here if desired
         router.back();
       } else {
@@ -1580,31 +1579,41 @@ export default function QuestionScreen() {
 
   const handleRemark = async (): Promise<Analysis | null> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/analyze-solution`, {
+      // Convert blocks to numbered solution (same format as handleSolveProblem)
+      const numberedSolution = descriptionBoxes.map((block, index) => {
+        if (block.type === 'text') {
+          return `${index + 1}. ${block.value}`;
+        } else if (block.type === 'if') {
+          return `${index + 1}. if ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'elseif') {
+          return `${index + 1}. elif ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'else') {
+          return `${index + 1}. else:\n   ${block.body}`;
+        } else if (block.type === 'while') {
+          return `${index + 1}. while ${block.condition}:\n   ${block.body}`;
+        } else if (block.type === 'for') {
+          return `${index + 1}. for ${block.condition}:\n   ${block.body}`;
+        }
+        return '';
+      }).join('\n');
+
+      const response = await apiCall('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          problemId: id,
-          solution: descriptionBoxes.map(box => {
-            if (box.type === 'text') return box.value;
-            if (box.type === 'if') return `If ${box.condition}: ${box.body}`;
-            if (box.type === 'else') return `Else: ${box.body}`;
-            if (box.type === 'elseif') return `Else if ${box.condition}: ${box.body}`;
-            if (box.type === 'while') return `While ${box.condition}: ${box.body}`;
-            if (box.type === 'for') return `For ${box.condition}: ${box.body}`;
-            return '';
-          }).join('\n'),
+          code: numberedSolution,
+          question: problem?.description || 'Solve the problem'
         }),
       });
 
-      if (!response.ok) {
+      if (response.ok) {
+        const data = await response.json();
+        return data.analysis;
+      } else {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      const data = await response.json();
-      return data;
     } catch (error) {
       console.error('Error analyzing solution:', error);
       return null;
@@ -1698,7 +1707,24 @@ export default function QuestionScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={async () => {
+          // Clear any stored data
+          if (id) {
+            await AsyncStorage.removeItem(`problem_${id}`);
+          }
+          // Clear any analysis data
+          setAnalysis(null);
+          setShowAnalysis(false);
+          
+          // Navigate based on source
+          if (source === 'roadmap') {
+            router.back(); // This will go back to the roadmap topic screen
+          } else if (source === 'allquestions') {
+            router.replace('/(tabs)/questions'); // Go to questions list
+          } else {
+            router.back(); // Default fallback
+          }
+        }} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         
@@ -1727,7 +1753,7 @@ export default function QuestionScreen() {
       >
         <ScrollView 
           style={[styles.content, { flex: 1 }]} 
-          contentContainerStyle={{ paddingBottom: 200 }}
+          contentContainerStyle={{ paddingBottom: 20 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
@@ -2098,9 +2124,15 @@ export default function QuestionScreen() {
             onClose={() => setShowAnalysis(false)}
             analysis={analysis}
             onTryForHigherScore={handleTryForHigherScore}
-            onMarkComplete={handleMarkComplete}
             onWritePseudocode={handleWritePseudocode}
             onRemark={handleRemark}
+            problemId={problem?.leetcode_id ?? 0}
+            problemTitle={problem?.title ?? ''}
+            descriptionBoxes={descriptionBoxes}
+            topicName={source === 'roadmap' ? params.topicName as string : undefined}
+            difficulty={difficulty as string}
+            description={cleanedDescription}
+            source={source as 'roadmap' | 'allquestions'} // Pass source to AnalysisModal
           />
         </KeyboardAvoidingView>
     </SafeAreaView>

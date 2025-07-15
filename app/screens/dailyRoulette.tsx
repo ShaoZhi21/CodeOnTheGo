@@ -5,14 +5,14 @@ import type { UserProfileStats } from '@/lib/types/profile';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -31,6 +31,7 @@ export default function DailyRouletteScreen() {
   const scaleAnimation = useRef(new Animated.Value(0.3)).current;
   const fadeAnimation = useRef(new Animated.Value(0)).current;
   const glowAnimation = useRef(new Animated.Value(0)).current;
+  const numberScaleAnimation = useRef(new Animated.Value(1)).current;
   const particleAnimations = useRef(
     Array.from({ length: 8 }, () => ({
       opacity: new Animated.Value(0),
@@ -133,13 +134,35 @@ export default function DailyRouletteScreen() {
   const startSpinning = () => {
     const finalNumber = selectedProblem?.id || parseInt(problemId || '1');
     
-    // Create realistic number progression during spin
-    let currentNumber = Math.max(1, finalNumber - 100); // Start from 100 numbers before final
-    let interval = 30; // Start with 30ms intervals (very fast)
+    // Create more realistic roulette-like number progression
+    let currentNumber = 1; // Start from 1
+    let interval = 50; // Start with 50ms intervals (very fast)
     let totalTime = 0;
-    const maxTime = 5000; // 5 seconds total spin time
-    let rotationDuration = 100; // Start with very fast rotation
+    const maxTime = 6000; // 6 seconds total spin time for more dramatic effect
     
+    // Start a simple continuous spinning animation
+    const spinWheel = () => {
+      // Reset animation value
+      spinAnimation.setValue(0);
+      
+      // Create a simple loop animation
+      const animate = () => {
+        Animated.timing(spinAnimation, {
+          toValue: 1,
+          duration: 800, // Slower for visibility
+          useNativeDriver: true,
+        }).start(() => {
+          if (phase === 'spinning') {
+            spinAnimation.setValue(0);
+            animate();
+          }
+        });
+      };
+      
+      animate();
+    };
+    
+    // Create a more realistic number progression pattern
     const updateNumber = () => {
       if (phase !== 'spinning' || totalTime >= maxTime) {
         // Stop spinning and reveal final number
@@ -153,33 +176,44 @@ export default function DailyRouletteScreen() {
       // Calculate progress (0 to 1)
       const progress = totalTime / maxTime;
       
-      // Create smooth deceleration curve
-      const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+      // Create smooth deceleration curve (more dramatic than before)
+      const easeOut = 1 - Math.pow(1 - progress, 4); // Quartic ease-out for more dramatic slowdown
       
       // Slow down the interval as we progress (stronger deceleration)
-      interval = 30 + (easeOut * 400); // From 30ms to 430ms
+      interval = 50 + (easeOut * 800); // From 50ms to 850ms
       
-      // Update the displayed number with realistic progression
-      if (progress < 0.7) {
-        // First 70%: Fast random-like progression with tendency towards final
-        const randomRange = Math.max(10, Math.floor(50 * (1 - progress)));
-        const bias = Math.floor((finalNumber - currentNumber) * progress * 0.3);
-        currentNumber = Math.max(1, currentNumber + Math.floor(Math.random() * randomRange) + bias);
-      } else if (progress < 0.9) {
-        // 70-90%: More controlled approach to final number
+      // Update the displayed number with realistic roulette-like progression
+      if (progress < 0.6) {
+        // First 60%: Fast random-like progression with some jumps
+        const randomRange = Math.max(5, Math.floor(80 * (1 - progress)));
+        const jumpChance = 0.1 + (progress * 0.2); // Increase chance of jumps over time
+        
+        if (Math.random() < jumpChance) {
+          // Occasionally make bigger jumps to simulate roulette randomness
+          currentNumber = Math.max(1, currentNumber + Math.floor(Math.random() * randomRange * 2));
+        } else {
+          // Normal progression with slight bias towards final number
+          const bias = Math.floor((finalNumber - currentNumber) * progress * 0.1);
+          currentNumber = Math.max(1, currentNumber + Math.floor(Math.random() * randomRange) + bias);
+        }
+      } else if (progress < 0.85) {
+        // 60-85%: More controlled approach with occasional overshooting
         const remaining = Math.abs(finalNumber - currentNumber);
-        const step = Math.max(1, Math.floor(remaining * 0.3));
+        const step = Math.max(1, Math.floor(remaining * 0.4));
+        
         if (currentNumber < finalNumber) {
-          currentNumber = Math.min(finalNumber, currentNumber + step);
+          currentNumber = Math.min(finalNumber + 10, currentNumber + step); // Allow slight overshoot
         } else if (currentNumber > finalNumber) {
-          currentNumber = Math.max(finalNumber, currentNumber - step);
+          currentNumber = Math.max(finalNumber - 10, currentNumber - step); // Allow slight undershoot
         }
       } else {
-        // Final 10%: Converge to exact final number
-        if (currentNumber !== finalNumber) {
-          currentNumber = finalNumber + (Math.random() > 0.7 ? (Math.random() > 0.5 ? 1 : -1) : 0);
-          currentNumber = Math.max(1, currentNumber);
-        } else {
+        // Final 15%: Oscillate around final number before settling
+        const oscillation = Math.sin(progress * 20) * 3; // Create oscillation effect
+        currentNumber = finalNumber + Math.floor(oscillation);
+        currentNumber = Math.max(1, currentNumber);
+        
+        // In the very last moments, settle on final number
+        if (progress > 0.95) {
           currentNumber = finalNumber;
         }
       }
@@ -187,52 +221,60 @@ export default function DailyRouletteScreen() {
       setCurrentSpinNumber(currentNumber);
       totalTime += interval;
       
+      // Add subtle scale animation to number when it changes
+      Animated.sequence([
+        Animated.timing(numberScaleAnimation, {
+          toValue: 1.1,
+          duration: 50,
+          useNativeDriver: true,
+        }),
+        Animated.timing(numberScaleAnimation, {
+          toValue: 1,
+          duration: 50,
+          useNativeDriver: true,
+        }),
+      ]).start();
+      
       setTimeout(updateNumber, interval);
     };
     
-    // Start the visual spinning animation with deceleration
-    const createSpinLoop = () => {
-      spinAnimation.setValue(0);
-      
-      // Calculate current rotation speed based on progress
-      const progress = totalTime / maxTime;
-      const easeOut = 1 - Math.pow(1 - progress, 2); // Quadratic ease-out for rotation
-      rotationDuration = 100 + (easeOut * 900); // From 100ms to 1000ms
-      
-      Animated.timing(spinAnimation, {
-        toValue: 1,
-        duration: rotationDuration,
-        useNativeDriver: true,
-      }).start(() => {
-        if (phase === 'spinning') {
-          createSpinLoop();
-        }
-      });
-    };
-    
-    createSpinLoop();
+    // Start both the spinning animation and number updates
+    spinWheel();
     updateNumber();
   };
 
   const revealNumber = (number: number) => {
-    // Stop spinning and show final number
+    // Stop spinning and show final number with enhanced animation
     Animated.parallel([
       Animated.spring(scaleAnimation, {
-        toValue: 1.2,
-        tension: 100,
-        friction: 6,
+        toValue: 1.3,
+        tension: 80,
+        friction: 8,
         useNativeDriver: true,
       }),
+      Animated.sequence([
+        Animated.timing(numberScaleAnimation, {
+          toValue: 1.4,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(numberScaleAnimation, {
+          toValue: 1,
+          tension: 100,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+      ]),
       Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnimation, {
             toValue: 1,
-            duration: 500,
+            duration: 400,
             useNativeDriver: true,
           }),
           Animated.timing(glowAnimation, {
-            toValue: 0.3,
-            duration: 500,
+            toValue: 0.2,
+            duration: 400,
             useNativeDriver: true,
           }),
         ])
@@ -242,10 +284,10 @@ export default function DailyRouletteScreen() {
     // Trigger particle explosion
     triggerParticleExplosion();
     
-    // Set to revealed phase after 2 seconds
+    // Set to revealed phase after 2.5 seconds for more dramatic effect
     setTimeout(() => {
       setPhase('revealed');
-    }, 2000);
+    }, 2500);
   };
 
   const triggerParticleExplosion = () => {
@@ -297,15 +339,7 @@ export default function DailyRouletteScreen() {
     router.back();
   };
 
-  const getSpinValue = () => {
-    if (phase === 'spinning') {
-      return spinAnimation.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg'],
-      });
-    }
-    return '0deg';
-  };
+
 
   const getDisplayNumber = () => {
     if (phase === 'loading') {
@@ -318,6 +352,18 @@ export default function DailyRouletteScreen() {
       return revealedNumber;
     }
     return '?';
+  };
+
+  const getNumberStyle = () => {
+    if (phase === 'spinning') {
+      return [
+        styles.numberText,
+        {
+          transform: [{ scale: numberScaleAnimation }],
+        }
+      ];
+    }
+    return styles.numberText;
   };
 
   return (
@@ -384,34 +430,59 @@ export default function DailyRouletteScreen() {
               opacity: fadeAnimation,
               transform: [
                 { scale: scaleAnimation },
-                { rotate: getSpinValue() },
+                { 
+                  rotate: phase === 'spinning' 
+                    ? spinAnimation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg'],
+                      })
+                    : '0deg'
+                },
               ],
             },
           ]}
         >
           {/* Inner Circle */}
           <View style={styles.innerCircle}>
-            <ThemedText style={styles.numberText}>
+            <ThemedText style={getNumberStyle()}>
               {getDisplayNumber()}
             </ThemedText>
           </View>
           
-          {/* Outer Ring Decorations */}
-          {Array.from({ length: 12 }).map((_, index) => (
+          {/* Outer Ring Decorations - Enhanced for more realistic look */}
+          {Array.from({ length: 24 }).map((_, index) => (
             <View
               key={index}
               style={[
                 styles.ringDot,
                 {
                   transform: [
-                    { rotate: `${index * 30}deg` },
-                    { translateY: -80 },
+                    { rotate: `${index * 15}deg` },
+                    { translateY: -85 },
+                  ],
+                },
+              ]}
+            />
+          ))}
+          
+          {/* Additional decorative elements for more realistic roulette look */}
+          {Array.from({ length: 8 }).map((_, index) => (
+            <View
+              key={`segment-${index}`}
+              style={[
+                styles.wheelSegment,
+                {
+                  transform: [
+                    { rotate: `${index * 45}deg` },
+                    { translateY: -70 },
                   ],
                 },
               ]}
             />
           ))}
         </Animated.View>
+        
+
 
         {/* Particles */}
         {particleAnimations.map((particle, index) => (
@@ -564,6 +635,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 4,
   },
+  wheelSegment: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#E8E6FF',
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+
   particle: {
     position: 'absolute',
     width: 12,

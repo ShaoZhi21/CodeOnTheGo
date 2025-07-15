@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import CircularProgress from '../../components/CircularProgress';
 import { ThemedText } from '../../components/ThemedText';
+import { useStreak } from '../../contexts/StreakContext';
 import { DailyChallengeService } from '../../lib/services/dailyChallengeService';
 import { ProfileService } from '../../lib/services/profileService';
-import { RecentTopicsService } from '../../lib/services/recentTopicsService';
 import { TopicService } from '../../lib/services/topicService';
 import { supabase } from '../../lib/supabase';
 import type { UserProfileStats } from '../../lib/types/profile';
 
 interface TopicProgress {
   name: string;
-  percentage: number;
+  completion_percentage: number;
   lastEdited: string;
 }
 
@@ -66,6 +66,7 @@ const getTopicIcon = (topicName: string) => {
 
 export default function HomeScreen() {
   console.log('HomeScreen component loaded');
+  const { showStreakAnimation } = useStreak();
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [topicsInProgress, setTopicsInProgress] = useState<TopicProgress[]>([]);
@@ -82,12 +83,16 @@ export default function HomeScreen() {
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
 
-  useEffect(() => {
-    loadProfile();
-    loadTopicsProgress();
-    loadAllTopics();
-    loadDailyChallenge();
-  }, []);
+  // Refresh data when screen comes into focus (e.g., after lesson/quiz completion)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 HomeScreen: Screen focused, refreshing data');
+      loadProfile();
+      loadTopicsProgress();
+      loadAllTopics();
+      loadDailyChallenge();
+    }, [])
+  );
 
   useEffect(() => {
     if (profile) {
@@ -114,13 +119,22 @@ export default function HomeScreen() {
 
   const loadProfile = async () => {
     try {
+      console.log('🔄 loadProfile: Starting...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ loadProfile: No user found');
+        return;
+      }
 
       const profileData = await ProfileService.getUserProfileStats(user.id);
+      console.log('📊 loadProfile: Profile data loaded:', {
+        current_streak: profileData?.current_streak,
+        longest_streak: profileData?.longest_streak,
+        total_xp: profileData?.total_xp
+      });
       setProfile(profileData);
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('❌ loadProfile: Error loading profile:', error);
     } finally {
       setLoading(false);
     }
@@ -128,8 +142,12 @@ export default function HomeScreen() {
 
   const loadDailyStats = async () => {
     try {
+      console.log('🔄 loadDailyStats: Starting...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ loadDailyStats: No user found');
+        return;
+      }
 
       // Get user's solved problems with problem details
       const { data: solvedData } = await supabase
@@ -175,7 +193,7 @@ export default function HomeScreen() {
         item.leetcode_problems && (item.leetcode_problems as any).difficulty === 'Hard'
       ).length || 0;
 
-      setDailyStats({
+      const newDailyStats = {
         streak: profile?.current_streak || 0,
         todayProblems,
         totalProblems,
@@ -183,92 +201,70 @@ export default function HomeScreen() {
         easyCount: userEasyCount,
         mediumCount: userMediumCount,
         hardCount: userHardCount
+      };
+
+      console.log('📊 loadDailyStats: Updated daily stats:', {
+        streak: newDailyStats.streak,
+        profile_streak: profile?.current_streak,
+        todayProblems: newDailyStats.todayProblems,
+        totalSolved: newDailyStats.totalSolved
       });
+
+      setDailyStats(newDailyStats);
     } catch (error) {
-      console.error('Error loading daily stats:', error);
+      console.error('❌ loadDailyStats: Error loading daily stats:', error);
     }
   };
 
   const loadTopicsProgress = useCallback(async () => {
     try {
-      console.log('Loading recent topics');
+      console.log('Loading topics progress');
 
-      // Get recent topics from the new service
-      const recentTopics = await RecentTopicsService.getRecentTopics();
-      console.log('Recent topics:', recentTopics);
+      // Get user ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
 
-      // Get progress for each recent topic (limit to 3 for compact view)
-      const progressPromises = recentTopics.slice(0, 3).map(async (topicName) => {
-        console.log('Loading progress for topic:', topicName);
-        
-        // Get all problems for this topic
-        const problems = await TopicService.getTopicProblems(topicName);
-        console.log(`Found ${problems.length} problems for topic ${topicName}`);
-        
-        // Get user's progress for these problems
-        const { data: { user } } = await supabase.auth.getUser();
-        let percentage = 0;
-        
-        if (user) {
-          const { data: progressData } = await supabase
-            .from('user_problem_progress')
-            .select('problem_id, is_solved')
-            .eq('user_id', user.id)
-            .in('problem_id', problems.map(p => p.leetcode_id));
+      // Get all topics and their stats
+      const { data: topicStats, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')
+        .eq('user_id', user.id);
 
-          // Calculate completion percentage
-          const completedProblems = progressData?.filter(p => p.is_solved) || [];
-          const totalProblems = problems.length;
-          percentage = totalProblems > 0 
-            ? Math.round((completedProblems.length / totalProblems) * 100)
-            : 0;
+      if (statsError) {
+        console.error('Error loading topic stats:', statsError);
+        return;
+      }
 
-          console.log(`Topic ${topicName}: ${completedProblems.length}/${totalProblems} completed (${percentage}%)`);
-        } else {
-          console.log(`Topic ${topicName}: No user found, showing 0% progress`);
-        }
-
-        return {
-          name: topicName,
-          percentage,
+      // Convert to TopicProgress format and sort by completion percentage
+      const progress = topicStats
+        .map((stat): TopicProgress => ({
+          name: stat.topic_name,
+          completion_percentage: stat.completion_percentage || 0,
           lastEdited: new Date().toISOString()
-        };
-      });
+        }))
+        .sort((a, b) => b.completion_percentage - a.completion_percentage)
+        .slice(0, 3); // Only take top 3 by completion percentage
 
-      const allProgress = await Promise.all(progressPromises);
-      console.log('All progress:', allProgress);
-      setTopicsInProgress(allProgress);
+      console.log('Topics progress loaded:', progress);
+      setTopicsInProgress(progress);
     } catch (error) {
       console.error('Error loading topics progress:', error);
-      // Fallback to default topics
-      const defaultTopics = ['Array', 'String', 'LinkedList'].slice(0, 3).map(topic => ({
-        name: topic,
-        percentage: 0,
-        lastEdited: new Date().toISOString()
-      }));
-      setTopicsInProgress(defaultTopics);
     }
   }, []);
 
   const handleTopicClick = async (topicName: string) => {
     console.log('handleTopicClick called with:', topicName);
-    try {
-      // Update recent topics using the new service
-      console.log('Updating recent topics for:', topicName);
-      await RecentTopicsService.updateRecentTopics(topicName);
-      console.log('Recent topics updated successfully');
-      
-      // Refresh the recent topics to show the new order
-      await loadTopicsProgress();
-      
-      // Navigate to the topic
-      console.log('Navigating to topic:', topicName);
-      router.push(`/screens/roadmaptopic?topic=${topicName}`);
-    } catch (error) {
-      console.error('Error handling topic click:', error);
-      // Still navigate even if updating fails
-      router.push(`/screens/roadmaptopic?topic=${topicName}`);
-    }
+    // Navigate to loading screen
+    router.replace({
+      pathname: '/screens/LoadingRoadMap',
+      params: {
+        topicName: topicName,
+        from: 'home'
+      }
+    });
   };
 
   const loadDailyChallenge = async () => {
@@ -447,9 +443,60 @@ export default function HomeScreen() {
         // Update local state
         setDailyChallenge(prev => prev ? { ...prev, completed: true } : null);
         console.log('Daily challenge marked as completed!');
+        
+        // Trigger streak animation for daily challenge completion
+        showStreakAnimation(1);
       }
     } catch (error) {
       console.error('Error marking daily challenge as completed:', error);
+    }
+  };
+
+  // Reset daily streak for testing purposes
+  const resetDailyStreak = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Clear last activity from both tables to allow streak animation
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Delete today's activities from both tables
+      const [problemResult, lessonResult] = await Promise.all([
+        supabase
+          .from('user_problem_progress')
+          .delete()
+          .eq('user_id', user.id)
+          .gte('created_at', today.toISOString()),
+        supabase
+          .from('user_lesson_completion')
+          .delete()
+          .eq('user_id', user.id)
+          .gte('completed_at', today.toISOString())
+      ]);
+
+      if (problemResult.error) {
+        console.error('Error clearing problem progress:', problemResult.error);
+      }
+      if (lessonResult.error) {
+        console.error('Error clearing lesson completion:', lessonResult.error);
+      }
+
+      console.log('✅ Last activity cleared successfully');
+      
+      // Show alert to user
+      Alert.alert(
+        'Reset Complete! 🎯',
+        'Today\'s activities have been cleared.\n\nYou can now test the streak animation by completing a lesson or problem!',
+        [{ text: 'OK', style: 'default' }]
+      );
+      
+      // Refresh profile data
+      loadProfile();
+    } catch (error) {
+      console.error('Error clearing last activity:', error);
+      Alert.alert('Error', 'Failed to clear activities. Please try again.');
     }
   };
 
@@ -501,78 +548,60 @@ export default function HomeScreen() {
               />
               <ThemedText style={styles.sectionTitle}>Quick Practice</ThemedText>
             </View>
+            <View style={styles.testButtonsContainer}>
+              {/* Reset Streak Button (for testing) */}
+              <TouchableOpacity style={styles.testButton} onPress={resetDailyStreak}>
+                <ThemedText style={styles.testButtonText}>Reset</ThemedText>
+              </TouchableOpacity>
+              
+              {/* Streak Animation Button (for testing) */}
+              <TouchableOpacity 
+                style={styles.testButton} 
+                onPress={() => {
+                  router.push({
+                    pathname: '/screens/StreakAnimation',
+                    params: {
+                      source: 'index',
+                      isTestStreak: 'true'
+                    }
+                  });
+                }}
+              >
+                <ThemedText style={styles.testButtonText}>Test Streak</ThemedText>
+              </TouchableOpacity>
+            </View>
           </View>
           
-          {/* Daily Streak Card - Now a Button */}
-          <TouchableOpacity style={styles.streakCard} onPress={handleRandomQuestion}>
-            <View style={styles.streakHeader}>
-              <View style={styles.streakIconContainer}>
-                <Image 
-                  source={require('../../assets/images/icons/fire-icon.png')} 
-                  style={styles.streakIcon}
-                  tintColor="#FFFFFF"
-                />
-              </View>
-              <View style={styles.streakContent}>
-                <ThemedText style={styles.streakTitle}>Daily Challenge</ThemedText>
-                <ThemedText style={styles.streakValue}>{dailyStats.streak} days streak</ThemedText>
-              </View>
-              <View style={styles.streakStats}>
-                {challengeLoading ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : dailyChallenge?.completed ? (
-                  <>
-                    <ThemedText style={styles.tapForRandomTextLarge}>COMPLETED ✓</ThemedText>
-                    <ThemedText style={styles.streakSubtext}>Come back tomorrow</ThemedText>
-                  </>
-                ) : (
-                  <>
-                    <ThemedText style={styles.tapForRandomTextLarge}>START →</ThemedText>
-                    <ThemedText style={styles.streakSubtext}>
-                      {dailyChallenge ? `Today: ${dailyChallenge.problemTitle.substring(0, 20)}...` : 'Tap to generate'}
-                    </ThemedText>
-                  </>
-                )}
-              </View>
-            </View>
-          </TouchableOpacity>
-
           <View style={styles.quickActionsGrid}>
-            <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/allquestions')}>
+            {/* Daily Challenge Card */}
+            <TouchableOpacity 
+              style={styles.actionCard} 
+              onPress={handleRandomQuestion}
+              disabled={challengeLoading}
+            >
               <View style={styles.actionIconContainer}>
                 <Image 
-                  source={require('../../assets/images/icons/list-icon.png')} 
+                  source={require('../../assets/images/icons/fire-icon.png')} 
                   style={styles.actionIcon}
                   tintColor="#8B5CF6"
                 />
               </View>
-              <ThemedText style={styles.actionTitle}>All Questions</ThemedText>
-              <View style={styles.actionSubtitleRow}>
-                <ThemedText style={styles.actionSubtitle}>{dailyStats.totalSolved}/{dailyStats.totalProblems} solved</ThemedText>
-                <View style={styles.difficultyBreakdown}>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#10B981' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.easyCount}</ThemedText>
-                  </View>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#F59E0B' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.mediumCount}</ThemedText>
-                  </View>
-                  <View style={styles.difficultyDot}>
-                    <View style={[styles.dot, { backgroundColor: '#EF4444' }]} />
-                    <ThemedText style={styles.difficultyCount}>{dailyStats.hardCount}</ThemedText>
-                  </View>
-                </View>
-              </View>
+              <ThemedText style={styles.actionTitle}>Daily Challenge</ThemedText>
+              <ThemedText style={styles.actionSubtitle}>{dailyStats.streak} day streak</ThemedText>
               <View style={styles.actionArrow}>
-                <Image 
-                  source={require('../../assets/images/icons/up-arrow.png')} 
-                  style={styles.smallArrowIcon}
-                  tintColor="#8B5CF6"
-                />
+                {challengeLoading ? (
+                  <ActivityIndicator size="small" color="#8B5CF6" />
+                ) : (
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
+                )}
               </View>
             </TouchableOpacity>
 
+            {/* Quiz Mode Card */}
             <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/quiz')}>
               <View style={styles.actionIconContainer}>
                 <Image 
@@ -621,8 +650,8 @@ export default function HomeScreen() {
                     style={styles.progressCard} 
                     onPress={() => handleTopicClick(topic.name)}
                   >
-                    <CircularProgress percentage={topic.percentage}>
-                      <ThemedText style={styles.progressPercentage}>{topic.percentage}%</ThemedText>
+                    <CircularProgress percentage={topic.completion_percentage}>
+                      <ThemedText style={styles.progressPercentage}>{topic.completion_percentage}%</ThemedText>
                     </CircularProgress>
                     <ThemedText style={styles.progressTopicName}>{topic.name}</ThemedText>
                   </TouchableOpacity>
@@ -771,7 +800,21 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     marginRight: 6,
-    tintColor: '#FFFFFF',
+    // Removed tintColor to keep original icon colors
+  },
+  resetStreakButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resetStreakText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
   statValue: {
     fontSize: 16,
@@ -824,81 +867,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Daily Streak Card
-  streakCard: {
-    backgroundColor: '#8B5CF6',
-    borderRadius: 16,
-    marginBottom: 16,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  streakHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    minHeight: 70, // Ensure minimum height
-  },
-  streakIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    flexShrink: 0, // Prevent shrinking
-  },
-  streakIcon: {
-    width: 20,
-    height: 20,
-  },
-  streakContent: {
-    flex: 1,
-    marginRight: 12,
-    justifyContent: 'center',
-  },
-  streakTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 2,
-    flexWrap: 'wrap',
-  },
-  streakValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  streakStats: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    flexShrink: 0,
-    minWidth: 80,
-  },
-  tapForRandomTextLarge: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    letterSpacing: 0.5,
-    textAlign: 'right',
-  },
-  streakSubtext: {
-    fontSize: 9,
-    fontWeight: '500',
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginTop: 2,
-    textAlign: 'right',
-    flexWrap: 'wrap',
-  },
+
 
   // Quick Actions
   quickActionsGrid: {
@@ -943,31 +912,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  actionSubtitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  difficultyBreakdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  difficultyDot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  difficultyCount: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
+
   actionArrow: {
     position: 'absolute',
     top: 16,
@@ -977,6 +922,32 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     transform: [{ rotate: '90deg' }],
+  },
+
+  // Test Buttons Container
+  testButtonsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 'auto',
+    marginRight: 16,
+  },
+  testButton: {
+    backgroundColor: '#F3F0FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#8B5CF6',
+  },
+  testButtonIcon: {
+    width: 20,
+    height: 20,
+    tintColor: '#8B5CF6',
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8B5CF6',
   },
 
   // Topic Roadmap

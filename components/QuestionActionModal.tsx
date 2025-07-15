@@ -41,14 +41,17 @@ export default function QuestionActionModal({
       topicName: topicName,
     });
     
-    // Navigate to lesson screen
+    // Navigate to loading lesson screen first
     router.push({
-      pathname: '/screens/lesson',
+      pathname: '/screens/LoadingLesson',
       params: {
         questionId: questionId.toString(),
+        problemId: questionId.toString(), // Add problemId (leetcode_id) for consistency
         questionTitle: questionTitle,
         questionDescription: questionDescription,
         topicName: topicName,
+        questionDifficulty: questionDifficulty,
+        from: 'roadmaptopic', // Add source for back navigation
       },
     });
     onClose();
@@ -69,7 +72,9 @@ export default function QuestionActionModal({
       params: {
         id: questionId.toString(),
         name: questionTitle,
-        difficulty: questionDifficulty
+        difficulty: questionDifficulty,
+        source: 'roadmap',
+        topicName: topicName
       },
     });
     onClose();
@@ -77,6 +82,16 @@ export default function QuestionActionModal({
 
   // Determine if the pseudocode button should be locked
   const isPseudocodeLocked = isLessonRequired && !hasCompletedLesson && !isQuestionSolved;
+
+  // Get difficulty color
+  const getDifficultyColor = (difficulty: string) => {
+    switch (difficulty) {
+      case 'Easy': return '#4CAF50';
+      case 'Medium': return '#FF9800';
+      case 'Hard': return '#F44336';
+      default: return '#6564c7';
+    }
+  };
 
   return (
     <Modal
@@ -93,29 +108,77 @@ export default function QuestionActionModal({
           </TouchableOpacity>
           
           <View style={styles.modalContent}>
-            {/* Lesson Button */}
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.lessonButton]} 
-              onPress={handleViewLesson}
-            >
-              <Text style={styles.modalButtonText}>Lesson</Text>
-            </TouchableOpacity>
-
-            {/* Pseudocode Button */}
-            <TouchableOpacity 
-              style={[styles.modalButton, styles.pseudocodeButton]} 
-              onPress={handleSolveProblem}
-            >
-              <View style={styles.buttonContent}>
-                {(isLessonRequired && !hasCompletedLesson && !isQuestionSolved) && (
-                  <Image 
-                    source={require('../assets/images/icons/lock-icon.png')} 
-                    style={styles.lockIcon} 
-                  />
-                )}
-                <Text style={styles.modalButtonText}>Pseudocode</Text>
+            {/* Question Title and Difficulty */}
+            <View style={styles.questionHeader}>
+              <View style={styles.titleRow}>
+                <Text style={styles.questionTitle} numberOfLines={2}>
+                  {questionTitle}
+                </Text>
+                <View style={[
+                  styles.difficultyBadge,
+                  { backgroundColor: getDifficultyColor(questionDifficulty) }
+                ]}>
+                  <Text style={styles.difficultyText}>
+                    {questionDifficulty}
+                  </Text>
+                </View>
               </View>
-            </TouchableOpacity>
+            </View>
+
+            {/* Lesson and Pseudocode Buttons in Row */}
+            <View style={styles.buttonRow}>
+              {/* Lesson Button */}
+              <TouchableOpacity 
+                style={[styles.squareButton, styles.lessonButton]} 
+                onPress={handleViewLesson}
+              >
+                <View style={styles.buttonContent}>
+                  <Image 
+                    source={require('../assets/images/icons/lesson-icon.png')} 
+                    style={styles.buttonIcon} 
+                  />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.squareButtonText}>Lesson</Text>
+                    {hasCompletedLesson && (
+                      <Image 
+                        source={require('../assets/images/icons/complete-icon.png')} 
+                        style={styles.completionIcon} 
+                      />
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              {/* Pseudocode Button */}
+              <TouchableOpacity 
+                style={[
+                  styles.squareButton, 
+                  styles.pseudocodeButton,
+                  isPseudocodeLocked && styles.lockedButton
+                ]} 
+                onPress={handleSolveProblem}
+                disabled={isPseudocodeLocked}
+              >
+                <View style={styles.buttonContent}>
+                  {isPseudocodeLocked && (
+                    <Text style={styles.lockedText}>Locked</Text>
+                  )}
+                  <Image 
+                    source={require('../assets/images/icons/pseudocode-icon.png')} 
+                    style={styles.buttonIcon} 
+                  />
+                  <View style={styles.textContainer}>
+                    <Text style={styles.squareButtonText}>Pseudocode</Text>
+                    {isQuestionSolved && (
+                      <Image 
+                        source={require('../assets/images/icons/complete-icon.png')} 
+                        style={styles.completionIcon} 
+                      />
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -145,6 +208,9 @@ const styles = StyleSheet.create({
     elevation: 5,
     position: 'relative',
     minWidth: 280,
+    maxWidth: '90%',
+    minHeight: 180,
+    maxHeight: 300, // Increased max height
   },
   closeButton: {
     position: 'absolute',
@@ -174,12 +240,52 @@ const styles = StyleSheet.create({
     paddingTop: 5,
     gap: 15,
   },
-  modalButton: {
-    borderRadius: 12,
-    paddingVertical: 15,
-    paddingHorizontal: 30,
+  questionHeader: {
     width: '100%',
+    marginBottom: 5,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap', // Allow title to wrap
+  },
+  questionTitle: {
+    fontSize: 18, // Slightly smaller font
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+    lineHeight: 22,
+    flexWrap: 'wrap', // Allow text to wrap
+  },
+  difficultyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    minWidth: 50,
     alignItems: 'center',
+    flexShrink: 0,
+    alignSelf: 'flex-start', // Align to top with text
+  },
+  difficultyText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 15,
+    width: '100%',
+    marginTop: 'auto', // Push buttons to bottom
+  },
+  squareButton: {
+    flex: 1,
+    aspectRatio: 1,
+    borderRadius: 16,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
@@ -192,162 +298,59 @@ const styles = StyleSheet.create({
   pseudocodeButton: {
     backgroundColor: '#2979FF',
   },
-  modalButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-    textAlign: 'center',
-    letterSpacing: 0.3,
+  lockedButton: {
+    backgroundColor: '#2979FF',
+    opacity: 0.4,
   },
   buttonContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  lockIcon: {
-    width: 16,
-    height: 16,
-    marginRight: 6,
-    tintColor: '#fff',
-  },
-  rowContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 15,
-  },
-  lessonBubble: {
-    backgroundColor: '#7C4DFF',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    position: 'relative',
-    shadowColor: '#7C4DFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 40,
-  },
-  lessonBubbleLeft: {
-    marginRight: 10,
-  },
-  lessonBubbleRight: {
-    marginLeft: 10,
-  },
-  lessonTail: {
-    position: 'absolute',
-    width: 0,
-    height: 0,
-    top: '50%',
-    marginTop: -6,
-  },
-  lessonTailLeft: {
-    right: -12,
-    borderLeftWidth: 12,
-    borderLeftColor: '#FFFFFF',
-    borderTopWidth: 6,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 6,
-    borderBottomColor: 'transparent',
-  },
-  lessonTailRight: {
-    left: -12,
-    borderRightWidth: 12,
-    borderRightColor: '#FFFFFF',
-    borderTopWidth: 6,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 6,
-    borderBottomColor: 'transparent',
-  },
-  popupBubble: {
-    backgroundColor: '#2979FF',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    shadowColor: '#2979FF',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-    borderWidth: 0,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 40,
-    flexDirection: 'row',
-  },
-  lessonButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-  },
-  popupContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     gap: 6,
+    marginTop: 8,
   },
-  pseudocodeButtonText: {
+  lockedText: {
+    color: '#FF0000',
+    fontWeight: '700',
+    fontSize: 10,
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  buttonIcon: {
+    width: 48,
+    height: 48,
+    marginBottom: 6,
+  },
+  squareButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 12,
     textAlign: 'center',
     letterSpacing: 0.3,
   },
-  bubbleTail: {
+  completionBadge: {
     position: 'absolute',
-    width: 0,
-    height: 0,
-    top: '50%',
-    marginTop: -8,
-  },
-  bubbleTailLeft: {
-    right: -15,
-    borderLeftWidth: 15,
-    borderLeftColor: '#FFFFFF',
-    borderTopWidth: 8,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 8,
-    borderBottomColor: 'transparent',
-  },
-  bubbleTailRight: {
-    left: -15,
-    borderRightWidth: 15,
-    borderRightColor: '#FFFFFF',
-    borderTopWidth: 8,
-    borderTopColor: 'transparent',
-    borderBottomWidth: 8,
-    borderBottomColor: 'transparent',
-  },
-  bubbleContent: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  bubbleButton: {
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    width: '100%',
+    top: -8,
+    right: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
-    shadowRadius: 5,
+    shadowRadius: 3,
     elevation: 5,
   },
-  bubbleButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-    textAlign: 'center',
-    letterSpacing: 0.3,
+  completionIcon: {
+    width: 16,
+    height: 16,
+    resizeMode: 'contain',
   },
 }); 

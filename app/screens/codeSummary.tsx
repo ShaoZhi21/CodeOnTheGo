@@ -1,8 +1,9 @@
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
-import { markQuestionComplete } from '@/lib/services/userProgress';
+import { ProfileService } from '@/lib/services/profileService';
+import { supabase } from '@/lib/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -149,26 +150,120 @@ export default function CodeSummary() {
     }
 
     setIsMarkingComplete(true);
-    
-    try {
-      // Calculate a score based on completion (could be enhanced with actual performance metrics)
-      const score = 85; // Default completion score
-      const stars = Math.ceil(score / 20); // Convert score to 1-5 stars
-      
-      const result = await markQuestionComplete({
-        problemId: parseInt(problemId),
-        score,
-        stars
-      });
 
-      if (result.success) {
-        router.push('/questions');
+    try {
+      // Step 1: Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Step 2: Get today and yesterday at 12am for streak checking
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const now = new Date();
+
+      // Step 3: Check for previous activities before this completion
+      const { data: previousActivities } = await supabase
+        .from('user_problem_progress')
+        .select('completed_at')
+        .eq('user_id', user.id)
+        .not('completed_at', 'is', null)
+        .lt('completed_at', now.toISOString())
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      // Step 4: Check if this problem was previously completed
+      const { data: existingProgress } = await supabase
+        .from('user_problem_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('problem_id', problemId)
+        .single();
+
+      // Step 5: Save/Update problem progress
+      const score = 85; // Or use a real score if available
+      const stars = Math.ceil(score / 20); // 1-5 stars
+      const progressData = {
+        user_id: user.id,
+        problem_id: parseInt(problemId),
+        is_solved: true,
+        score: score,
+        stars: Math.min(stars, 3),
+        attempts: (existingProgress?.attempts || 0) + 1,
+        hints_used: existingProgress?.hints_used || 0,
+        time_spent_minutes: existingProgress?.time_spent_minutes || 0,
+        first_solved_at: existingProgress?.first_solved_at || now.toISOString(),
+        last_attempt_at: now.toISOString(),
+        completed_at: now.toISOString(),
+        best_score: Math.max(existingProgress?.best_score || 0, score)
+      };
+
+      if (existingProgress) {
+        const { error: updateError } = await supabase
+          .from('user_problem_progress')
+          .update(progressData)
+          .eq('user_id', user.id)
+          .eq('problem_id', problemId);
+        if (updateError) throw new Error('Failed to update progress');
       } else {
-        Alert.alert('Error', result.error || 'Failed to mark problem as complete');
+        const { error: insertError } = await supabase
+          .from('user_problem_progress')
+          .insert(progressData);
+        if (insertError) throw new Error('Failed to insert progress');
+      }
+
+      // Step 6: Check streak logic
+      let lastActivity = previousActivities && previousActivities.length > 0 
+        ? new Date(previousActivities[0].completed_at)
+        : null;
+      const isNewStreak = !lastActivity || lastActivity < today;
+
+      if (isNewStreak) {
+        // If last activity was exactly yesterday, increment streak
+        if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
+          await ProfileService.updateStreak(user.id, true);
+        } else {
+          await ProfileService.updateStreak(user.id, false);
+          await ProfileService.updateStreak(user.id, true);
+        }
+        // Navigate to streak animation
+        router.push({
+          pathname: '/screens/StreakAnimation',
+          params: {
+            problemTitle: title || '',
+            problemId: problemId?.toString() || '',
+            topicName: params.topicName || '',
+            quizData: '',
+            fromPseudocode: 'true',
+            difficulty: difficulty || '',
+            description: description || '',
+            code: summaryData?.finalCode || '',
+            source: 'codeSummary',
+            from: params.from || 'roadmap'
+          }
+        });
+      } else {
+        // Go directly to PseudocodeComplete
+        router.push({
+          pathname: '/screens/PseudocodeComplete',
+          params: {
+            problemTitle: title || '',
+            problemId: problemId?.toString() || '',
+            topicName: params.topicName || '',
+            difficulty: difficulty || '',
+            description: description || '',
+            code: summaryData?.finalCode || '',
+            source: 'codeSummary',
+            from: params.from || 'roadmap'
+          }
+        });
       }
     } catch (error) {
       console.error('Error marking problem complete:', error);
-      Alert.alert('Error', 'Failed to mark problem as complete');
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to mark problem as complete');
     } finally {
       setIsMarkingComplete(false);
     }
