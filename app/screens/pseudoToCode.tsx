@@ -555,7 +555,7 @@ export default function PseudoToCode() {
     <SafeAreaView style={styles.container}>
       {/* Header with title bubble */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(tabs)')}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         

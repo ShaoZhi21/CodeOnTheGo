@@ -1,41 +1,28 @@
-import { BlurView } from 'expo-blur';
 import { Link, router } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
-
-// Password validation rules (matching Supabase requirements)
-const PASSWORD_RULES = {
-  minLength: 8, // Supabase typically requires 8+ characters
-  requireUppercase: true,
-  requireLowercase: true,
-  requireNumber: true,
-  requireSpecialChar: false, // Make special chars optional to avoid conflicts
-};
 
 const validatePassword = (password: string) => {
-  const errors = [];
+  const errors: string[] = [];
   
-  if (password.length < PASSWORD_RULES.minLength) {
-    errors.push(`Password must be at least ${PASSWORD_RULES.minLength} characters long`);
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters long');
   }
-  if (PASSWORD_RULES.requireUppercase && !/[A-Z]/.test(password)) {
+  
+  if (!/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter');
   }
-  if (PASSWORD_RULES.requireLowercase && !/[a-z]/.test(password)) {
+  
+  if (!/[a-z]/.test(password)) {
     errors.push('Password must contain at least one lowercase letter');
   }
-  if (PASSWORD_RULES.requireNumber && !/\d/.test(password)) {
+  
+  if (!/\d/.test(password)) {
     errors.push('Password must contain at least one number');
   }
-  if (PASSWORD_RULES.requireSpecialChar && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-    errors.push('Password must contain at least one special character');
-  }
-
+  
   return errors;
 };
 
@@ -51,7 +38,6 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
   const [formErrors, setFormErrors] = useState<string[]>([]);
-  const colorScheme = useColorScheme();
 
   const handlePasswordChange = (text: string) => {
     setPassword(text);
@@ -140,92 +126,81 @@ export default function SignupScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <BlurView intensity={80} style={styles.blurContainer}>
-        <View style={styles.formContainer}>
-          <ThemedText style={styles.title}>Create Account</ThemedText>
-          
-          <TextInput
-            style={[
-              styles.input,
-              { color: Colors[colorScheme ?? 'light'].text }
-            ]}
-            placeholder="Full Name"
-            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-            value={name}
-            onChangeText={setName}
-            editable={!loading}
-          />
+    <View style={styles.container}>
+      <View style={styles.formContainer}>
+        <ThemedText style={styles.title}>Create Account</ThemedText>
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Full Name"
+          placeholderTextColor="#687076"
+          value={name}
+          onChangeText={setName}
+          editable={!loading}
+        />
 
-          <TextInput
-            style={[
-              styles.input,
-              { color: Colors[colorScheme ?? 'light'].text }
-            ]}
-            placeholder="Email"
-            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
-          
-          <TextInput
-            style={[
-              styles.input,
-              { color: Colors[colorScheme ?? 'light'].text }
-            ]}
-            placeholder="Password"
-            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-            value={password}
-            onChangeText={handlePasswordChange}
-            secureTextEntry
-            editable={!loading}
-          />
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor="#687076"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          editable={!loading}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="#687076"
+          value={password}
+          onChangeText={handlePasswordChange}
+          secureTextEntry
+          editable={!loading}
+        />
 
-          {(formErrors.length > 0 || passwordErrors.length > 0) && (
-            <View style={styles.errorContainer}>
-              {formErrors.map((error, index) => (
-                <ThemedText key={`form-${index}`} style={styles.errorText}>
-                  • {error}
-                </ThemedText>
-              ))}
-              {passwordErrors.map((error, index) => (
-                <ThemedText key={`password-${index}`} style={styles.errorText}>
-                  • {error}
-                </ThemedText>
-              ))}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { 
-                backgroundColor: '#6564c7',
-                opacity: loading ? 0.7 : 1
-              }
-            ]}
-            onPress={handleSignup}
-            disabled={loading}
-          >
-            <ThemedText style={styles.buttonText}>
-              {loading ? 'Signing up...' : 'Sign Up'}
-            </ThemedText>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <ThemedText>Already have an account? </ThemedText>
-            <Link href="/login" asChild>
-              <TouchableOpacity>
-                <ThemedText style={styles.link}>Login</ThemedText>
-              </TouchableOpacity>
-            </Link>
+        {(formErrors.length > 0 || passwordErrors.length > 0) && (
+          <View style={styles.errorContainer}>
+            {formErrors.map((error, index) => (
+              <ThemedText key={`form-${index}`} style={styles.errorText}>
+                • {error}
+              </ThemedText>
+            ))}
+            {passwordErrors.map((error, index) => (
+              <ThemedText key={`password-${index}`} style={styles.errorText}>
+                • {error}
+              </ThemedText>
+            ))}
           </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.button,
+            { 
+              backgroundColor: '#6564c7',
+              opacity: loading ? 0.7 : 1
+            }
+          ]}
+          onPress={handleSignup}
+          disabled={loading}
+        >
+          <ThemedText style={styles.buttonText}>
+            {loading ? 'Signing up...' : 'Sign Up'}
+          </ThemedText>
+        </TouchableOpacity>
+
+        <View style={styles.footer}>
+          <ThemedText>Already have an account? </ThemedText>
+          <Link href="/login" asChild>
+            <TouchableOpacity>
+              <ThemedText style={styles.link}>Login</ThemedText>
+            </TouchableOpacity>
+          </Link>
         </View>
-      </BlurView>
-    </ThemedView>
+      </View>
+    </View>
   );
 }
 
@@ -236,12 +211,19 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#faf5fd',
   },
-  blurContainer: {
-    borderRadius: 20,
-  },
   formContainer: {
     padding: 20,
     justifyContent: 'center',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   title: {
     fontSize: 32,
@@ -260,6 +242,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 15,
     fontSize: 16,
+    backgroundColor: 'white',
+    color: '#11181C',
   },
   button: {
     height: 50,

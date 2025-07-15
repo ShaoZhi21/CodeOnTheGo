@@ -4,15 +4,15 @@ import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface LessonMCQQuestion {
@@ -390,7 +390,7 @@ export default function LessonMCQScreen() {
   };
 
   const handleBackToLesson = () => {
-    router.back();
+    router.replace('/screens/lesson');
   };
 
   // Handle quiz completion and trigger streak

@@ -1,12 +1,9 @@
-import { BlurView } from 'expo-blur';
 import { Link, router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 const validateEmail = (email: string) => {
@@ -20,8 +17,15 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState('');
-  const colorScheme = useColorScheme();
   const params = useLocalSearchParams();
+  const { user } = useAuth();
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (user) {
+      router.replace('/(tabs)');
+    }
+  }, [user]);
 
   useEffect(() => {
     if (params.message) {
@@ -65,6 +69,7 @@ export default function LoginScreen() {
         return;
       }
 
+      // Navigation will be handled by the auth context
       router.replace('/(tabs)');
     } catch (error: any) {
       setFormErrors([error.message]);
@@ -74,87 +79,79 @@ export default function LoginScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <BlurView intensity={80} style={styles.blurContainer}>
-        <View style={styles.formContainer}>
-          <Image 
-            source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
-            style={styles.logo}
-          />
-          <ThemedText style={styles.title}>CodeOnTheGo</ThemedText>
-          
-          <TextInput
-            style={[
-              styles.input,
-              { color: Colors[colorScheme ?? 'light'].text }
-            ]}
-            placeholder="Email"
-            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
-          
-          <TextInput
-            style={[
-              styles.input,
-              { color: Colors[colorScheme ?? 'light'].text }
-            ]}
-            placeholder="Password"
-            placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
+    <View style={styles.container}>
+      <View style={styles.formContainer}>
+        <Image 
+          source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+          style={styles.logo}
+        />
+        <ThemedText style={styles.title}>CodeOnTheGo</ThemedText>
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          placeholderTextColor="#687076"
+          value={email}
+          onChangeText={setEmail}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          editable={!loading}
+        />
+        
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          placeholderTextColor="#687076"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+          editable={!loading}
+        />
 
-          {successMessage ? (
-            <View style={styles.successContainer}>
-              <ThemedText style={styles.successText}>
-                {successMessage}
-              </ThemedText>
-            </View>
-          ) : null}
-
-          {formErrors.length > 0 && (
-            <View style={styles.errorContainer}>
-              {formErrors.map((error, index) => (
-                <ThemedText key={index} style={styles.errorText}>
-                  • {error}
-                </ThemedText>
-              ))}
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { 
-                backgroundColor: '#6564c7',
-                opacity: loading ? 0.7 : 1
-              }
-            ]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            <ThemedText style={styles.buttonText}>
-              {loading ? 'Logging in...' : 'Login'}
+        {successMessage ? (
+          <View style={styles.successContainer}>
+            <ThemedText style={styles.successText}>
+              {successMessage}
             </ThemedText>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <ThemedText>Don&apos;t have an account? </ThemedText>
-            <Link href="/signup" asChild>
-              <TouchableOpacity>
-                <ThemedText style={styles.link}>Sign Up</ThemedText>
-              </TouchableOpacity>
-            </Link>
           </View>
+        ) : null}
+
+        {formErrors.length > 0 && (
+          <View style={styles.errorContainer}>
+            {formErrors.map((error, index) => (
+              <ThemedText key={index} style={styles.errorText}>
+                • {error}
+              </ThemedText>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.button,
+            { 
+              backgroundColor: '#6564c7',
+              opacity: loading ? 0.7 : 1
+            }
+          ]}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          <ThemedText style={styles.buttonText}>
+            {loading ? 'Logging in...' : 'Login'}
+          </ThemedText>
+        </TouchableOpacity>
+
+        <View style={styles.footer}>
+          <ThemedText>Don&apos;t have an account? </ThemedText>
+          <Link href="/signup" asChild>
+            <TouchableOpacity>
+              <ThemedText style={styles.link}>Sign Up</ThemedText>
+            </TouchableOpacity>
+          </Link>
         </View>
-      </BlurView>
-    </ThemedView>
+      </View>
+    </View>
   );
 }
 
@@ -165,13 +162,20 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#faf5fd',
   },
-  blurContainer: {
-    borderRadius: 20,
-  },
   formContainer: {
     padding: 20,
     justifyContent: 'center',
     marginBottom: 20,
+    backgroundColor: 'white',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   title: {
     fontSize: 32,
@@ -190,6 +194,8 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 15,
     fontSize: 16,
+    backgroundColor: 'white',
+    color: '#11181C',
   },
   button: {
     height: 50,

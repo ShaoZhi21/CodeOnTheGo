@@ -5,6 +5,10 @@ export default function ScreensLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
+        animation: 'none',
+        presentation: 'card',
+        gestureDirection: 'horizontal',
+        gestureEnabled: true,
       }}
     >
       <Stack.Screen name="lesson" />
@@ -18,6 +22,8 @@ export default function ScreensLayout() {
       <Stack.Screen name="tournament" />
       <Stack.Screen name="duel" />
       <Stack.Screen name="PseudocodeComplete" />
+      <Stack.Screen name="LoadingLesson" />
+      <Stack.Screen name="LoadingQuestion" />
     </Stack>
   );
 } 

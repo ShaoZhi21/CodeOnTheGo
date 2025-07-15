@@ -1,4 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
+import { useAuth } from '@/contexts/AuthContext';
 import { NotificationService } from '@/lib/services/notificationService';
 import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
@@ -13,6 +14,7 @@ export default function ProfileScreen() {
   const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const router = useRouter();
+  const { signOut } = useAuth();
 
   const levelDescriptions = {
     Beginner: 'Little to no programming knowledge, have not done or done little leetcode.',
@@ -153,14 +155,9 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const { error } = await supabase.auth.signOut();
-              if (error) {
-                console.error('Error logging out:', error);
-                Alert.alert('Error', 'Failed to logout');
-              } else {
-                // Navigate to auth screen
-                router.replace('/login');
-              }
+              await signOut();
+              // Navigate to auth screen
+              router.replace('/login');
             } catch (error) {
               console.error('Error logging out:', error);
               Alert.alert('Error', 'Failed to logout');

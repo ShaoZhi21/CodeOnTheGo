@@ -1,15 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
 
@@ -636,7 +636,7 @@ export default function LessonScreen() {
     } catch (error) {
         console.error('❌ Error loading lesson:', error);
         setError(error instanceof Error ? error.message : 'Failed to load lesson');
-        router.back();
+        router.replace('/(tabs)');
       } finally {
         setLoading(false);
       }
@@ -652,7 +652,7 @@ export default function LessonScreen() {
       Alert.alert(
         'Error Loading Lesson',
         error,
-        [{ text: 'Go Back', onPress: () => router.back() }]
+        [{ text: 'Go Back', onPress: () => router.replace('/(tabs)') }]
       );
     }
   }, [error, router]);
@@ -686,7 +686,7 @@ export default function LessonScreen() {
     return (
       <SafeAreaView style={styles.errorContainer}>
         <ThemedText style={styles.errorText}>{error}</ThemedText>
-        <TouchableOpacity onPress={() => router.back()} style={styles.errorButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.errorButton}>
           <ThemedText style={styles.errorButtonText}>Go Back</ThemedText>
         </TouchableOpacity>
       </SafeAreaView>
@@ -697,7 +697,7 @@ export default function LessonScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
             <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           </TouchableOpacity>
           

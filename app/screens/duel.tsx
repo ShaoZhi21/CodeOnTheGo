@@ -1,13 +1,12 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
-import React from 'react';
 import { Image, SafeAreaView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function Duel() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
           <ThemedText>Back</ThemedText>
         </TouchableOpacity>

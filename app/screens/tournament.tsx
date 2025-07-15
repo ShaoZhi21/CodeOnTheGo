@@ -99,14 +99,14 @@ export default function TournamentScreen() {
       setCurrentView('main');
       setCurrentTournament(null);
     } else {
-      router.back();
+      router.replace('/(tabs)');
     }
   };
 
   const renderMainView = () => (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
           <ThemedText>← Back</ThemedText>
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>Tournament Arena</ThemedText>

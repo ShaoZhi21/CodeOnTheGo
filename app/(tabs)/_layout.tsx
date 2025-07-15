@@ -2,11 +2,21 @@ import { Tabs } from 'expo-router';
 import { Image, Platform, View } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import TabBarBackground from '@/components/ui/TabBarBackground';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  // Always use light theme instead of detecting system theme
+  const colorScheme = 'light';
+  
+  // Protect all tab routes
+  const { loading } = useProtectedRoute();
+
+  // Show loading screen while checking authentication
+  if (loading) {
+    return <LoadingScreen message="Loading app..." />;
+  }
 
   return (
     <Tabs

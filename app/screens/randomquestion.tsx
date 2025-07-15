@@ -1,6 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
-import React from 'react';
 import { Image, SafeAreaView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 
@@ -9,7 +8,7 @@ export default function RandomQuestion() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.back()} 
+          onPress={() => router.replace('/(tabs)')} 
           style={styles.backButton}
         >
           <Image 

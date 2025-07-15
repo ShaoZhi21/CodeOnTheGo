@@ -337,7 +337,7 @@ export default function RoadmapTopic() {
     handleCloseModal();
     
     router.push({
-      pathname: '/screens/LoadingLesson',
+      pathname: '/screens/LoadingLesson' as any,
       params: {
         questionId: selectedQuestion.leetcode_id?.toString(),
         questionTitle: selectedQuestion.title,
@@ -372,7 +372,7 @@ export default function RoadmapTopic() {
     handleCloseModal();
     
     router.push({
-      pathname: '/screens/LoadingQuestion',
+      pathname: '/screens/LoadingQuestion' as any,
       params: {
         id: selectedQuestion.leetcode_id?.toString(),
         name: selectedQuestion.title,

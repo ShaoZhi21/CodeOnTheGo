@@ -1531,7 +1531,7 @@ export default function QuestionScreen() {
         }
         
         // Show success message or animation here if desired
-        router.back();
+        router.replace('/(tabs)');
       } else {
         console.error('Failed to mark question complete:', result.error);
         // Show error message to user
@@ -1718,11 +1718,11 @@ export default function QuestionScreen() {
           
           // Navigate based on source
           if (source === 'roadmap') {
-            router.back(); // This will go back to the roadmap topic screen
+            router.replace('/screens/roadmaptopic'); // Use replace instead of back
           } else if (source === 'allquestions') {
             router.replace('/(tabs)/questions'); // Go to questions list
           } else {
-            router.back(); // Default fallback
+            router.replace('/(tabs)'); // Default fallback to main tabs
           }
         }} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
