@@ -8,6 +8,7 @@ export default function ScreensLayout() {
       }}
     >
       <Stack.Screen name="lesson" />
+      <Stack.Screen name="LessonMCQ" />
       <Stack.Screen name="question" />
       <Stack.Screen name="quiz" />
       <Stack.Screen name="roadmaptopic" />
@@ -16,6 +17,7 @@ export default function ScreensLayout() {
       <Stack.Screen name="randomquestion" />
       <Stack.Screen name="tournament" />
       <Stack.Screen name="duel" />
+      <Stack.Screen name="PseudocodeComplete" />
     </Stack>
   );
 } 

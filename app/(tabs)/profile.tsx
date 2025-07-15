@@ -1,15 +1,17 @@
 import { ThemedText } from '@/components/ThemedText';
+import { NotificationService } from '@/lib/services/notificationService';
 import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedLevel, setSelectedLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
+  const [notificationEnabled, setNotificationEnabled] = useState(false);
   const router = useRouter();
 
   const levelDescriptions = {
@@ -24,9 +26,14 @@ export default function ProfileScreen() {
     Advanced: '#F44336'
   };
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  // Refresh data when screen comes into focus (e.g., returning from lesson completion)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🎯 ProfileScreen: Screen focused, refreshing data');
+      loadProfile();
+      loadNotificationSettings();
+    }, [])
+  );
 
   const loadProfile = async () => {
     try {
@@ -46,6 +53,51 @@ export default function ProfileScreen() {
       Alert.alert('Error', 'Failed to load profile data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadNotificationSettings = async () => {
+    try {
+      const settings = await NotificationService.getSettings();
+      setNotificationEnabled(settings.enabled);
+    } catch (error) {
+      console.error('Error loading notification settings:', error);
+    }
+  };
+
+  const handleNotificationToggle = async () => {
+    try {
+      const newEnabled = !notificationEnabled;
+      setNotificationEnabled(newEnabled);
+      
+      if (newEnabled) {
+        // Initialize notifications and request permissions
+        const initialized = await NotificationService.initialize();
+        if (!initialized) {
+          Alert.alert('Permission Required', 'Please enable notifications in your device settings to receive daily reminders.');
+          setNotificationEnabled(false);
+          return;
+        }
+      }
+      
+      await NotificationService.updateSettings({ enabled: newEnabled });
+      
+      if (newEnabled) {
+        Alert.alert('Notifications Enabled', 'You\'ll receive daily reminders to practice coding!');
+      } else {
+        Alert.alert('Notifications Disabled', 'Daily reminders have been turned off.');
+      }
+    } catch (error) {
+      console.error('Error toggling notifications:', error);
+      Alert.alert('Error', 'Failed to update notification settings');
+    }
+  };
+
+  const handleTestNotification = async () => {
+    try {
+      await NotificationService.sendTestNotification();
+    } catch (error) {
+      console.error('Error sending test notification:', error);
     }
   };
 
@@ -118,10 +170,6 @@ export default function ProfileScreen() {
       ],
       { cancelable: true }
     );
-  };
-
-  const handleDataPrivacy = () => {
-    router.push('/data-privacy');
   };
 
   const getProgressSteps = (level: 'Beginner' | 'Intermediate' | 'Advanced') => {
@@ -312,97 +360,21 @@ export default function ProfileScreen() {
                 <ThemedText style={styles.settingLabel}>Push Notifications</ThemedText>
                 <ThemedText style={styles.settingDescription}>Get reminders to practice coding</ThemedText>
               </View>
-              <TouchableOpacity style={styles.toggleButton}>
-                <ThemedText style={styles.toggleText}>ON</ThemedText>
+              <TouchableOpacity 
+                style={[styles.toggleButton, { backgroundColor: notificationEnabled ? '#4CAF50' : '#ccc' }]} 
+                onPress={handleNotificationToggle}
+              >
+                <ThemedText style={styles.toggleText}>{notificationEnabled ? 'ON' : 'OFF'}</ThemedText>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Daily Goal Setting */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Daily Goal</ThemedText>
-                <ThemedText style={styles.settingDescription}>Problems to solve per day</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.goalSelector}>
-                <ThemedText style={styles.goalText}>3</ThemedText>
+            {notificationEnabled && (
+              <TouchableOpacity 
+                style={styles.testNotificationButton} 
+                onPress={handleTestNotification}
+              >
+                <ThemedText style={styles.testNotificationText}>Test Notification</ThemedText>
               </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Auto-Save Solutions */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Auto-Save Solutions</ThemedText>
-                <ThemedText style={styles.settingDescription}>Automatically save your code solutions</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.toggleButton}>
-                <ThemedText style={styles.toggleText}>ON</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Dark Mode */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Dark Mode</ThemedText>
-                <ThemedText style={styles.settingDescription}>Switch to dark theme</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.toggleButton}>
-                <ThemedText style={styles.toggleText}>OFF</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Code Font Size */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Code Font Size</ThemedText>
-                <ThemedText style={styles.settingDescription}>Adjust code editor font size</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.fontSizeSelector}>
-                <ThemedText style={styles.fontSizeText}>14px</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Hint Preferences */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Smart Hints</ThemedText>
-                <ThemedText style={styles.settingDescription}>Get contextual hints based on your progress</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.toggleButton}>
-                <ThemedText style={styles.toggleText}>ON</ThemedText>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Data & Privacy */}
-          <View style={styles.settingCard}>
-            <TouchableOpacity style={styles.settingRowClickable} onPress={handleDataPrivacy}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Data & Privacy</ThemedText>
-                <ThemedText style={styles.settingDescription}>Manage your data and privacy settings</ThemedText>
-              </View>
-              <ThemedText style={styles.chevron}>›</ThemedText>
-            </TouchableOpacity>
-          </View>
-
-          {/* About */}
-          <View style={styles.settingCard}>
-            <TouchableOpacity style={styles.settingRowClickable}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>About</ThemedText>
-                <ThemedText style={styles.settingDescription}>App version and information</ThemedText>
-              </View>
-              <ThemedText style={styles.chevron}>›</ThemedText>
-            </TouchableOpacity>
+            )}
           </View>
 
           {/* Logout Button */}
@@ -571,12 +543,85 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  settingLabel: {
+  settingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  saveButton: {
+    backgroundColor: '#6564c7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  saveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  settingRowClickable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  settingInfo: {
+    flex: 1,
+  },
+  settingDescription: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  toggleButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 50,
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chevron: {
+    fontSize: 18,
+    color: '#999',
+    fontWeight: '300',
+  },
+  logoutButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 32,
+    marginBottom: 20,
+    width: '100%',
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-    lineHeight: 22,
   },
   warningText: {
     fontSize: 12,
@@ -696,114 +741,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  settingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  saveButton: {
+  testNotificationButton: {
     backgroundColor: '#6564c7',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  settingRow: {
-    flexDirection: 'row',
+    paddingVertical: 10,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  settingRowClickable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  settingInfo: {
-    flex: 1,
-  },
-  settingDescription: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-    lineHeight: 18,
-  },
-  toggleButton: {
-    backgroundColor: '#4CAF50',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 50,
-    alignItems: 'center',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  toggleText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  goalSelector: {
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 45,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#BBDEFB',
-  },
-  goalText: {
-    color: '#1976D2',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  fontSizeSelector: {
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    minWidth: 55,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  fontSizeText: {
-    color: '#333',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  chevron: {
-    fontSize: 18,
-    color: '#999',
-    fontWeight: '300',
-  },
-  logoutButton: {
-    backgroundColor: '#F44336',
-    paddingVertical: 18,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 32,
-    marginBottom: 20,
-    width: '100%',
-    shadowColor: '#F44336',
-    shadowOffset: { width: 0, height: 4 },
+    justifyContent: 'center',
+    marginTop: 12,
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  logoutButtonText: {
+  testNotificationText: {
     color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  settingLabel: {
     fontSize: 16,
     fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 22,
   },
 }); 

@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS user_lesson_completion (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
     problem_id INTEGER REFERENCES leetcode_problems(leetcode_id) ON DELETE CASCADE,
     quiz_completed BOOLEAN DEFAULT FALSE,
-    quiz_score INTEGER DEFAULT 0 CHECK (quiz_score >= 0 AND quiz_score <= 3),
+    quiz_score INTEGER DEFAULT 0 CHECK (quiz_score >= 0 AND quiz_score <= 10),
     quiz_attempts INTEGER DEFAULT 0 CHECK (quiz_attempts >= 0),
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

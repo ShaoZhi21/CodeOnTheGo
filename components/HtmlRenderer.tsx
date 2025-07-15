@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Dimensions, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { ThemedText } from './ThemedText';
