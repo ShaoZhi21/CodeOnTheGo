@@ -1491,30 +1491,19 @@ export default function QuestionScreen() {
   const handleMarkComplete = async () => {
     try {
       if (!analysis) return;
-      
-      const { markQuestionComplete } = await import('@/lib/services/userProgress');
-      
-      const completeParams = {
-        problemId: problem?.leetcode_id ?? 0,
-        score: analysis.score,
-        stars: analysis.stars
-      };
-
-      console.log('🔍 HANDLE MARK COMPLETE - Params being passed:', JSON.stringify(completeParams, null, 2));
-      
-      const result = await markQuestionComplete(completeParams);
-
+      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
+      const problemId = problem?.leetcode_id ?? 0;
+      const score = analysis.score;
+      const stars = analysis.stars;
+      const result = await markProblemFullyComplete(problemId, score, stars);
+      console.log('🔍 HANDLE MARK COMPLETE - Params being passed:', JSON.stringify({ problemId, score, stars }, null, 2));
       if (result.success) {
-        console.log('Problem marked as complete!');
-        
+        console.log('Problem marked as fully complete!');
         // Check if this is a daily challenge completion
         const isDailyChallenge = params.isDaily === 'true';
         if (isDailyChallenge) {
           console.log('🎯 Daily challenge completed! Triggering streak animation');
-          // Trigger streak animation for daily challenge completion
           showStreakAnimation(1);
-          
-          // Mark daily challenge as completed in the service
           try {
             const { DailyChallengeService } = await import('@/lib/services/dailyChallengeService');
             const { data: { user } } = await supabase.auth.getUser();
@@ -1526,18 +1515,14 @@ export default function QuestionScreen() {
             console.error('Error marking daily challenge as completed:', error);
           }
         } else {
-          // Regular question completion
           showStreakAnimation(1);
         }
-        
-        // Show success message or animation here if desired
-        router.replace('/(tabs)');
+        router.back();
       } else {
-        console.error('Failed to mark question complete:', result.error);
-        // Show error message to user
+        console.error('Failed to mark problem fully complete:', result.error);
       }
     } catch (error) {
-      console.error('Error marking question complete:', error);
+      console.error('Error marking problem fully complete:', error);
     }
   };
 

@@ -266,7 +266,12 @@ export default function RoadmapTopic() {
       // Ensure problems is properly typed
       const typedProblems = problems as TopicProblemWithProgress[];
 
-      // Get user's progress
+      // Get unified completion status
+      const { getUnifiedCompletionStatus } = await import('../../lib/services/userProgress');
+      const problemIds = typedProblems.map(p => p.leetcode_id || 0);
+      const unifiedStatusMap = await getUnifiedCompletionStatus(problemIds);
+
+      // Get user's progress (for stars, etc.)
       const progressMap: Record<number, UserProgress> = {};
       const lessonProgressMap: Record<number, boolean> = {};
 
@@ -296,8 +301,6 @@ export default function RoadmapTopic() {
           .select('problem_id, quiz_completed')
           .eq('user_id', user.id);
         
-        console.log('Lesson completion query result:', { lessonData, lessonError });
-        
         if (lessonData) {
           lessonData.forEach(lesson => {
             lessonProgressMap[lesson.problem_id] = lesson.quiz_completed;
@@ -305,8 +308,13 @@ export default function RoadmapTopic() {
         }
       }
 
-      // Update state with fetched data
-      setQuestions(typedProblems);
+      // Update state with fetched data, using unified completion status
+      const questionsWithUnifiedStatus = typedProblems.map(q => ({
+        ...q,
+        completed: unifiedStatusMap[q.leetcode_id]?.isCompleted || false,
+        stars: progressMap[q.leetcode_id]?.stars || 0
+      }));
+      setQuestions(questionsWithUnifiedStatus);
       setProgress(progressMap);
       setLessonProgress(lessonProgressMap);
 

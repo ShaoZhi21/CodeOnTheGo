@@ -266,3 +266,90 @@ export async function getUserStats(): Promise<{
     return null;
   }
 } 
+
+/**
+ * Get unified completion status for one or more problems (true if either table marks as complete)
+ */
+export async function getUnifiedCompletionStatus(problemIds: number[]): Promise<Record<number, { isCompleted: boolean }>> {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return {};
+
+    // Query both tables in parallel
+    const [progressRes, lessonRes] = await Promise.all([
+      supabase
+        .from('user_problem_progress')
+        .select('problem_id, is_solved')
+        .eq('user_id', user.id)
+        .in('problem_id', problemIds),
+      supabase
+        .from('user_lesson_completion')
+        .select('problem_id, quiz_completed')
+        .eq('user_id', user.id)
+        .in('problem_id', problemIds)
+    ]);
+
+    const progressMap: Record<number, boolean> = {};
+    progressRes.data?.forEach((row: any) => {
+      progressMap[row.problem_id] = !!row.is_solved;
+    });
+    const lessonMap: Record<number, boolean> = {};
+    lessonRes.data?.forEach((row: any) => {
+      lessonMap[row.problem_id] = !!row.quiz_completed;
+    });
+
+    const result: Record<number, { isCompleted: boolean }> = {};
+    for (const id of problemIds) {
+      result[id] = { isCompleted: !!progressMap[id] || !!lessonMap[id] };
+    }
+    return result;
+  } catch (e) {
+    console.error('Error in getUnifiedCompletionStatus:', e);
+    return {};
+  }
+}
+
+/**
+ * Mark a problem as fully complete (updates both user_problem_progress and user_lesson_completion)
+ */
+export async function markProblemFullyComplete(problemId: number, score: number = 100, stars: number = 3): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) return { success: false, error: 'User not authenticated' };
+
+    // Upsert user_problem_progress
+    const now = new Date().toISOString();
+    const upsertProgress = {
+      user_id: user.id,
+      problem_id: problemId,
+      is_solved: true,
+      score,
+      best_score: score,
+      stars,
+      completed_at: now,
+      last_attempt_at: now,
+      updated_at: now
+    };
+    const { error: progressError } = await supabase
+      .from('user_problem_progress')
+      .upsert(upsertProgress, { onConflict: 'user_id,problem_id', ignoreDuplicates: false });
+    if (progressError) return { success: false, error: progressError.message };
+
+    // Upsert user_lesson_completion
+    const upsertLesson = {
+      user_id: user.id,
+      problem_id: problemId,
+      quiz_completed: true,
+      updated_at: now
+    };
+    const { error: lessonError } = await supabase
+      .from('user_lesson_completion')
+      .upsert(upsertLesson, { onConflict: 'user_id,problem_id', ignoreDuplicates: false });
+    if (lessonError) return { success: false, error: lessonError.message };
+
+    return { success: true };
+  } catch (e) {
+    console.error('Error in markProblemFullyComplete:', e);
+    return { success: false, error: 'Unexpected error' };
+  }
+} 

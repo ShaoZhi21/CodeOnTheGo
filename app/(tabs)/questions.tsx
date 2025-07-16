@@ -65,9 +65,11 @@ export default function AllQuestionsScreen() {
   const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   
-  // Sorting options
-  const [sortOption, setSortOption] = useState<'id-asc' | 'id-desc' | 'name-asc' | 'difficulty-asc' | 'difficulty-desc' | 'status-asc'>('id-asc');
+  // Sorting and filtering options
+  const [sortOption, setSortOption] = useState<'id-asc' | 'id-desc' | 'name-asc' | 'status-asc'>('id-asc');
+  const [difficultyFilter, setDifficultyFilter] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
   const [showSortOptions, setShowSortOptions] = useState(false);
+  const [showDifficultyFilter, setShowDifficultyFilter] = useState(false);
   
   // Scroll position tracking
   const [scrollPosition, setScrollPosition] = useState(0);
@@ -215,18 +217,15 @@ export default function AllQuestionsScreen() {
               problem.title.toLowerCase().includes(searchLower) ||
               problem.leetcode_id.toString().includes(search)
             );
+            console.log(`🔄 CACHE: Applied search filter, from ${cachedProblems.length} to ${filteredProblems.length} problems`);
           }
           
-          // Apply sorting to cached data
-          const [sortField, sortOrder] = sortOption.split('-');
-          if (sortField === 'status') {
-            filteredProblems.sort((a: ProblemWithStatus, b: ProblemWithStatus) => {
-              const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
-              const aOrder = statusOrder[a.status as keyof typeof statusOrder];
-              const bOrder = statusOrder[b.status as keyof typeof statusOrder];
-              return sortOrder === 'asc' ? aOrder - bOrder : bOrder - aOrder;
-            });
-          }
+          console.log(`🔄 CACHE: Before sorting/filtering, have ${filteredProblems.length} problems`);
+          
+          // Apply sorting and filtering to cached data using the same function
+          filteredProblems = sortAndFilterProblems(filteredProblems, sortOption, difficultyFilter);
+          
+          console.log(`🔄 CACHE: After sorting/filtering, have ${filteredProblems.length} problems`);
           
           setProblems(filteredProblems);
           setLoading(false);
@@ -262,57 +261,100 @@ export default function AllQuestionsScreen() {
     }
   };
 
+  // Simple sorting and filtering function
+  const sortAndFilterProblems = (problems: ProblemWithStatus[], sortOption: string, difficultyFilter: string): ProblemWithStatus[] => {
+    let filtered = [...problems];
+    
+    console.log(`🔄 FILTERING: Starting with ${filtered.length} problems, filter: ${difficultyFilter}`);
+    
+    // Apply difficulty filter first
+    if (difficultyFilter !== 'All') {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(problem => problem.difficulty === difficultyFilter);
+      console.log(`🔄 FILTERED by difficulty: ${difficultyFilter}, from ${beforeCount} to ${filtered.length} problems`);
+      
+      // Debug: Show difficulty distribution
+      const difficultyCounts = filtered.reduce((acc, p) => {
+        acc[p.difficulty] = (acc[p.difficulty] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('🔄 Difficulty counts after filtering:', difficultyCounts);
+    } else {
+      console.log(`🔄 NO FILTERING applied, keeping all ${filtered.length} problems`);
+      
+      // Debug: Show difficulty distribution for all problems
+      const difficultyCounts = filtered.reduce((acc, p) => {
+        acc[p.difficulty] = (acc[p.difficulty] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('🔄 Difficulty counts (all problems):', difficultyCounts);
+    }
+    
+    // Apply sorting
+    const [sortField, sortOrder] = sortOption.split('-');
+    console.log(`🔄 SORTING: ${sortField} ${sortOrder}`);
+    
+    switch (sortField) {
+      case 'id':
+        filtered.sort((a, b) => {
+          return sortOrder === 'asc' ? a.leetcode_id - b.leetcode_id : b.leetcode_id - a.leetcode_id;
+        });
+        break;
+        
+      case 'name':
+        filtered.sort((a, b) => {
+          return a.title.localeCompare(b.title);
+        });
+        break;
+        
+      case 'status':
+        filtered.sort((a, b) => {
+          const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
+          const aOrder = statusOrder[a.status as keyof typeof statusOrder];
+          const bOrder = statusOrder[b.status as keyof typeof statusOrder];
+          
+          if (sortOrder === 'asc') {
+            // Unsolved → Solved: Unsolved(1) comes first, then Solved(2)
+            return aOrder - bOrder;
+          } else {
+            // Solved → Unsolved: Solved(2) comes first, then Unsolved(1)
+            return bOrder - aOrder;
+          }
+        });
+        break;
+    }
+    
+    // Debug: Show first 5 items after sorting
+    console.log('🔄 First 5 after sorting:', filtered.slice(0, 5).map(p => ({
+      id: p.leetcode_id,
+      title: p.title.substring(0, 20) + '...',
+      difficulty: p.difficulty,
+      status: p.status
+    })));
+    
+    return filtered;
+  };
+
   // Fetch problems from Supabase with search
   const fetchProblems = async (search: string = '', backgroundFetch: boolean = false) => {
     try {
       console.log('🔄 fetchProblems called - search:', search, 'sortOption:', sortOption, 'background:', backgroundFetch);
-      console.log('🔄 Supabase URL:', supabaseUrl ? 'Set' : 'Missing');
-      console.log('🔄 Supabase Key:', supabaseKey ? 'Set' : 'Missing');
       
       if (!backgroundFetch) {
         setLoading(true);
       }
       setError(null);
 
-      // Build query
+      // Build query - always fetch all problems, we'll sort in JavaScript
       let query = supabase
         .from('leetcode_problems')
-        .select('id, leetcode_id, title, difficulty, tags, is_premium');
+        .select('id, leetcode_id, title, difficulty, tags, is_premium')
+        .order('leetcode_id', { ascending: true }); // Always fetch in ID order for consistency
 
       // Add search filter if provided
       if (search.trim()) {
         query = query.or(`title.ilike.%${search}%,leetcode_id.eq.${parseInt(search) || 0}`);
       }
-
-      // Add sorting based on sortOption
-      const [sortField, sortOrder] = sortOption.split('-');
-      let orderField: string;
-      let ascending: boolean;
-
-      switch (sortField) {
-        case 'id':
-          orderField = 'leetcode_id';
-          ascending = sortOrder === 'asc';
-          break;
-        case 'name':
-          orderField = 'title';
-          ascending = true;
-          break;
-        case 'difficulty':
-          orderField = 'difficulty';
-          ascending = sortOrder === 'asc';
-          break;
-        case 'status':
-          // Status sorting will be done after fetching user progress
-          orderField = 'leetcode_id';
-          ascending = true;
-          break;
-        default:
-          orderField = 'leetcode_id';
-          ascending = true;
-      }
-
-      query = query.order(orderField, { ascending });
 
       // Test query to check if table exists and has data
       const { data: testData, error: testError } = await supabase
@@ -320,89 +362,54 @@ export default function AllQuestionsScreen() {
         .select('id')
         .limit(1);
       
-      console.log('🔄 Test query - data:', testData?.length || 0, 'error:', testError);
-      
       if (testError) {
         console.error('🔄 Test query error:', testError);
         throw testError;
       }
 
-      // Get total count with search
-      let countQuery = supabase
-        .from('leetcode_problems')
-        .select('*', { count: 'exact', head: true });
-      
-      // Add search filter if provided
-      if (search.trim()) {
-        countQuery = countQuery.or(`title.ilike.%${search}%,leetcode_id.eq.${parseInt(search) || 0}`);
-      }
-
-      const { count, error: countError } = await countQuery;
-      console.log('🔄 Total problems count:', count, 'countError:', countError);
-      
-      if (countError) {
-        console.error('🔄 Count query error:', countError);
-        throw countError;
-      }
-      
-      // Get problems for current page with search
+      // Get problems
       const { data, error } = await query;
-
-      console.log('🔄 Fetched problems data length:', data?.length || 0, 'error:', error);
 
       if (error) {
         throw error;
       }
 
       const problemsData = data || [];
+      console.log('🔄 Fetched problems data length:', problemsData.length);
+
+      // Debug: Check difficulty distribution in raw data
+      const rawDifficultyCounts = problemsData.reduce((acc, p) => {
+        acc[p.difficulty] = (acc[p.difficulty] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('🔄 Raw difficulty counts from database:', rawDifficultyCounts);
+      console.log('🔄 First 10 problems difficulty values:', problemsData.slice(0, 10).map(p => p.difficulty));
 
       // Get user progress for these problems
-      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const { getUnifiedCompletionStatus } = await import('@/lib/services/userProgress');
       const problemIds = problemsData.map(p => p.leetcode_id);
-      
-      console.log('🔍 FETCH PROBLEMS - Getting progress for problem IDs:', problemIds);
-      
-      const progressMap = await getUserProgressForProblems(problemIds);
-
-      console.log('🔍 FETCH PROBLEMS - Raw progress map:', JSON.stringify(progressMap, null, 2));
+      const unifiedStatusMap = await getUnifiedCompletionStatus(problemIds);
 
       // Combine problems with their status
       let problemsWithStatus: ProblemWithStatus[] = problemsData.map(problem => {
-        const progress = progressMap[problem.leetcode_id];
-        
-        console.log(`🔍 FETCH PROBLEMS - Problem ${problem.leetcode_id}:`, {
-          progress,
-          score: progress?.score,
-          stars: progress?.stars,
-          scoreType: typeof progress?.score,
-          starsType: typeof progress?.stars
-        });
-
+        const unified = unifiedStatusMap[problem.leetcode_id];
         return {
           ...problem,
-          status: progress?.is_solved ? 'Solved' : 'Unsolved',
-          score: progress?.score,
-          stars: progress?.stars
+          status: unified?.isCompleted ? 'Solved' : 'Unsolved',
         };
       });
 
-      // Sort by status if that's the selected option
-      if (sortField === 'status') {
-        problemsWithStatus.sort((a, b) => {
-          const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
-          const aOrder = statusOrder[a.status as keyof typeof statusOrder];
-          const bOrder = statusOrder[b.status as keyof typeof statusOrder];
-          return ascending ? aOrder - bOrder : bOrder - aOrder;
-        });
-      }
+      console.log('🔄 Problems with status length:', problemsWithStatus.length);
 
-      console.log('🔍 FETCH PROBLEMS - Final problems with status:', problemsWithStatus.map(p => ({
-        id: p.leetcode_id,
-        title: p.title,
-        status: p.status,
-        score: p.score,
-        stars: p.stars
-      })));
+      // Apply sorting and filtering
+      problemsWithStatus = sortAndFilterProblems(problemsWithStatus, sortOption, difficultyFilter);
+
+      // Debug: Count difficulties
+      const difficultyCounts = problemsWithStatus.reduce((acc, p) => {
+        acc[p.difficulty] = (acc[p.difficulty] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('🔍 FETCH PROBLEMS - Difficulty counts:', difficultyCounts);
 
       // Save to cache if this is a full fetch (not search-specific)
       if (!search.trim() && !backgroundFetch) {
@@ -454,13 +461,13 @@ export default function AllQuestionsScreen() {
   };
 
   useEffect(() => {
-    console.log('🔄 useEffect triggered - searchQuery:', searchQuery, 'sortOption:', sortOption);
+    console.log('🔄 useEffect triggered - searchQuery:', searchQuery, 'sortOption:', sortOption, 'difficultyFilter:', difficultyFilter);
     if (searchQuery.trim()) {
       fetchProblems(searchQuery);
     } else {
       loadQuestionsWithCache(searchQuery);
     }
-  }, [sortOption]); // Removed searchQuery from dependency to prevent double fetching
+  }, [sortOption, difficultyFilter]); // Removed searchQuery from dependency to prevent double fetching
 
   // Initial load
   useEffect(() => {
@@ -495,30 +502,26 @@ export default function AllQuestionsScreen() {
       setRefreshingStatus(true);
 
       // Get user progress for current problems
-      const { getUserProgressForProblems } = await import('@/lib/services/userProgress');
+      const { getUnifiedCompletionStatus } = await import('@/lib/services/userProgress');
       const problemIds = problems.map(p => p.leetcode_id);
       
       console.log('🔍 ALL QUESTIONS - Fetching progress for problem IDs:', problemIds);
       
-      const progressMap = await getUserProgressForProblems(problemIds);
+      const unifiedStatusMap = await getUnifiedCompletionStatus(problemIds);
 
-      console.log('🔍 ALL QUESTIONS - Raw progress map from database:', JSON.stringify(progressMap, null, 2));
+      console.log('🔍 ALL QUESTIONS - Raw progress map from database:', JSON.stringify(unifiedStatusMap, null, 2));
 
       // Update problems with latest status
       const updatedProblems: ProblemWithStatus[] = problems.map(problem => {
-        const progress = progressMap[problem.leetcode_id];
+        const unified = unifiedStatusMap[problem.leetcode_id];
         
         console.log(`🔍 ALL QUESTIONS - Problem ${problem.leetcode_id} (${problem.title}):`);
-        console.log(`🔍 ALL QUESTIONS - Progress data:`, progress);
-        console.log(`🔍 ALL QUESTIONS - Is solved:`, progress?.is_solved);
-        console.log(`🔍 ALL QUESTIONS - Score:`, progress?.score, 'Type:', typeof progress?.score);
-        console.log(`🔍 ALL QUESTIONS - Stars:`, progress?.stars, 'Type:', typeof progress?.stars);
+        console.log(`🔍 ALL QUESTIONS - Progress data:`, unified);
+        console.log(`🔍 ALL QUESTIONS - Is completed:`, unified?.isCompleted);
 
         return {
           ...problem,
-          status: progress?.is_solved ? 'Solved' : 'Unsolved',
-          score: progress?.score,
-          stars: progress?.stars
+          status: unified?.isCompleted ? 'Solved' : 'Unsolved',
         };
       });
 
@@ -543,6 +546,12 @@ export default function AllQuestionsScreen() {
     console.log('🔄 handleSortOptionChange called - newSortOption:', newSortOption);
     setSortOption(newSortOption);
     setShowSortOptions(false);
+    
+    // Apply sorting and filtering immediately to current problems using the same function
+    if (problems.length > 0) {
+      const sortedProblems = sortAndFilterProblems([...problems], newSortOption, difficultyFilter);
+      setProblems(sortedProblems);
+    }
   };
 
   const getSortDisplayText = () => {
@@ -553,14 +562,25 @@ export default function AllQuestionsScreen() {
         return 'ID ↓';
       case 'name-asc':
         return 'Name A-Z';
-      case 'difficulty-asc':
-        return 'Easy → Hard';
-      case 'difficulty-desc':
-        return 'Hard → Easy';
       case 'status-asc':
-        return 'Unsolved → Solved';
+        return 'Status';
       default:
         return 'ID ↑';
+    }
+  };
+
+  const getDifficultyFilterDisplayText = () => {
+    switch (difficultyFilter) {
+      case 'All':
+        return 'All Difficulties';
+      case 'Easy':
+        return 'Easy Only';
+      case 'Medium':
+        return 'Medium Only';
+      case 'Hard':
+        return 'Hard Only';
+      default:
+        return 'All Difficulties';
     }
   };
 
@@ -618,17 +638,97 @@ export default function AllQuestionsScreen() {
 
       </View>
 
-      {/* Sorting Bubble */}
+      {/* Sorting and Filtering */}
       <View style={styles.sortingContainer}>
-        <TouchableOpacity 
-          style={styles.sortingBubble}
-          onPress={() => setShowSortOptions(!showSortOptions)}
-          activeOpacity={0.7}
-        >
-          <ThemedText style={styles.sortingBubbleText}>Sort: {getSortDisplayText()}</ThemedText>
-          <ThemedText style={styles.sortingBubbleIcon}>▼</ThemedText>
-        </TouchableOpacity>
+        <View style={styles.filterRow}>
+          {/* Difficulty Filter */}
+          <TouchableOpacity 
+            style={styles.filterBubble}
+            onPress={() => setShowDifficultyFilter(!showDifficultyFilter)}
+            activeOpacity={0.7}
+          >
+            <ThemedText style={styles.filterBubbleText}>{getDifficultyFilterDisplayText()}</ThemedText>
+            <ThemedText style={styles.filterBubbleIcon}>▼</ThemedText>
+          </TouchableOpacity>
+
+          {/* Sort Options */}
+          <TouchableOpacity 
+            style={styles.sortingBubble}
+            onPress={() => setShowSortOptions(!showSortOptions)}
+            activeOpacity={0.7}
+          >
+            <ThemedText style={styles.sortingBubbleText}>Sort: {getSortDisplayText()}</ThemedText>
+            <ThemedText style={styles.sortingBubbleIcon}>▼</ThemedText>
+          </TouchableOpacity>
+        </View>
         
+        {/* Difficulty Filter Options */}
+        {showDifficultyFilter && (
+          <View style={styles.filterOptionsContainer}>
+            <TouchableOpacity 
+              style={[styles.filterOption, difficultyFilter === 'All' && styles.activeFilterOption]}
+              onPress={() => {
+                setDifficultyFilter('All');
+                setShowDifficultyFilter(false);
+                if (problems.length > 0) {
+                  const sortedProblems = sortAndFilterProblems([...problems], sortOption, 'All');
+                  setProblems(sortedProblems);
+                }
+              }}
+            >
+              <ThemedText style={[styles.filterOptionText, difficultyFilter === 'All' && styles.activeFilterOptionText]}>
+                All Difficulties
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterOption, difficultyFilter === 'Easy' && styles.activeFilterOption]}
+              onPress={() => {
+                setDifficultyFilter('Easy');
+                setShowDifficultyFilter(false);
+                if (problems.length > 0) {
+                  const sortedProblems = sortAndFilterProblems([...problems], sortOption, 'Easy');
+                  setProblems(sortedProblems);
+                }
+              }}
+            >
+              <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Easy' && styles.activeFilterOptionText]}>
+                Easy Only
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterOption, difficultyFilter === 'Medium' && styles.activeFilterOption]}
+              onPress={() => {
+                setDifficultyFilter('Medium');
+                setShowDifficultyFilter(false);
+                if (problems.length > 0) {
+                  const sortedProblems = sortAndFilterProblems([...problems], sortOption, 'Medium');
+                  setProblems(sortedProblems);
+                }
+              }}
+            >
+              <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Medium' && styles.activeFilterOptionText]}>
+                Medium Only
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterOption, difficultyFilter === 'Hard' && styles.activeFilterOption]}
+              onPress={() => {
+                setDifficultyFilter('Hard');
+                setShowDifficultyFilter(false);
+                if (problems.length > 0) {
+                  const sortedProblems = sortAndFilterProblems([...problems], sortOption, 'Hard');
+                  setProblems(sortedProblems);
+                }
+              }}
+            >
+              <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Hard' && styles.activeFilterOptionText]}>
+                Hard Only
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {/* Sort Options */}
         {showSortOptions && (
           <View style={styles.sortOptionsContainer}>
             <TouchableOpacity 
@@ -656,27 +756,11 @@ export default function AllQuestionsScreen() {
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={[styles.sortOption, sortOption === 'difficulty-asc' && styles.activeSortOption]}
-              onPress={() => handleSortOptionChange('difficulty-asc')}
-            >
-              <ThemedText style={[styles.sortOptionText, sortOption === 'difficulty-asc' && styles.activeSortOptionText]}>
-                Easy → Hard
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortOption === 'difficulty-desc' && styles.activeSortOption]}
-              onPress={() => handleSortOptionChange('difficulty-desc')}
-            >
-              <ThemedText style={[styles.sortOptionText, sortOption === 'difficulty-desc' && styles.activeSortOptionText]}>
-                Hard → Easy
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
               style={[styles.sortOption, sortOption === 'status-asc' && styles.activeSortOption]}
               onPress={() => handleSortOptionChange('status-asc')}
             >
               <ThemedText style={[styles.sortOptionText, sortOption === 'status-asc' && styles.activeSortOptionText]}>
-                Unsolved → Solved
+                Status
               </ThemedText>
             </TouchableOpacity>
           </View>
@@ -1101,7 +1185,75 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: '#8B5CF6',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
+  },
+  filterBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#6564c7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    flex: 1,
+    marginRight: 8,
+  },
+  filterBubbleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2d2d2d',
+    marginRight: 8,
+  },
+  filterBubbleIcon: {
+    fontSize: 14,
+    color: '#6564c7',
+  },
+  filterOptionsContainer: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    right: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 100,
+  },
+  filterOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  activeFilterOption: {
+    backgroundColor: '#f1ecfd',
+    borderColor: '#6564c7',
+    borderWidth: 1,
+  },
+  filterOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2d2d2d',
+  },
+  activeFilterOptionText: {
+    color: '#6564c7',
   },
   sortingBubble: {
     flexDirection: 'row',
@@ -1117,6 +1269,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+    flex: 1,
+    marginLeft: 8,
   },
   sortingBubbleText: {
     fontSize: 14,

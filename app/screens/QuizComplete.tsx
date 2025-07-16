@@ -1,4 +1,3 @@
-import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -16,27 +15,17 @@ export default function QuizComplete() {
     console.log('🎯 handleComplete called with topicName:', topicName);
     console.log('🎯 handleComplete called with problemTitle:', problemTitle);
     console.log('🎯 handleComplete called with problemId:', problemId);
-    // Unlock pseudocode for this problem (mark as solved in user_problem_progress)
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && problemId) {
-        // Use the passed problemId directly (no need to query)
+      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
+      if (problemId) {
         const leetcodeId = parseInt(problemId);
-        console.log('🎯 Using problemId:', leetcodeId, 'for title:', problemTitle);
         if (leetcodeId) {
-          await supabase
-            .from('user_problem_progress')
-            .upsert({
-              user_id: user.id,
-              problem_id: leetcodeId,
-              is_solved: true,
-              updated_at: new Date().toISOString(),
-            });
-          console.log('🎯 Successfully unlocked pseudocode for problemId:', leetcodeId);
+          await markProblemFullyComplete(leetcodeId);
+          console.log('🎯 Successfully marked problem fully complete for problemId:', leetcodeId);
         }
       }
     } catch (error) {
-      console.error('Error unlocking pseudocode:', error);
+      console.error('Error marking problem fully complete:', error);
     }
     console.log('🎯 Navigating to LoadingRoadMap with topicName:', topicName);
     router.replace({

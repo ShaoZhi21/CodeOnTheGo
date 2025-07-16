@@ -636,7 +636,7 @@ export default function LessonScreen() {
     } catch (error) {
         console.error('❌ Error loading lesson:', error);
         setError(error instanceof Error ? error.message : 'Failed to load lesson');
-        router.replace('/(tabs)');
+        router.back();
       } finally {
         setLoading(false);
       }

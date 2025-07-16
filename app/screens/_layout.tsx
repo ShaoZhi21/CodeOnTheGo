@@ -5,7 +5,7 @@ export default function ScreensLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: 'none',
+        animation: 'fade',
         presentation: 'card',
         gestureDirection: 'horizontal',
         gestureEnabled: true,
