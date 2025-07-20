@@ -1,6 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
 import { router } from 'expo-router';
-import React from 'react';
 import { Image, SafeAreaView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 export default function Duel() {

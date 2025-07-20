@@ -4,15 +4,15 @@ import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface LessonMCQQuestion {
@@ -396,19 +396,16 @@ export default function LessonMCQScreen() {
   // Handle quiz completion and trigger streak
   const handleQuizCompletion = async () => {
     if (quizCompleted) return; // Prevent multiple calls
-    
     setQuizCompleted(true);
-    
     try {
+      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       // Calculate final score
       const actualScore = Math.min(score, totalQuestions);
       const percentage = Math.round((actualScore / totalQuestions) * 100);
       const passed = percentage >= 70;
-
       // Find the problem ID by title
       let problemId = 0;
       if (finalProblemTitle) {
@@ -419,34 +416,8 @@ export default function LessonMCQScreen() {
           .limit(1);
         problemId = problems && problems.length > 0 ? problems[0].leetcode_id : 0;
       }
-
-      // Check if quiz completion already exists
-      const { data: existingCompletion } = await supabase
-        .from('user_lesson_completion')
-        .select('quiz_score, quiz_completed')
-        .eq('user_id', user.id)
-        .eq('problem_id', problemId)
-        .single();
-
-      console.log('🔍 Existing quiz completion:', existingCompletion);
-
-      // Save quiz completion to database (upsert will update if exists)
-      const { error } = await supabase
-        .from('user_lesson_completion')
-        .upsert({
-          user_id: user.id,
-          problem_id: problemId,
-          quiz_completed: passed,
-          quiz_score: actualScore,
-          completed_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,problem_id'
-        });
-
-      if (error) {
-        console.error('Error saving quiz completion:', error);
-      } else {
-        console.log('✅ Quiz completion saved successfully');
+      if (problemId) {
+        await markProblemFullyComplete(problemId, actualScore, Math.ceil(actualScore / 20));
       }
     } catch (error) {
       console.error('Error handling quiz completion:', error);

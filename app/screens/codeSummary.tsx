@@ -152,11 +152,12 @@ export default function CodeSummary() {
     setIsMarkingComplete(true);
 
     try {
-      // Step 1: Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('User not authenticated');
-      }
+      // Use unified completion logic
+      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
+      const score = 85; // Or use a real score if available
+      const stars = Math.ceil(score / 20); // 1-5 stars
+      const result = await markProblemFullyComplete(parseInt(problemId), score, Math.min(stars, 3));
+      if (!result.success) throw new Error(result.error || 'Failed to mark problem as complete');
 
       // Step 2: Get today and yesterday at 12am for streak checking
       const today = new Date();
@@ -166,56 +167,18 @@ export default function CodeSummary() {
       const now = new Date();
 
       // Step 3: Check for previous activities before this completion
+      const userResult = await supabase.auth.getUser();
+      const userObj = userResult.data.user;
+      if (!userObj) throw new Error('User not authenticated');
       const { data: previousActivities } = await supabase
         .from('user_problem_progress')
         .select('completed_at')
-        .eq('user_id', user.id)
+        .eq('user_id', userObj.id)
         .not('completed_at', 'is', null)
         .lt('completed_at', now.toISOString())
         .order('completed_at', { ascending: false })
         .limit(1);
 
-      // Step 4: Check if this problem was previously completed
-      const { data: existingProgress } = await supabase
-        .from('user_problem_progress')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('problem_id', problemId)
-        .single();
-
-      // Step 5: Save/Update problem progress
-      const score = 85; // Or use a real score if available
-      const stars = Math.ceil(score / 20); // 1-5 stars
-      const progressData = {
-        user_id: user.id,
-        problem_id: parseInt(problemId),
-        is_solved: true,
-        score: score,
-        stars: Math.min(stars, 3),
-        attempts: (existingProgress?.attempts || 0) + 1,
-        hints_used: existingProgress?.hints_used || 0,
-        time_spent_minutes: existingProgress?.time_spent_minutes || 0,
-        first_solved_at: existingProgress?.first_solved_at || now.toISOString(),
-        last_attempt_at: now.toISOString(),
-        completed_at: now.toISOString(),
-        best_score: Math.max(existingProgress?.best_score || 0, score)
-      };
-
-      if (existingProgress) {
-        const { error: updateError } = await supabase
-          .from('user_problem_progress')
-          .update(progressData)
-          .eq('user_id', user.id)
-          .eq('problem_id', problemId);
-        if (updateError) throw new Error('Failed to update progress');
-      } else {
-        const { error: insertError } = await supabase
-          .from('user_problem_progress')
-          .insert(progressData);
-        if (insertError) throw new Error('Failed to insert progress');
-      }
-
-      // Step 6: Check streak logic
       let lastActivity = previousActivities && previousActivities.length > 0 
         ? new Date(previousActivities[0].completed_at)
         : null;
@@ -224,10 +187,10 @@ export default function CodeSummary() {
       if (isNewStreak) {
         // If last activity was exactly yesterday, increment streak
         if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
-          await ProfileService.updateStreak(user.id, true);
+          await ProfileService.updateStreak(userObj.id, true);
         } else {
-          await ProfileService.updateStreak(user.id, false);
-          await ProfileService.updateStreak(user.id, true);
+          await ProfileService.updateStreak(userObj.id, false);
+          await ProfileService.updateStreak(userObj.id, true);
         }
         // Navigate to streak animation
         router.push({

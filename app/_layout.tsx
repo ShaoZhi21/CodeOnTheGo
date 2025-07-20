@@ -1,19 +1,20 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import StreakAnimation from '@/components/StreakAnimation';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { StreakProvider, useStreak } from '@/contexts/StreakContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 
 function AppContent() {
-  const colorScheme = useColorScheme();
+  // Always use light theme instead of detecting system theme
+  const colorScheme = 'light';
   const { streakAnimationVisible, currentStreakCount, hideStreakAnimation } = useStreak();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={DefaultTheme}>
       <Stack
         screenOptions={{
           headerShown: false,
@@ -24,7 +25,7 @@ function AppContent() {
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       
       {/* Global Streak Animation */}
       <StreakAnimation 
@@ -39,9 +40,11 @@ function AppContent() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <StreakProvider>
-        <AppContent />
-      </StreakProvider>
+      <AuthProvider>
+        <StreakProvider>
+          <AppContent />
+        </StreakProvider>
+      </AuthProvider>
     </GestureHandlerRootView>
   );
 }

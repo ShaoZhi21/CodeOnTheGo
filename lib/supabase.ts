@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 
@@ -16,8 +17,15 @@ if (!supabaseServiceKey) {
   console.error('Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY - This is required for admin operations');
 }
 
-// Regular client for normal operations
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Regular client for normal operations with session persistence
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  }
+});
 
 // Admin client for admin operations (user creation, etc.)
 export const supabaseAdmin = supabaseServiceKey 

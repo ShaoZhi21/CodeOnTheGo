@@ -6,6 +6,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createClient } = require('@supabase/supabase-js');
 const { getTopicProblems, getTopicStats, getAllTopics, recordTopicNavigation, getRecentTopicNavigation, getProblemSolution } = require('./services/topicService');
 const { getUserProfile, updateUserProfile, getUserProfileStats } = require('./services/profileService');
+const { TournamentService } = require('./services/tournamentService');
 const bodyParser = require('body-parser');
 
 // To use Judge0 API for code execution, you need to:
