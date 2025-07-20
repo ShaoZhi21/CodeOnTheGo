@@ -2,16 +2,16 @@ import { ThemedText } from '@/components/ThemedText';
 import { TopicService } from '@/lib/services/topicService';
 import { supabase } from '@/lib/supabase';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 interface Topic {
@@ -27,6 +27,12 @@ interface TopicProgress {
   completion_percentage: number;
 }
 
+interface TopicProgressHome {
+  name: string;
+  completion_percentage: number;
+  lastEdited: string;
+}
+
 interface TopicCardProps {
   topic: Topic;
   index: number;
@@ -36,6 +42,7 @@ interface TopicCardProps {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2; // 2 cards per row with 16px margins
+const STATS_CARD_WIDTH = (width - 64) / 3; // 3 cards per row with margins and gaps
 
 // Topic icon mapping
 const getTopicIcon = (topicName: string) => {
@@ -139,12 +146,6 @@ const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }
             {Math.round(displayProgress.completion_percentage)}% complete
           </ThemedText>
         </View>
-        
-        <View style={[styles.learnButton, { backgroundColor: colors.accent }]}>
-          <ThemedText style={styles.learnButtonText}>
-            {displayProgress.completed_problems > 0 ? 'Continue →' : 'Start →'}
-          </ThemedText>
-        </View>
       </View>
     </TouchableOpacity>
   );
@@ -154,6 +155,7 @@ export default function LearnScreen() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [topicProgress, setTopicProgress] = useState<{ [key: string]: TopicProgress }>({});
+  const [topicsInProgress, setTopicsInProgress] = useState<TopicProgressHome[]>([]);
 
   useEffect(() => {
     loadTopics();
@@ -163,6 +165,7 @@ export default function LearnScreen() {
   useEffect(() => {
     if (topics.length > 0) {
       loadTopicProgress();
+      loadTopicsProgress();
     }
   }, [topics]);
 
@@ -221,6 +224,44 @@ export default function LearnScreen() {
     }
   };
 
+  const loadTopicsProgress = useCallback(async () => {
+    try {
+      console.log('Loading topics progress');
+
+      // Get user ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('No user found');
+        return;
+      }
+
+      // Get all topics and their stats
+      const { data: topicStats, error: statsError } = await supabase
+        .from('topic_stats')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (statsError) {
+        console.error('Error loading topic stats:', statsError);
+        return;
+      }
+
+      // Convert to TopicProgress format and sort by completion percentage
+      const progress = topicStats
+        .map((stat): TopicProgressHome => ({
+          name: stat.topic_name,
+          completion_percentage: stat.completion_percentage || 0,
+          lastEdited: new Date().toISOString()
+        }))
+        .sort((a, b) => b.completion_percentage - a.completion_percentage)
+        .slice(0, 3); // Only take top 3 by completion percentage
+
+      setTopicsInProgress(progress);
+    } catch (error) {
+      console.error('Error loading topics progress:', error);
+    }
+  }, []);
+
   const handleTopicPress = async (topic: Topic) => {
     try {
       // Navigate to loading screen first
@@ -259,6 +300,61 @@ export default function LearnScreen() {
             Master data structures and algorithms through interactive lessons
           </ThemedText>
         </View>
+
+        {/* Progress Statistics Section */}
+        {topicsInProgress.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Image 
+                  source={require('@/assets/images/icons/trophy-icon.png')} 
+                  style={styles.sectionIcon}
+                  tintColor="#6564c7"
+                />
+                <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
+              </View>
+            </View>
+            
+            <View style={styles.progressGrid}>
+              {topicsInProgress.map((topic, index) => (
+                <TouchableOpacity 
+                  key={topic.name} 
+                  style={[styles.progressCard, { backgroundColor: getTopicColors(index).bg }]} 
+                  onPress={() => {
+                    const topicObj = topics.find(t => t.name === topic.name);
+                    if (topicObj) {
+                      handleTopicPress(topicObj);
+                    }
+                  }}
+                >
+                  <View style={styles.progressCircleContainer}>
+                    <View style={[styles.progressCircle, { borderColor: getTopicColors(index).accent }]}>
+                      <View 
+                        style={[
+                          styles.progressCircleFill, 
+                          { 
+                            backgroundColor: getTopicColors(index).accent,
+                            transform: [{ rotate: `${(topic.completion_percentage / 100) * 360}deg` }]
+                          }
+                        ]} 
+                      />
+                      <View style={styles.progressCircleInner}>
+                        <ThemedText style={styles.progressPercentage}>{Math.round(topic.completion_percentage)}%</ThemedText>
+                      </View>
+                    </View>
+                  </View>
+                  <ThemedText 
+                    style={[styles.progressTopicName, { color: getTopicColors(index).accent }]}
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                  >
+                    {topic.name}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* All Topics Section */}
         <View style={styles.section}>
@@ -340,7 +436,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 10,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -382,34 +478,34 @@ const styles = StyleSheet.create({
   topicCard: {
     width: CARD_WIDTH,
     backgroundColor: '#F3F0FF',
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: '#E0D7FF',
-    padding: 16,
-    marginBottom: 16,
+    padding: 12,
+    marginBottom: 12,
     shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     backgroundColor: '#8B5CF6', // This will be overridden by dynamic colors
-    borderRadius: 12,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
   topicIcon: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
   },
   progressBadge: {
     backgroundColor: 'rgba(0, 0, 0, 0.1)',
@@ -426,20 +522,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topicTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#8B5CF6', // This will be overridden by dynamic colors
-    marginBottom: 8,
-    lineHeight: 20,
+    marginBottom: 6,
+    lineHeight: 18,
   },
   topicDescription: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
-    lineHeight: 18,
-    marginBottom: 12,
+    lineHeight: 16,
+    marginBottom: 8,
   },
   progressContainer: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   progressBar: {
     height: 4,
@@ -456,19 +552,77 @@ const styles = StyleSheet.create({
     color: '#666',
     fontWeight: '500',
   },
-  learnButton: {
-    backgroundColor: '#8B5CF6', // This will be overridden by dynamic colors
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-  },
-  learnButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
   bottomSpacing: {
     height: 32,
+  },
+  progressGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  progressCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+    alignItems: 'center',
+    height: 140,
+  },
+  progressCircleContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  progressCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 4,
+    borderColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  progressCircleFill: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    borderRadius: 25,
+    borderWidth: 4,
+    borderColor: 'transparent',
+    borderTopColor: 'currentColor',
+    borderRightColor: 'currentColor',
+  },
+  progressCircleInner: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressPercentage: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  progressTopicName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
   },
 }); 

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { router, useFocusEffect } from 'expo-router';
-import CircularProgress from '../../components/CircularProgress';
 import { ThemedText } from '../../components/ThemedText';
 import { useStreak } from '../../contexts/StreakContext';
 import { DailyChallengeService } from '../../lib/services/dailyChallengeService';
@@ -623,7 +622,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Learning Hub */}
+        {/* Learning Journey */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
@@ -632,89 +631,109 @@ export default function HomeScreen() {
                 style={styles.sectionIcon}
                 tintColor="#8B5CF6"
               />
-              <ThemedText style={styles.sectionTitle}>Learning Hub</ThemedText>
+              <ThemedText style={styles.sectionTitle}>Your Learning Journey</ThemedText>
             </View>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/learn')}>
-              <ThemedText style={styles.seeAllText}>See All</ThemedText>
-            </TouchableOpacity>
           </View>
           
-          {/* Continue Learning */}
-          {topicsInProgress.length > 0 && (
-            <View style={styles.subsection}>
-              <ThemedText style={styles.subsectionTitle}>Continue Learning</ThemedText>
-              <View style={styles.progressGrid}>
-                {topicsInProgress.map((topic) => (
-                  <TouchableOpacity 
-                    key={topic.name} 
-                    style={styles.progressCard} 
-                    onPress={() => handleTopicClick(topic.name)}
-                  >
-                    <CircularProgress percentage={topic.completion_percentage}>
-                      <ThemedText style={styles.progressPercentage}>{topic.completion_percentage}%</ThemedText>
-                    </CircularProgress>
-                    <ThemedText style={styles.progressTopicName}>{topic.name}</ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
 
-          {/* Topic Roadmap */}
+
+          {/* Learning Action Buttons */}
           <View style={styles.subsection}>
-            <ThemedText style={styles.subsectionTitle}>Explore Topics</ThemedText>
+            <ThemedText style={styles.subsectionTitle}>Ready to Learn?</ThemedText>
             
-            {/* First Row */}
-            <ScrollView 
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.topicsScrollContent}
-              style={styles.topicsRow}
-            >
-              {roadmapTopics.slice(0, Math.ceil(roadmapTopics.length / 2)).map((topic, index) => (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.modernTopicCard} 
-                  onPress={() => handleTopicClick(topic.name)}
-                >
-                  <View style={[styles.topicIconContainer, { backgroundColor: topic.color }]}>
-                    <Image 
-                      source={getTopicIcon(topic.name)} 
-                      style={styles.topicCardIcon}
-                    />
-                  </View>
-                  <ThemedText style={[styles.modernTopicName, { color: topic.color }]}>
-                    {topic.name}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <View style={styles.learningActionsGrid}>
+              {/* Start Learning Button */}
+              <TouchableOpacity 
+                style={styles.learningActionCard} 
+                onPress={() => router.push('/(tabs)/learn')}
+              >
+                <View style={styles.learningActionIconContainer}>
+                  <Image 
+                    source={require('../../assets/images/icons/book-icon.png')} 
+                    style={styles.learningActionIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+                <ThemedText style={styles.learningActionTitle}>Start Learning</ThemedText>
+                <ThemedText style={styles.learningActionSubtitle}>Explore the roadmap</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+              </TouchableOpacity>
 
-            {/* Second Row */}
-            <ScrollView 
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.topicsScrollContent}
-              style={styles.topicsRow}
-            >
-              {roadmapTopics.slice(Math.ceil(roadmapTopics.length / 2)).map((topic, index) => (
-                <TouchableOpacity 
-                  key={index + Math.ceil(roadmapTopics.length / 2)} 
-                  style={styles.modernTopicCard} 
-                  onPress={() => handleTopicClick(topic.name)}
-                >
-                  <View style={[styles.topicIconContainer, { backgroundColor: topic.color }]}>
-                    <Image 
-                      source={getTopicIcon(topic.name)} 
-                      style={styles.topicCardIcon}
-                    />
-                  </View>
-                  <ThemedText style={[styles.modernTopicName, { color: topic.color }]}>
-                    {topic.name}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              {/* Practice Problems Button */}
+              <TouchableOpacity 
+                style={styles.learningActionCard} 
+                onPress={() => router.push('/(tabs)/questions')}
+              >
+                <View style={styles.learningActionIconContainer}>
+                  <Image 
+                    source={require('../../assets/images/icons/question-icon.png')} 
+                    style={styles.learningActionIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+                <ThemedText style={styles.learningActionTitle}>Practice Problems</ThemedText>
+                <ThemedText style={styles.learningActionSubtitle}>Solve coding challenges</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {/* Take Quiz Button */}
+              <TouchableOpacity 
+                style={styles.learningActionCard} 
+                onPress={() => router.push('/screens/quiz')}
+              >
+                <View style={styles.learningActionIconContainer}>
+                  <Image 
+                    source={require('../../assets/images/icons/quiz-icon.png')} 
+                    style={styles.learningActionIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+                <ThemedText style={styles.learningActionTitle}>Take Quiz</ThemedText>
+                <ThemedText style={styles.learningActionSubtitle}>Test your knowledge</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {/* View Progress Button */}
+              <TouchableOpacity 
+                style={styles.learningActionCard} 
+                onPress={() => router.push('/(tabs)/learn')}
+              >
+                <View style={styles.learningActionIconContainer}>
+                  <Image 
+                    source={require('../../assets/images/icons/trophy-icon.png')} 
+                    style={styles.learningActionIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+                <ThemedText style={styles.learningActionTitle}>View Progress</ThemedText>
+                <ThemedText style={styles.learningActionSubtitle}>Track your journey</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={styles.smallArrowIcon}
+                    tintColor="#8B5CF6"
+                  />
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -1096,5 +1115,54 @@ const styles = StyleSheet.create({
 
   bottomSpacing: {
     height: 20,
+  },
+
+  // Learning Actions Grid
+  learningActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  learningActionCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    position: 'relative',
+  },
+  learningActionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  learningActionIcon: {
+    width: 20,
+    height: 20,
+  },
+  learningActionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  learningActionSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  learningActionArrow: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
   },
 });

@@ -51,56 +51,6 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
-        name="learn"
-        options={{
-          title: 'Learn',
-          tabBarIcon: ({ focused }) => (
-            <View style={{
-              padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
-            }}>
-              <Image 
-                source={require('@/assets/images/icons/book-icon.png')}
-                style={{
-                  width: 26,
-                  height: 26,
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
-                }}
-              />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="duel"
-        options={{
-          title: 'Duel',
-          tabBarIcon: ({ focused }) => (
-            <View style={{
-              padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
-            }}>
-              <Image 
-                source={require('@/assets/images/icons/duel-icon.png')}
-                style={{
-                  width: 26,
-                  height: 26,
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
-                }}
-              />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
@@ -114,6 +64,32 @@ export default function TabLayout() {
             }}>
               <Image 
                 source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
+                style={{
+                  width: 26,
+                  height: 26,
+                  opacity: focused ? 1 : 0.7,
+                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                }}
+              />
+            </View>
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="learn"
+        options={{
+          title: 'Learn',
+          tabBarIcon: ({ focused }) => (
+            <View style={{
+              padding: 8,
+              borderRadius: 12,
+              borderWidth: focused ? 2 : 1,
+              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
+              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+            }}>
+              <Image 
+                source={require('@/assets/images/icons/book-icon.png')}
                 style={{
                   width: 26,
                   height: 26,
