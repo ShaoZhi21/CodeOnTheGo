@@ -33,6 +33,17 @@ interface DailyChallenge {
   completed: boolean;
 }
 
+interface LastActivity {
+  problemId: number;
+  problemTitle: string;
+  difficulty: string;
+  topic: string;
+  completedAt: string;
+  type: 'lesson' | 'pseudocode';
+  score?: number;
+  stars?: number;
+}
+
 const getTopicIcon = (topicName: string) => {
   const iconMap: { [key: string]: any } = {
     'Array': require('../../assets/images/icons/list-icon.png'),
@@ -63,6 +74,15 @@ const getTopicIcon = (topicName: string) => {
   return matchingKey ? iconMap[matchingKey] : require('../../assets/images/icons/code-icon.png');
 };
 
+const getDifficultyColor = (difficulty: string) => {
+  switch (difficulty) {
+    case 'Easy': return '#00B8A3';
+    case 'Medium': return '#FFA116';
+    case 'Hard': return '#FF375F';
+    default: return '#6564c7';
+  }
+};
+
 export default function HomeScreen() {
   console.log('HomeScreen component loaded');
   const { showStreakAnimation } = useStreak();
@@ -81,6 +101,8 @@ export default function HomeScreen() {
   });
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
+  const [lastActivities, setLastActivities] = useState<LastActivity[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
 
   // Refresh data when screen comes into focus (e.g., after lesson/quiz completion)
   useFocusEffect(
@@ -90,6 +112,7 @@ export default function HomeScreen() {
       loadTopicsProgress();
       loadAllTopics();
       loadDailyChallenge();
+      loadLastActivities();
     }, [])
   );
 
@@ -264,6 +287,100 @@ export default function HomeScreen() {
         from: 'home'
       }
     });
+  };
+
+  const loadLastActivities = async () => {
+    try {
+      console.log('🔄 loadLastActivities: Starting...');
+      setActivitiesLoading(true);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('❌ loadLastActivities: No user found');
+        return;
+      }
+
+      // Get last completed lesson (from user_lesson_completion)
+      const { data: lastLesson } = await supabase
+        .from('user_lesson_completion')
+        .select(`
+          problem_id,
+          completed_at,
+          quiz_score,
+          leetcode_problems (
+            title,
+            difficulty,
+            tags
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('quiz_completed', true)
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      // Get last completed pseudocode (from user_problem_progress)
+      const { data: lastPseudocode } = await supabase
+        .from('user_problem_progress')
+        .select(`
+          problem_id,
+          completed_at,
+          score,
+          stars,
+          leetcode_problems (
+            title,
+            difficulty,
+            tags
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_solved', true)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false })
+        .limit(1);
+
+      const activities: LastActivity[] = [];
+
+      // Add last lesson if exists
+      if (lastLesson && lastLesson.length > 0) {
+        const lesson = lastLesson[0];
+        const problem = lesson.leetcode_problems as any;
+        activities.push({
+          problemId: lesson.problem_id,
+          problemTitle: problem?.title || 'Unknown Problem',
+          difficulty: problem?.difficulty || 'Unknown',
+          topic: problem?.tags?.[0] || 'General',
+          completedAt: lesson.completed_at,
+          type: 'lesson',
+          score: lesson.quiz_score
+        });
+      }
+
+      // Add last pseudocode if exists
+      if (lastPseudocode && lastPseudocode.length > 0) {
+        const pseudocode = lastPseudocode[0];
+        const problem = pseudocode.leetcode_problems as any;
+        activities.push({
+          problemId: pseudocode.problem_id,
+          problemTitle: problem?.title || 'Unknown Problem',
+          difficulty: problem?.difficulty || 'Unknown',
+          topic: problem?.tags?.[0] || 'General',
+          completedAt: pseudocode.completed_at,
+          type: 'pseudocode',
+          score: pseudocode.score,
+          stars: pseudocode.stars
+        });
+      }
+
+      // Sort by completion date (most recent first)
+      activities.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+      
+      setLastActivities(activities.slice(0, 2)); // Show only the 2 most recent activities
+      console.log('✅ loadLastActivities: Loaded', activities.length, 'activities');
+    } catch (error) {
+      console.error('❌ loadLastActivities: Error:', error);
+    } finally {
+      setActivitiesLoading(false);
+    }
   };
 
   const loadDailyChallenge = async () => {
@@ -514,30 +631,170 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       {/* User Profile Header */}
       <View style={styles.profileContainer}>
-        <TouchableOpacity style={styles.userSection} onPress={() => router.push('/(tabs)/profile')}>
-          <Image source={require('../../assets/images/icons/profile-icon.png')} style={styles.avatar} />
-          <ThemedText style={styles.userName} numberOfLines={1} ellipsizeMode="tail">{profile?.name || 'User'}</ThemedText>
-        </TouchableOpacity>
+        {/* Left Container - Equal Width */}
+        <View style={styles.sideContainer}>
+          <TouchableOpacity style={styles.userSection} onPress={() => router.push('/(tabs)/profile')}>
+            <Image source={require('../../assets/images/icons/profile-icon.png')} style={styles.avatar} />
+            <ThemedText style={styles.userName} numberOfLines={1} ellipsizeMode="tail">{profile?.name || 'User'}</ThemedText>
+          </TouchableOpacity>
+        </View>
         
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statValue}>{dailyStats.streak}</ThemedText>
+        {/* App Icon in Middle - Centered */}
+        <View style={styles.appIconCenterContainer}>
+          <View style={styles.appIconContainer}>
+            <Image 
+              source={require('../../assets/images/icons/codeonthego-bird-icon.png')} 
+              style={styles.appIcon}
+            />
           </View>
-          <View style={styles.statItem}>
-            <Image source={require('../../assets/images/icons/trophy-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statValue}>{profile?.trophy_count || 0}</ThemedText>
-          </View>
-          <View style={styles.statItem}>
-            <Image source={require('../../assets/images/icons/magnifying-glass-icon.png')} style={styles.statIcon} />
-            <ThemedText style={styles.statValue}>{profile?.available_hints || 5}</ThemedText>
+        </View>
+        
+        {/* Right Container - Equal Width */}
+        <View style={styles.sideContainer}>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Image source={require('../../assets/images/icons/fire-icon.png')} style={styles.statIcon} />
+              <ThemedText style={styles.statValue} numberOfLines={1} ellipsizeMode="tail">{dailyStats.streak} days</ThemedText>
+            </View>
           </View>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Quick Practice */}
+        {/* Learning Journey - Moved to Top */}
         <View style={styles.sectionWithTopPadding}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionTitleContainer}>
+              <Image 
+                source={require('../../assets/images/icons/book-icon.png')} 
+                style={styles.sectionIcon}
+                tintColor="#8B5CF6"
+              />
+              <ThemedText style={styles.sectionTitle}>Your Learning Journey</ThemedText>
+            </View>
+          </View>
+          
+          {/* Learning Action Buttons */}
+          <View style={styles.subsection}>
+            <ThemedText style={styles.subsectionTitle}>Ready to Learn?</ThemedText>
+            
+            <View style={styles.learningActionsGrid}>
+              {/* Topical Roadmap Button */}
+              <TouchableOpacity 
+                style={[styles.learningActionCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]} 
+                onPress={() => router.push('/(tabs)/learn')}
+              >
+                <View style={[styles.learningActionIconContainer, { backgroundColor: '#F59E0B' }]}>
+                  <Image 
+                    source={require('../../assets/images/icons/book-icon.png')} 
+                    style={[styles.learningActionIcon, { tintColor: '#FFFFFF' }]}
+                  />
+                </View>
+                <ThemedText style={[styles.learningActionTitle, { color: '#92400E' }]}>Topical Roadmap</ThemedText>
+                <ThemedText style={[styles.learningActionSubtitle, { color: '#B45309' }]}>Explore the roadmap</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={[styles.smallArrowIcon, { tintColor: '#F59E0B' }]}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {/* Practice Problems Button */}
+              <TouchableOpacity 
+                style={[styles.learningActionCard, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]} 
+                onPress={() => router.push('/(tabs)/questions')}
+              >
+                <View style={[styles.learningActionIconContainer, { backgroundColor: '#3B82F6' }]}>
+                  <Image 
+                    source={require('../../assets/images/icons/question-icon.png')} 
+                    style={[styles.learningActionIcon, { tintColor: '#FFFFFF' }]}
+                  />
+                </View>
+                <ThemedText style={[styles.learningActionTitle, { color: '#1E40AF' }]}>Practice Problems</ThemedText>
+                <ThemedText style={[styles.learningActionSubtitle, { color: '#1D4ED8' }]}>Solve coding challenges</ThemedText>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={[styles.smallArrowIcon, { tintColor: '#3B82F6' }]}
+                  />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Recent Activity Card - Full width below the two buttons */}
+            {lastActivities.length > 0 && (
+              <View style={styles.horizontalActivityCard}>
+                {lastActivities.slice(0, 1).map((activity, index) => (
+                  <View key={`${activity.type}-${activity.problemId}`} style={styles.horizontalActivityContent}>
+                    <View style={styles.horizontalActivityLeft}>
+                      <View style={styles.horizontalActivityIconContainer}>
+                        <Image 
+                          source={activity.type === 'lesson' 
+                            ? require('../../assets/images/icons/book-icon.png')
+                            : require('../../assets/images/icons/code-icon.png')
+                          } 
+                          style={styles.horizontalActivityIcon}
+                          tintColor="#8B5CF6"
+                        />
+                      </View>
+                      <View style={styles.horizontalActivityInfo}>
+                        <ThemedText style={styles.horizontalActivityTitle} numberOfLines={1}>
+                          {activity.problemTitle}
+                        </ThemedText>
+                        <View style={styles.horizontalActivityMeta}>
+                          <ThemedText style={[styles.horizontalActivityDifficulty, { color: getDifficultyColor(activity.difficulty) }]}>
+                            {activity.difficulty}
+                          </ThemedText>
+                          <ThemedText style={styles.horizontalActivityTopic}>
+                            • {activity.topic}
+                          </ThemedText>
+                          {activity.score !== undefined && (
+                            <ThemedText style={styles.horizontalActivityScore}>
+                              • {activity.score}%
+                            </ThemedText>
+                          )}
+                          {activity.stars !== undefined && (
+                            <View style={styles.horizontalStarsContainer}>
+                              <ThemedText style={styles.horizontalActivityScore}>• </ThemedText>
+                              {[1, 2, 3].map(star => (
+                                <Image 
+                                  key={star}
+                                  source={require('../../assets/images/icons/star-icon.png')} 
+                                  style={[
+                                    styles.horizontalStarIcon, 
+                                    { opacity: star <= (activity.stars || 0) ? 1 : 0.3 }
+                                  ]}
+                                  tintColor="#FFD700"
+                                />
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.horizontalActivityRight}>
+                      <View style={styles.horizontalActivityBadge}>
+                        <ThemedText style={styles.horizontalActivityBadgeText}>
+                          {activity.type === 'lesson' ? 'Lesson' : 'Pseudocode'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText style={styles.horizontalActivityDate}>
+                        {new Date(activity.completedAt).toLocaleDateString()}
+                      </ThemedText>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+
+
+        {/* Quick Practice */}
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <Image 
@@ -574,166 +831,50 @@ export default function HomeScreen() {
           <View style={styles.quickActionsGrid}>
             {/* Daily Challenge Card */}
             <TouchableOpacity 
-              style={styles.actionCard} 
+              style={[styles.actionCard, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]} 
               onPress={handleRandomQuestion}
               disabled={challengeLoading}
             >
-              <View style={styles.actionIconContainer}>
+              <View style={[styles.actionIconContainer, { backgroundColor: '#EF4444' }]}>
                 <Image 
                   source={require('../../assets/images/icons/fire-icon.png')} 
-                  style={styles.actionIcon}
-                  tintColor="#8B5CF6"
+                  style={[styles.actionIcon, { tintColor: '#FFFFFF' }]}
                 />
               </View>
-              <ThemedText style={styles.actionTitle}>Daily Challenge</ThemedText>
-              <ThemedText style={styles.actionSubtitle}>{dailyStats.streak} day streak</ThemedText>
+              <ThemedText style={[styles.actionTitle, { color: '#991B1B' }]}>Daily Challenge</ThemedText>
+              <ThemedText style={[styles.actionSubtitle, { color: '#DC2626' }]}>{dailyStats.streak} day streak</ThemedText>
               <View style={styles.actionArrow}>
                 {challengeLoading ? (
-                  <ActivityIndicator size="small" color="#8B5CF6" />
+                  <ActivityIndicator size="small" color="#EF4444" />
                 ) : (
                   <Image 
                     source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={styles.smallArrowIcon}
-                    tintColor="#8B5CF6"
+                    style={[styles.smallArrowIcon, { tintColor: '#EF4444' }]}
                   />
                 )}
               </View>
             </TouchableOpacity>
 
             {/* Quiz Mode Card */}
-            <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/screens/quiz')}>
-              <View style={styles.actionIconContainer}>
+            <TouchableOpacity 
+              style={[styles.actionCard, { backgroundColor: '#D1FAE5', borderColor: '#10B981' }]} 
+              onPress={() => router.push('/screens/quiz')}
+            >
+              <View style={[styles.actionIconContainer, { backgroundColor: '#10B981' }]}>
                 <Image 
                   source={require('../../assets/images/icons/quiz-icon.png')} 
-                  style={styles.actionIcon}
-                  tintColor="#8B5CF6"
+                  style={[styles.actionIcon, { tintColor: '#FFFFFF' }]}
                 />
               </View>
-              <ThemedText style={styles.actionTitle}>Quiz Mode</ThemedText>
-              <ThemedText style={styles.actionSubtitle}>Test yourself</ThemedText>
+              <ThemedText style={[styles.actionTitle, { color: '#065F46' }]}>Quiz Mode</ThemedText>
+              <ThemedText style={[styles.actionSubtitle, { color: '#047857' }]}>Test yourself</ThemedText>
               <View style={styles.actionArrow}>
                 <Image 
                   source={require('../../assets/images/icons/up-arrow.png')} 
-                  style={styles.smallArrowIcon}
-                  tintColor="#8B5CF6"
+                  style={[styles.smallArrowIcon, { tintColor: '#10B981' }]}
                 />
               </View>
             </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Learning Journey */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <Image 
-                source={require('../../assets/images/icons/book-icon.png')} 
-                style={styles.sectionIcon}
-                tintColor="#8B5CF6"
-              />
-              <ThemedText style={styles.sectionTitle}>Your Learning Journey</ThemedText>
-            </View>
-          </View>
-          
-
-
-          {/* Learning Action Buttons */}
-          <View style={styles.subsection}>
-            <ThemedText style={styles.subsectionTitle}>Ready to Learn?</ThemedText>
-            
-            <View style={styles.learningActionsGrid}>
-              {/* Start Learning Button */}
-              <TouchableOpacity 
-                style={styles.learningActionCard} 
-                onPress={() => router.push('/(tabs)/learn')}
-              >
-                <View style={styles.learningActionIconContainer}>
-                  <Image 
-                    source={require('../../assets/images/icons/book-icon.png')} 
-                    style={styles.learningActionIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-                <ThemedText style={styles.learningActionTitle}>Start Learning</ThemedText>
-                <ThemedText style={styles.learningActionSubtitle}>Explore the roadmap</ThemedText>
-                <View style={styles.learningActionArrow}>
-                  <Image 
-                    source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={styles.smallArrowIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {/* Practice Problems Button */}
-              <TouchableOpacity 
-                style={styles.learningActionCard} 
-                onPress={() => router.push('/(tabs)/questions')}
-              >
-                <View style={styles.learningActionIconContainer}>
-                  <Image 
-                    source={require('../../assets/images/icons/question-icon.png')} 
-                    style={styles.learningActionIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-                <ThemedText style={styles.learningActionTitle}>Practice Problems</ThemedText>
-                <ThemedText style={styles.learningActionSubtitle}>Solve coding challenges</ThemedText>
-                <View style={styles.learningActionArrow}>
-                  <Image 
-                    source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={styles.smallArrowIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {/* Take Quiz Button */}
-              <TouchableOpacity 
-                style={styles.learningActionCard} 
-                onPress={() => router.push('/screens/quiz')}
-              >
-                <View style={styles.learningActionIconContainer}>
-                  <Image 
-                    source={require('../../assets/images/icons/quiz-icon.png')} 
-                    style={styles.learningActionIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-                <ThemedText style={styles.learningActionTitle}>Take Quiz</ThemedText>
-                <ThemedText style={styles.learningActionSubtitle}>Test your knowledge</ThemedText>
-                <View style={styles.learningActionArrow}>
-                  <Image 
-                    source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={styles.smallArrowIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-              </TouchableOpacity>
-
-              {/* View Progress Button */}
-              <TouchableOpacity 
-                style={styles.learningActionCard} 
-                onPress={() => router.push('/(tabs)/learn')}
-              >
-                <View style={styles.learningActionIconContainer}>
-                  <Image 
-                    source={require('../../assets/images/icons/trophy-icon.png')} 
-                    style={styles.learningActionIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-                <ThemedText style={styles.learningActionTitle}>View Progress</ThemedText>
-                <ThemedText style={styles.learningActionSubtitle}>Track your journey</ThemedText>
-                <View style={styles.learningActionArrow}>
-                  <Image 
-                    source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={styles.smallArrowIcon}
-                    tintColor="#8B5CF6"
-                  />
-                </View>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
 
@@ -768,56 +909,77 @@ const styles = StyleSheet.create({
   profileContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#8B5CF6',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  sideContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    marginHorizontal: 8,
   },
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
+    minWidth: 0, // Allow flex shrinking
+    justifyContent: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   avatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    marginRight: 12,
+    marginRight: 8,
     backgroundColor: '#fff',
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   userName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
-    flex: 1,
+    maxWidth: 120,
   },
   statsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
+    justifyContent: 'flex-end',
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    minWidth: 60,
+    paddingVertical: 10,
+    minWidth: 90,
+    maxWidth: 120,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   statIcon: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
     marginRight: 6,
     // Removed tintColor to keep original icon colors
   },
@@ -836,19 +998,48 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+
+  // App Icon Styles
+  appIconCenterContainer: {
+    flex: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingRight: 22,
+  },
+  appIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  appIcon: {
+    width: 35,
+    height: 35,
+    resizeMode: 'contain',
   },
 
   // Sections
   section: {
     paddingHorizontal: 20,
-    marginBottom: 32,
+    marginBottom: 0,
   },
   sectionWithTopPadding: {
     paddingHorizontal: 20,
-    marginBottom: 32,
+    marginBottom: 0,
     paddingTop: 16,
   },
   sectionHeader: {
@@ -1164,5 +1355,188 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
+  },
+
+  // Activity Dashboard Styles
+  activityGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  activityCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  activityIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F3F0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityIcon: {
+    width: 16,
+    height: 16,
+  },
+  activityBadge: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  activityBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  activityDetails: {
+    gap: 6,
+  },
+  activityDetail: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  activityDetailLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  activityDetailValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  starsContainer: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  starIcon: {
+    width: 12,
+    height: 12,
+  },
+  activityDate: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+
+  // Horizontal Activity Card Styles
+  horizontalActivityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    marginBottom: 8,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  horizontalActivityContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  horizontalActivityLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  horizontalActivityIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F3F0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  horizontalActivityIcon: {
+    width: 20,
+    height: 20,
+  },
+  horizontalActivityInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  horizontalActivityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  horizontalActivityMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  horizontalActivityDifficulty: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  horizontalActivityTopic: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  horizontalActivityScore: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  horizontalStarsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  },
+  horizontalStarIcon: {
+    width: 10,
+    height: 10,
+  },
+  horizontalActivityRight: {
+    alignItems: 'flex-end',
+  },
+  horizontalActivityBadge: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  horizontalActivityBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  horizontalActivityDate: {
+    fontSize: 11,
+    color: '#9CA3AF',
   },
 });

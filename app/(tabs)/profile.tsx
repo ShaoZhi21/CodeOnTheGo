@@ -293,22 +293,8 @@ export default function ProfileScreen() {
               <ThemedText style={styles.statLabel}>Complete</ThemedText>
             </View>
             <View style={styles.statItem}>
-              <View style={styles.trophyContainer}>
-                <Image 
-                  source={require('@/assets/images/icons/trophy-icon.png')}
-                  style={styles.trophyIcon}
-                />
-                <ThemedText style={styles.statNumber}>{profile.trophy_count}</ThemedText>
-              </View>
-              <ThemedText style={styles.statLabel}>Trophies</ThemedText>
-            </View>
-            <View style={styles.statItem}>
               <ThemedText style={styles.statNumber}>🔥 {profile.current_streak}</ThemedText>
               <ThemedText style={styles.statLabel}>Streak</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>{profile.available_hints || 0}</ThemedText>
-              <ThemedText style={styles.statLabel}>Hints</ThemedText>
             </View>
           </View>
         </View>
@@ -515,17 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  trophyContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trophyIcon: {
-    width: 18,
-    height: 18,
-    tintColor: '#FFD700',
-    marginRight: 6,
-  },
+
   settingsContainer: {
     marginBottom: 80,
   },
