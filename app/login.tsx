@@ -160,22 +160,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: '#faf5fd',
+    backgroundColor: '#fff',
   },
   formContainer: {
     padding: 20,
     justifyContent: 'center',
     marginBottom: 20,
     backgroundColor: 'white',
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
   },
   title: {
     fontSize: 32,
