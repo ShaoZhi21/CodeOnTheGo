@@ -341,7 +341,7 @@ export default function AllQuestionsScreen() {
       console.log('🔄 fetchProblems called - search:', search, 'sortOption:', sortOption, 'background:', backgroundFetch);
       
       if (!backgroundFetch) {
-        setLoading(true);
+      setLoading(true);
       }
       setError(null);
 
@@ -420,11 +420,11 @@ export default function AllQuestionsScreen() {
     } catch (err) {
       console.error('Error fetching problems:', err);
       if (!backgroundFetch) {
-        setError('Failed to load problems. Please try again.');
+      setError('Failed to load problems. Please try again.');
       }
     } finally {
       if (!backgroundFetch) {
-        setLoading(false);
+      setLoading(false);
       }
       setIsSearching(false);
     }
@@ -579,7 +579,7 @@ export default function AllQuestionsScreen() {
         return 'Medium Only';
       case 'Hard':
         return 'Hard Only';
-      default:
+        default:
         return 'All Difficulties';
     }
   };
@@ -642,30 +642,30 @@ export default function AllQuestionsScreen() {
       <View style={styles.sortingContainer}>
         <View style={styles.filterRow}>
           {/* Difficulty Filter */}
-          <TouchableOpacity 
+        <TouchableOpacity 
             style={styles.filterBubble}
             onPress={() => setShowDifficultyFilter(!showDifficultyFilter)}
-            activeOpacity={0.7}
-          >
+          activeOpacity={0.7}
+        >
             <ThemedText style={styles.filterBubbleText}>{getDifficultyFilterDisplayText()}</ThemedText>
             <ThemedText style={styles.filterBubbleIcon}>▼</ThemedText>
-          </TouchableOpacity>
+        </TouchableOpacity>
 
           {/* Sort Options */}
-          <TouchableOpacity 
+        <TouchableOpacity 
             style={styles.sortingBubble}
             onPress={() => setShowSortOptions(!showSortOptions)}
-            activeOpacity={0.7}
-          >
+          activeOpacity={0.7}
+        >
             <ThemedText style={styles.sortingBubbleText}>Sort: {getSortDisplayText()}</ThemedText>
             <ThemedText style={styles.sortingBubbleIcon}>▼</ThemedText>
-          </TouchableOpacity>
+        </TouchableOpacity>
         </View>
         
         {/* Difficulty Filter Options */}
         {showDifficultyFilter && (
           <View style={styles.filterOptionsContainer}>
-            <TouchableOpacity 
+        <TouchableOpacity 
               style={[styles.filterOption, difficultyFilter === 'All' && styles.activeFilterOption]}
               onPress={() => {
                 setDifficultyFilter('All');
@@ -675,12 +675,12 @@ export default function AllQuestionsScreen() {
                   setProblems(sortedProblems);
                 }
               }}
-            >
+        >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'All' && styles.activeFilterOptionText]}>
                 All Difficulties
               </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
+        </TouchableOpacity>
+        <TouchableOpacity 
               style={[styles.filterOption, difficultyFilter === 'Easy' && styles.activeFilterOption]}
               onPress={() => {
                 setDifficultyFilter('Easy');
@@ -705,7 +705,7 @@ export default function AllQuestionsScreen() {
                   setProblems(sortedProblems);
                 }
               }}
-            >
+        >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Medium' && styles.activeFilterOptionText]}>
                 Medium Only
               </ThemedText>
@@ -724,7 +724,7 @@ export default function AllQuestionsScreen() {
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Hard' && styles.activeFilterOptionText]}>
                 Hard Only
               </ThemedText>
-            </TouchableOpacity>
+        </TouchableOpacity>
           </View>
         )}
         
