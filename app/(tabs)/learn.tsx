@@ -184,35 +184,37 @@ export default function LearnScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user && topics.length > 0) {
-        // Calculate progress for each topic
+        // Use the same topic_stats view that "Your Progress" uses for consistency
+        const { data: topicStats, error: statsError } = await supabase
+          .from('topic_stats')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (statsError) {
+          console.error('Error loading topic stats:', statsError);
+          return;
+        }
+
+        // Create progress map from topic_stats data
         const progressMap: { [key: string]: TopicProgress } = {};
         
         for (const topic of topics) {
-          // Get total problems for this topic
-          const { data: topicProblems } = await supabase
-            .from('topic_problems')
-            .select('leetcode_id')
-            .eq('topic_name', topic.name)
-            .eq('is_premium', false);
-
-          const totalProblems = topicProblems?.length || 0;
-
-          // Get completed problems for this topic
-          const { data: completedData } = await supabase
-            .from('user_problem_progress')
-            .select('problem_id')
-            .eq('user_id', user.id)
-            .eq('is_solved', true)
-            .in('problem_id', topicProblems?.map(p => p.leetcode_id) || []);
-
-          const completedProblems = completedData?.length || 0;
-
-          if (totalProblems > 0) {
+          const topicStat = topicStats.find(stat => stat.topic_name === topic.name);
+          
+          if (topicStat) {
             progressMap[topic.name] = {
               topic_name: topic.name,
-              completed_problems: completedProblems,
-              total_problems: totalProblems,
-              completion_percentage: (completedProblems / totalProblems) * 100,
+              completed_problems: topicStat.completed_problems || 0,
+              total_problems: topicStat.total_problems || 0,
+              completion_percentage: topicStat.completion_percentage || 0,
+            };
+          } else {
+            // If no stats found for this topic, set default values
+            progressMap[topic.name] = {
+              topic_name: topic.name,
+              completed_problems: 0,
+              total_problems: 0,
+              completion_percentage: 0,
             };
           }
         }

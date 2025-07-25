@@ -58,16 +58,23 @@ export default function LessonMCQScreen() {
   // Reset state if this is a redo
   useEffect(() => {
     if (params.redo === '1') {
-      setCurrentQuestionIndex(0);
-      setSelectedAnswers([]);
-      setScore(0);
-      setShowResult(false);
-      setSelectedOption(null);
-      setShowExplanation(false);
-      setHasSubmitted(false);
-      setIsCorrect(false);
-      setQuizCompleted(false);
-      slideAnim.setValue(screenHeight);
+      // Batch all state updates together to avoid multiple re-renders
+      const resetState = () => {
+        setCurrentQuestionIndex(0);
+        setSelectedAnswers([]);
+        setScore(0);
+        setShowResult(false);
+        setSelectedOption(null);
+        setShowExplanation(false);
+        setHasSubmitted(false);
+        setIsCorrect(false);
+        setQuizCompleted(false);
+      };
+      
+      // Use requestAnimationFrame to ensure we're not in the middle of a render
+      requestAnimationFrame(() => {
+        resetState();
+      });
     }
   }, [params.redo]);
     
@@ -108,6 +115,13 @@ export default function LessonMCQScreen() {
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
 
+  // Reset slideAnim if this is a redo (after animation values are declared)
+  useEffect(() => {
+    if (params.redo === '1') {
+      slideAnim.setValue(screenHeight);
+    }
+  }, [params.redo, slideAnim]);
+
   const currentQuestion = quizData?.quiz[currentQuestionIndex];
   const totalQuestions = quizData?.quiz.length || 0;
 
@@ -121,37 +135,42 @@ export default function LessonMCQScreen() {
 
   // Bounce animation when question appears
   useEffect(() => {
-    // Reset animations
-    bounceAnim.setValue(0);
-    fadeAnim.setValue(0);
-    scaleAnim.setValue(0.8);
-    setSelectedOption(null);
-    setShowExplanation(false);
-    setHasSubmitted(false);
-    setIsCorrect(false);
-    slideAnim.setValue(screenHeight);
+    // Use requestAnimationFrame to ensure we're not in the middle of a render
+    requestAnimationFrame(() => {
+      // Reset animations
+      bounceAnim.setValue(0);
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.8);
+      slideAnim.setValue(screenHeight);
+      
+      // Reset state
+      setSelectedOption(null);
+      setShowExplanation(false);
+      setHasSubmitted(false);
+      setIsCorrect(false);
 
-    // Start bounce animation
-    Animated.parallel([
-      Animated.spring(bounceAnim, {
-        toValue: 1,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [currentQuestionIndex]);
+      // Start bounce animation
+      Animated.parallel([
+        Animated.spring(bounceAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [currentQuestionIndex, bounceAnim, fadeAnim, scaleAnim, slideAnim]);
 
   const handleAnswerSelect = (selectedAnswer: string) => {
     // Allow re-selection if not submitted or if previous answer was wrong
@@ -226,14 +245,17 @@ export default function LessonMCQScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      setShowExplanation(false);
-      
-      if (currentQuestionIndex < totalQuestions - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-      } else {
-        // Quiz completed: check if this is first daily activity
-        checkDailyStreakAndNavigate();
-      }
+      // Use requestAnimationFrame to ensure we're not in the middle of a render
+      requestAnimationFrame(() => {
+        setShowExplanation(false);
+        
+        if (currentQuestionIndex < totalQuestions - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        } else {
+          // Quiz completed: check if this is first daily activity
+          checkDailyStreakAndNavigate();
+        }
+      });
     });
   };
 
@@ -378,15 +400,18 @@ export default function LessonMCQScreen() {
   };
 
   const handleRetryQuiz = () => {
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
-    setScore(0);
-    setShowResult(false);
-    setSelectedOption(null);
-    setShowExplanation(false);
-    setHasSubmitted(false);
-    setIsCorrect(false);
-    slideAnim.setValue(screenHeight);
+    // Use requestAnimationFrame to ensure we're not in the middle of a render
+    requestAnimationFrame(() => {
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers([]);
+      setScore(0);
+      setShowResult(false);
+      setSelectedOption(null);
+      setShowExplanation(false);
+      setHasSubmitted(false);
+      setIsCorrect(false);
+      slideAnim.setValue(screenHeight);
+    });
   };
 
   const handleBackToLesson = () => {
@@ -559,9 +584,12 @@ export default function LessonMCQScreen() {
                       useNativeDriver: true,
                     }),
                   ]).start(() => {
-                    setShowExplanation(false);
-                    setHasSubmitted(false);
-                    setIsCorrect(false);
+                    // Use requestAnimationFrame to ensure we're not in the middle of a render
+                    requestAnimationFrame(() => {
+                      setShowExplanation(false);
+                      setHasSubmitted(false);
+                      setIsCorrect(false);
+                    });
                   });
                 }}
               >

@@ -209,8 +209,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     minWidth: 280,
     maxWidth: '90%',
-    minHeight: 180,
-    maxHeight: 300, // Increased max height
+    maxHeight: 220,
   },
   closeButton: {
     position: 'absolute',
@@ -238,11 +237,11 @@ const styles = StyleSheet.create({
   modalContent: {
     alignItems: 'center',
     paddingTop: 5,
-    gap: 15,
+    gap: 0,
   },
   questionHeader: {
     width: '100%',
-    marginBottom: 5,
+    marginBottom: 0,
   },
   titleRow: {
     flexDirection: 'row',
@@ -277,7 +276,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 15,
     width: '100%',
-    marginTop: 'auto', // Push buttons to bottom
+    marginTop: 20, // Push buttons to bottom
   },
   squareButton: {
     flex: 1,

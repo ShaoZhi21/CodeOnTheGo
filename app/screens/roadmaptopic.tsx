@@ -68,7 +68,7 @@ const decodeHtmlEntities = (text: string): string => {
         }
       });
   } catch (error) {
-    console.warn('Error in decodeHtmlEntities:', error, 'Original text:', text);
+    // Remove console.warn to avoid text rendering issues
     return text || ''; // Return original text or empty string on error
   }
 };
@@ -131,20 +131,19 @@ export default function RoadmapTopic() {
   // Reload data when screen comes into focus (e.g., returning from question screen)
   useFocusEffect(
     useCallback(() => {
-      if (topicString && needsRefresh) {
+      if (topicString) {
         console.log('🔄 Screen focused, needsRefresh:', needsRefresh);
         console.log('🔄 fromPage:', fromPage);
-        
-        // Reset the refresh flag
-        setNeedsRefresh(false);
         
         // Always refresh lesson completion data when coming back to roadmap
         refreshLessonCompletionData();
         
-        // Force refresh if coming from quizcomplete or pseudocomplete, otherwise only if no preFetchedData
-        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete' || !preFetchedData) {
+        // Force refresh if coming from quizcomplete, pseudocomplete, or if needsRefresh is true
+        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete' || needsRefresh || !preFetchedData) {
           console.log('🔄 Forcing data refresh');
           loadTopicData();
+          // Reset the refresh flag after loading
+          setNeedsRefresh(false);
         } else {
           console.log('🔄 Using preFetchedData, only refreshing lesson completion');
         }
@@ -160,6 +159,14 @@ export default function RoadmapTopic() {
       setNeedsRefresh(true);
     }
   }, [fromPage]);
+
+  // Ensure data is loaded on mount if no preFetchedData
+  useEffect(() => {
+    if (topicString && !preFetchedData && questions.length === 0) {
+      console.log('🔄 No preFetchedData, loading topic data on mount');
+      loadTopicData();
+    }
+  }, [topicString, preFetchedData, questions.length]);
 
   // Removed automatic scroll to bottom to prevent jumping behavior
 
@@ -191,6 +198,17 @@ export default function RoadmapTopic() {
         return;
       }
 
+      // Get updated progress data (including stars)
+      const { data: progressData, error: progressError } = await supabase
+        .from('user_problem_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('problem_id', problemIds);
+
+      if (progressError) {
+        console.error('RoadmapTopic: Error fetching progress:', progressError);
+      }
+
       // Update lesson progress state
       const newLessonProgress: Record<number, boolean> = {};
       lessonData?.forEach(lesson => {
@@ -199,8 +217,26 @@ export default function RoadmapTopic() {
         }
       });
 
+      // Update progress state (including stars)
+      const newProgress: Record<number, UserProgress> = {};
+      progressData?.forEach(p => {
+        newProgress[p.problem_id] = {
+          completed: p.is_solved,
+          stars: p.stars || 0,
+          score: p.best_score
+        };
+      });
+
+      // Update questions with new stars data
+      const updatedQuestions = questions.map(q => ({
+        ...q,
+        stars: newProgress[q.leetcode_id]?.stars || q.stars || 0
+      }));
+
       setLessonProgress(newLessonProgress);
-      console.log('RoadmapTopic: Lesson completion data updated successfully');
+      setProgress(newProgress);
+      setQuestions(updatedQuestions);
+      console.log('RoadmapTopic: Lesson completion and progress data updated successfully');
     } catch (error) {
       console.error('RoadmapTopic: Error in refreshLessonCompletionData:', error);
     }
