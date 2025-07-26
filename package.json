@@ -62,7 +62,8 @@
     "react-native-web": "~0.20.0",
     "react-native-websocket": "^1.0.2",
     "react-native-webview": "13.13.5",
-    "react-syntax-highlighter": "^15.6.1"
+    "react-syntax-highlighter": "^15.6.1",
+    "expo-dev-client": "~5.2.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
