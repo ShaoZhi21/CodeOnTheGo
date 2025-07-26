@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AnalysisModal } from '../components/AnalysisModal';
 
@@ -815,18 +815,48 @@ export default function QuestionScreen() {
     }
   }, [preFetchedData]);
 
+  // Track current scroll position for keyboard handling
+  const [currentScrollY, setCurrentScrollY] = useState(0);
+
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
-      // Auto scroll down when keyboard opens
-      setTimeout(() => {
-        mainScrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
+      const keyboardHeight = event.endCoordinates.height;
+      const focusedInput = TextInput.State.currentlyFocusedInput();
+      
+      if (focusedInput && mainScrollViewRef.current) {
+        // Longer delay to let KeyboardAvoidingView do its work first
+        setTimeout(() => {
+          focusedInput.measureInWindow((x: number, y: number, width: number, height: number) => {
+            const screenHeight = Dimensions.get('window').height;
+            const keyboardTopPosition = screenHeight - keyboardHeight;
+            
+            // Calculate where we want the input to be positioned
+            const desiredInputPosition = keyboardTopPosition - height - 40;
+            
+            // Calculate the scroll adjustment needed
+            const scrollAdjustment = y - desiredInputPosition;
+            
+            // Only scroll if adjustment is significant
+            if (Math.abs(scrollAdjustment) > 10) {
+              if (mainScrollViewRef.current) {
+                // Calculate new scroll position relative to current position
+                const newScrollY = currentScrollY + scrollAdjustment;
+                
+                mainScrollViewRef.current.scrollTo({
+                  y: Math.max(0, newScrollY),
+                  animated: true
+                });
+              }
+            }
+          });
+        }, 300); // Increased delay to let KeyboardAvoidingView work first
+      }
     });
 
     return () => {
       keyboardDidShowListener?.remove();
     };
-  }, []);
+  }, [currentScrollY]);
 
   // Function to parse examples from HTML content (improved)
   const parseExamplesFromHtmlSimple = (htmlContent: string): { examples: Example[], cleanedHtml: string } => {
@@ -1734,15 +1764,19 @@ export default function QuestionScreen() {
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? -180 : -220}
+        keyboardVerticalOffset={0}
       >
         <ScrollView 
           style={[styles.content, { flex: 1 }]} 
-          contentContainerStyle={{ paddingBottom: 20 }}
+          contentContainerStyle={{ paddingBottom: 0 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="interactive"
           ref={mainScrollViewRef}
+          onScroll={(event) => {
+            setCurrentScrollY(event.nativeEvent.contentOffset.y);
+          }}
+          scrollEventThrottle={16}
         >
           <View style={styles.buttonContainer}>
             <TouchableOpacity style={[styles.toggleButton, { backgroundColor: showProblem ? '#6564c7' : '#c7c1e9' }]} onPress={() => setShowProblem(true)}>

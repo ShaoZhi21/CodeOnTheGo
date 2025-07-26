@@ -1,5 +1,4 @@
 import { ThemedText } from '@/components/ThemedText';
-import React from 'react';
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface ElseBlockProps {
@@ -29,6 +28,8 @@ export function ElseBlock({ body, onChangeBody, onDelete, borderStyle, explanati
           placeholder="then..."
           placeholderTextColor="#aaa"
           multiline
+          blurOnSubmit={true}
+          returnKeyType="done"
         />
       </View>
       {explanation && (

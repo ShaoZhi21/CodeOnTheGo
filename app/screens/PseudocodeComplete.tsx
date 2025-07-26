@@ -35,9 +35,6 @@ export default function PseudocodeComplete() {
           from: 'pseudocomplete'
         }
       });
-    } else if (from === 'allquestions') {
-      console.log('Navigating back to allquestions');
-      router.replace('/screens/allquestions');
     } else if (from === 'question') {
       console.log('Navigating back to question');
       router.replace('/screens/question');

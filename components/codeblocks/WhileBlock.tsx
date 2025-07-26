@@ -1,5 +1,4 @@
 import { ThemedText } from '@/components/ThemedText';
-import React from 'react';
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface WhileBlockProps {
@@ -24,6 +23,8 @@ export function WhileBlock({ condition, body, onChangeCondition, onChangeBody, o
             onChangeText={onChangeCondition}
             placeholder="condition"
             placeholderTextColor="#aaa"
+            blurOnSubmit={true}
+            returnKeyType="done"
           />
           {onDelete && (
             <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
@@ -38,6 +39,8 @@ export function WhileBlock({ condition, body, onChangeCondition, onChangeBody, o
           placeholder="do..."
           placeholderTextColor="#aaa"
           multiline
+          blurOnSubmit={true}
+          returnKeyType="done"
         />
       </View>
       {explanation && (

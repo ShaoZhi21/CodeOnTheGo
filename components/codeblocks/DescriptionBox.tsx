@@ -32,6 +32,8 @@ const DescriptionBox: React.FC<DescriptionBoxProps> = ({ value, onChangeText, pl
             multiline
             placeholder={placeholder || "Write your solution here..."}
             maxLength={CHAR_LIMIT} // allow a little overflow for warning
+            blurOnSubmit={true}
+            returnKeyType="done"
           />
           {isOverLimit && (
             <Text style={styles.limitWarning}>Max characters. Use a new box.</Text>

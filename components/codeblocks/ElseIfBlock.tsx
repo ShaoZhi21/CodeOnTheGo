@@ -1,5 +1,4 @@
 import { ThemedText } from '@/components/ThemedText';
-import React from 'react';
 import { Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 interface ElseIfBlockProps {
@@ -25,6 +24,8 @@ export function ElseIfBlock({ condition, body, onChangeCondition, onChangeBody, 
             onChangeText={onChangeCondition}
             placeholder="condition"
             placeholderTextColor="#aaa"
+            blurOnSubmit={true}
+            returnKeyType="done"
           />
           {onDelete && (
             <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
@@ -39,6 +40,8 @@ export function ElseIfBlock({ condition, body, onChangeCondition, onChangeBody, 
           placeholder="then..."
           placeholderTextColor="#aaa"
           multiline
+          blurOnSubmit={true}
+          returnKeyType="done"
         />
       </View>
       {explanation && (
