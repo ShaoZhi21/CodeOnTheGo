@@ -317,35 +317,50 @@ export default function HomeScreen() {
 
   const fetchRecapLessons = async () => {
     try {
+      console.log('🔄 fetchRecapLessons: Starting...');
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ fetchRecapLessons: No user found');
+        return;
+      }
 
+      console.log('🔍 fetchRecapLessons: Fetching last 3 completed lessons for user:', user.id);
+      
       // Fetch last 3 completed lessons
       const { data: lessonCompletions, error } = await supabase
         .from('user_lesson_completion')
-        .select('problem_id, completed_at')
+        .select('problem_id, completed_at, created_at')
         .eq('user_id', user.id)
         .eq('quiz_completed', true)
-        .order('completed_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(3);
 
       if (error) {
-        console.error('Error fetching lesson completions:', error);
+        console.error('❌ fetchRecapLessons: Error fetching lesson completions:', error);
         return;
+      }
+
+      console.log('📊 fetchRecapLessons: Found lesson completions:', lessonCompletions?.length || 0);
+      if (lessonCompletions && lessonCompletions.length > 0) {
+        console.log('📋 fetchRecapLessons: Lesson completions:', lessonCompletions);
       }
 
       if (lessonCompletions && lessonCompletions.length > 0) {
         // Get problem details for each completed lesson
         const problemIds = lessonCompletions.map(lesson => lesson.problem_id);
+        console.log('🔍 fetchRecapLessons: Fetching problem details for IDs:', problemIds);
+        
         const { data: problems, error: problemsError } = await supabase
           .from('leetcode_problems')
           .select('leetcode_id, title, difficulty')
           .in('leetcode_id', problemIds);
 
         if (problemsError) {
-          console.error('Error fetching problems:', problemsError);
+          console.error('❌ fetchRecapLessons: Error fetching problems:', problemsError);
           return;
         }
+
+        console.log('📊 fetchRecapLessons: Found problems:', problems?.length || 0);
 
         // Combine lesson completions with problem details
         const recapData: RecapLesson[] = lessonCompletions.map(lesson => {
@@ -358,11 +373,16 @@ export default function HomeScreen() {
           };
         });
 
+        console.log('✅ fetchRecapLessons: Setting recap lessons:', recapData);
         setRecapLessons(recapData);
         setRecapQuestionCount(recapData.length * 3); // 3 questions per lesson
+      } else {
+        console.log('ℹ️ fetchRecapLessons: No completed lessons found');
+        setRecapLessons([]);
+        setRecapQuestionCount(0);
       }
     } catch (error) {
-      console.error('Error in fetchRecapLessons:', error);
+      console.error('❌ fetchRecapLessons: Error in fetchRecapLessons:', error);
     }
   };
 
@@ -734,17 +754,17 @@ export default function HomeScreen() {
               <View style={styles.recapContent}>
                 <ThemedText style={styles.recapTitle}>Active Recall</ThemedText>
                 <ThemedText style={styles.recapDescription}>
-                  Recap questions your last 3 completed lessons
+                  Your last 3 questions:
                 </ThemedText>
                 <View style={styles.recapTagsContainer}>
                   {recapLessons.length === 0 ? (
                     <View style={styles.recapTag}>
-                      <ThemedText style={styles.recapTagText}>No lessons completed</ThemedText>
+                      <ThemedText style={styles.recapTagText} numberOfLines={1} ellipsizeMode="tail">No lessons completed</ThemedText>
                     </View>
                   ) : (
                     recapLessons.map((lesson, index) => (
                       <View key={index} style={styles.recapTag}>
-                        <ThemedText style={styles.recapTagText}>{lesson.title}</ThemedText>
+                        <ThemedText style={styles.recapTagText} numberOfLines={1} ellipsizeMode="tail">{lesson.title}</ThemedText>
                       </View>
                     ))
                   )}
@@ -1430,6 +1450,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: 'flex-start',
+    maxWidth: 100,
   },
   recapTagText: {
     fontSize: 11,
