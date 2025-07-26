@@ -169,7 +169,29 @@ export default function CodeSummary() {
         throw new Error(`Failed to check existing progress: ${checkError.message}`);
       }
 
-      const isNewCompletion = !existingProgress;
+      // Check if lesson is also completed
+      const { data: lessonCompletion, error: lessonError } = await supabase
+        .from('user_lesson_completion')
+        .select('quiz_completed')
+        .eq('user_id', userObj.id)
+        .eq('problem_id', parseInt(problemId))
+        .single();
+
+      if (lessonError && lessonError.code !== 'PGRST116') {
+        throw new Error(`Failed to check lesson completion: ${lessonError.message}`);
+      }
+
+      // Problem is fully completed if both pseudocode (existingProgress) and lesson (lessonCompletion) are done
+      const isFullyCompleted = existingProgress && lessonCompletion?.quiz_completed;
+      const isNewCompletion = !isFullyCompleted;
+
+      console.log('🔍 Completion check results:', {
+        problemId,
+        hasPseudocodeProgress: !!existingProgress,
+        hasLessonCompletion: !!lessonCompletion?.quiz_completed,
+        isFullyCompleted,
+        isNewCompletion
+      });
 
       // Use unified completion logic
       const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
@@ -181,6 +203,7 @@ export default function CodeSummary() {
       // Only update profile stats if this is a new completion
       if (isNewCompletion) {
         console.log('🔄 Starting profile stats update for new completion...');
+        console.log('✅ This is a NEW completion - updating profile stats');
         
         // Get problem difficulty from leetcode_problems
         console.log('📊 Fetching problem difficulty for problemId:', problemId);
@@ -275,6 +298,7 @@ export default function CodeSummary() {
         console.log('✅ Successfully updated user_profiles table');
       } else {
         console.log('ℹ️ Problem already completed, skipping profile stats update');
+        console.log('ℹ️ This is a RE-COMPLETION - only updating problem progress');
       }
 
       Alert.alert('Success', 'Problem marked as complete!');

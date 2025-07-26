@@ -8,10 +8,10 @@ import React from 'react';
 import { ActivityIndicator, Alert, Dimensions, Image, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
 } from 'react-native-reanimated';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -237,10 +237,11 @@ export function AnalysisModal({
       console.log('🔍 Existing progress:', existingProgress);
 
       // Step 4: Save/Update problem progress
+      // Only set is_solved: true when pseudocode is completed (not just lesson)
       const progressData = {
         user_id: user.id,
         problem_id: problemId,
-        is_solved: true, // This will mark both pseudocode and lesson as completed
+        is_solved: true, // Only set to true when pseudocode is completed
         score: analysis.score || 0,
         stars: Math.min(analysis.stars || 0, 3), // Ensure stars is within 0-3 range
         attempts: (existingProgress?.attempts || 0) + 1,
@@ -251,6 +252,7 @@ export function AnalysisModal({
         completed_at: now.toISOString(),
         best_score: Math.max(existingProgress?.best_score || 0, analysis.score || 0)
       };
+      // This function is only called after pseudocode is completed, so is_solved is correct here.
 
       if (existingProgress) {
         // Update existing progress

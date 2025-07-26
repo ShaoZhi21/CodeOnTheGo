@@ -423,7 +423,6 @@ export default function LessonMCQScreen() {
     if (quizCompleted) return; // Prevent multiple calls
     setQuizCompleted(true);
     try {
-      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -442,7 +441,17 @@ export default function LessonMCQScreen() {
         problemId = problems && problems.length > 0 ? problems[0].leetcode_id : 0;
       }
       if (problemId) {
-        await markProblemFullyComplete(problemId, actualScore, Math.ceil(actualScore / 20));
+        // Only update user_lesson_completion, not user_problem_progress
+        await supabase
+          .from('user_lesson_completion')
+          .upsert({
+            user_id: user.id,
+            problem_id: problemId,
+            quiz_completed: true,
+            quiz_score: actualScore,
+            completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,problem_id' });
       }
     } catch (error) {
       console.error('Error handling quiz completion:', error);

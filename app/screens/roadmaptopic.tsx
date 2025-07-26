@@ -119,54 +119,63 @@ export default function RoadmapTopic() {
 
   // Scroll to bottom only on first load
   useEffect(() => {
-    if (questions && questions.length > 0 && !hasScrolledToBottom.current) {
+    const shouldScroll = questions?.length > 0 && !hasScrolledToBottom.current;
+    if (shouldScroll) {
+      console.log('📜 Initial scroll to bottom');
       hasScrolledToBottom.current = true;
-      // Add a small delay to ensure content is rendered
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: false });
       }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [questions]);
+  }, []); // Run only once on mount
 
-  // Reload data when screen comes into focus (e.g., returning from question screen)
+  // Initialize data from preFetchedData once
+  useEffect(() => {
+    if (!preFetchedData || questions.length > 0) return; // Skip if we already have questions
+    
+    console.log('📦 Initializing from preFetchedData');
+    try {
+      const data = typeof preFetchedData === 'string' ? JSON.parse(preFetchedData) : preFetchedData;
+      if (!data) return;
+      
+      setQuestions(data.problems || []);
+      setProgress(data.progress || {});
+      setLessonProgress(data.lessonProgress || {});
+      setTopicStats(data.stats || null);
+    } catch (error) {
+      console.error('Error parsing preFetchedData:', error);
+    }
+  }, []); // Run only once on mount
+
+  // Handle focus effects without causing refreshes
   useFocusEffect(
     useCallback(() => {
-      if (topicString) {
-        console.log('🔄 Screen focused, needsRefresh:', needsRefresh);
-        console.log('🔄 fromPage:', fromPage);
+      const handleFocus = async () => {
+        if (!topicString) return;
         
-        // Always refresh lesson completion data when coming back to roadmap
-        refreshLessonCompletionData();
-        
-        // Force refresh if coming from quizcomplete, pseudocomplete, or if needsRefresh is true
-        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete' || needsRefresh || !preFetchedData) {
-          console.log('🔄 Forcing data refresh');
-          loadTopicData();
-          // Reset the refresh flag after loading
-          setNeedsRefresh(false);
-        } else {
-          console.log('🔄 Using preFetchedData, only refreshing lesson completion');
+        // Only refresh completion data when returning from specific pages
+        if (fromPage === 'quizcomplete' || fromPage === 'pseudocomplete') {
+          console.log('🔄 Refreshing completion data after quiz/pseudo completion');
+          await refreshLessonCompletionData();
         }
-      }
-    }, [topicString, preFetchedData, fromPage, needsRefresh])
+      };
+
+      handleFocus();
+    }, [topicString, fromPage]) // Only depend on these two props
   );
 
-  // Set needsRefresh to true when returning from a question or quiz
+  // Load initial data if no preFetchedData (run once)
   useEffect(() => {
-    console.log('🔄 fromPage changed:', fromPage);
-    if (fromPage === 'quizcomplete' || fromPage === 'question' || fromPage === 'pseudocomplete') {
-      console.log('🔄 Setting needsRefresh to true');
-      setNeedsRefresh(true);
-    }
-  }, [fromPage]);
+    const loadInitialData = async () => {
+      if (!topicString || preFetchedData || questions.length > 0) return;
+      
+      console.log('📥 Loading initial topic data');
+      await loadTopicData();
+    };
 
-  // Ensure data is loaded on mount if no preFetchedData
-  useEffect(() => {
-    if (topicString && !preFetchedData && questions.length === 0) {
-      console.log('🔄 No preFetchedData, loading topic data on mount');
-      loadTopicData();
-    }
-  }, [topicString, preFetchedData, questions.length]);
+    loadInitialData();
+  }, []); // Run only once on mount
 
   // Removed automatic scroll to bottom to prevent jumping behavior
 

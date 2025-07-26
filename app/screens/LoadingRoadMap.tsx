@@ -112,19 +112,56 @@ export default function LoadingRoadMap() {
 
       console.log('🎯 LoadingRoadMap: Lesson completion data:', lessonData);
 
-      // Create progress map
+      // Create progress map with correct stars calculation
       const progressMap: Record<number, { problem_id: number; completed: boolean; stars: number }> = {};
+      const lessonProgressMap: Record<number, boolean> = {};
+      
+      // First, create lesson progress map
+      lessonData?.forEach(lesson => {
+        if (lesson.problem_id) {
+          lessonProgressMap[lesson.problem_id] = lesson.quiz_completed || false;
+        }
+      });
+      
+      // Then, create progress map with correct stars logic
       progressData?.forEach(p => {
+        const hasCompletedLesson = lessonProgressMap[p.problem_id] || false;
+        const hasCompletedPseudocode = p.is_solved;
+        const isFullyCompleted = hasCompletedLesson && hasCompletedPseudocode;
+        
+        // Only show stars if both lesson and pseudocode are completed
+        const stars = isFullyCompleted ? (p.stars || 0) : 0;
+        
         progressMap[p.problem_id] = {
           problem_id: p.problem_id,
-          completed: p.is_solved,
-          stars: p.stars
+          completed: isFullyCompleted,
+          stars: stars
+        };
+      });
+
+      // Update problems with correct stars
+      const problemsWithStars = problems.map(problem => {
+        const progress = progressMap[problem.leetcode_id];
+        const hasCompletedLesson = lessonProgressMap[problem.leetcode_id] || false;
+        const hasCompletedPseudocode = progress?.completed || false;
+        
+        console.log(`🎯 LoadingRoadMap: Problem ${problem.leetcode_id} (${problem.title}):`, {
+          lessonCompleted: hasCompletedLesson,
+          pseudocodeCompleted: hasCompletedPseudocode,
+          fullyCompleted: hasCompletedLesson && hasCompletedPseudocode,
+          stars: progress?.stars || 0
+        });
+        
+        return {
+          ...problem,
+          stars: progress?.stars || 0,
+          completed: progress?.completed || false
         };
       });
 
       // Prepare data for roadmap screen
       const roadmapData = {
-        problems,
+        problems: problemsWithStars,
         progress: progressMap,
         stats: {
           total_problems: topicStatsData.total_problems,
