@@ -287,16 +287,6 @@ export default function ProfileScreen() {
           </View>
 
           {/* Other Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>{profile.completion_percentage.toFixed(1)}%</ThemedText>
-              <ThemedText style={styles.statLabel}>Complete</ThemedText>
-            </View>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statNumber}>🔥 {profile.current_streak}</ThemedText>
-              <ThemedText style={styles.statLabel}>Streak</ThemedText>
-            </View>
-          </View>
         </View>
 
         {/* Settings */}
@@ -413,7 +403,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   statsContainer: {
-    marginBottom: 30,
+    marginBottom: 14,
   },
   sectionTitle: {
     fontSize: 22,
