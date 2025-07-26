@@ -159,6 +159,49 @@ export default function CodeSummary() {
       const result = await markProblemFullyComplete(parseInt(problemId), score, Math.min(stars, 3));
       if (!result.success) throw new Error(result.error || 'Failed to mark problem as complete');
 
+      // Get problem difficulty from leetcode_problems
+      const { data: problemData, error: problemError } = await supabase
+        .from('leetcode_problems')
+        .select('difficulty')
+        .eq('id', problemId)
+        .single();
+
+      if (problemError) throw new Error('Failed to get problem difficulty');
+
+      // Get user profile stats
+      const userResult = await supabase.auth.getUser();
+      const userObj = userResult.data.user;
+      if (!userObj) throw new Error('User not authenticated');
+
+      // Get current stats to calculate new completion percentage
+      const { data: currentStats, error: statsGetError } = await supabase
+        .from('user_profile_stats')
+        .select('total_questions, easy_solved, medium_solved, hard_solved')
+        .eq('user_id', userObj.id)
+        .single();
+
+      if (statsGetError) throw new Error('Failed to get current stats');
+
+      const newTotalQuestions = (currentStats?.total_questions || 0) + 1;
+      const newCompletionPercentage = Number((newTotalQuestions * 100.0 / 3850).toFixed(2));
+
+      // Update user_profile_stats based on difficulty
+      const { error: statsError } = await supabase
+        .from('user_profile_stats')
+        .upsert({
+          user_id: userObj.id,
+          total_questions: newTotalQuestions,
+          completion_percentage: newCompletionPercentage,
+          easy_solved: problemData.difficulty === 'Easy' ? (currentStats?.easy_solved || 0) + 1 : currentStats?.easy_solved || 0,
+          medium_solved: problemData.difficulty === 'Medium' ? (currentStats?.medium_solved || 0) + 1 : currentStats?.medium_solved || 0,
+          hard_solved: problemData.difficulty === 'Hard' ? (currentStats?.hard_solved || 0) + 1 : currentStats?.hard_solved || 0,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (statsError) throw new Error('Failed to update user stats');
+
       // Step 2: Get today and yesterday at 12am for streak checking
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -167,9 +210,6 @@ export default function CodeSummary() {
       const now = new Date();
 
       // Step 3: Check for previous activities before this completion
-      const userResult = await supabase.auth.getUser();
-      const userObj = userResult.data.user;
-      if (!userObj) throw new Error('User not authenticated');
       const { data: previousActivities } = await supabase
         .from('user_problem_progress')
         .select('completed_at')
