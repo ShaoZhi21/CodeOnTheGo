@@ -1,6 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
-import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -152,6 +151,26 @@ export default function CodeSummary() {
     setIsMarkingComplete(true);
 
     try {
+      // Get user profile
+      const userResult = await supabase.auth.getUser();
+      const userObj = userResult.data.user;
+      if (!userObj) throw new Error('User not authenticated');
+
+      // First check if this problem has already been completed
+      const { data: existingProgress, error: checkError } = await supabase
+        .from('user_problem_progress')
+        .select('*')
+        .eq('user_id', userObj.id)
+        .eq('problem_id', parseInt(problemId))
+        .single();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "not found" error, which is expected if problem not completed
+        throw new Error(`Failed to check existing progress: ${checkError.message}`);
+      }
+
+      const isNewCompletion = !existingProgress;
+
       // Use unified completion logic
       const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
       const score = 85; // Or use a real score if available
@@ -159,111 +178,85 @@ export default function CodeSummary() {
       const result = await markProblemFullyComplete(parseInt(problemId), score, Math.min(stars, 3));
       if (!result.success) throw new Error(result.error || 'Failed to mark problem as complete');
 
-      // Get problem difficulty from leetcode_problems
-      const { data: problemData, error: problemError } = await supabase
-        .from('leetcode_problems')
-        .select('difficulty')
-        .eq('id', problemId)
-        .single();
+      // Only update profile stats if this is a new completion
+      if (isNewCompletion) {
+        // Get problem difficulty from leetcode_problems
+        const { data: problemData, error: problemError } = await supabase
+          .from('leetcode_problems')
+          .select('difficulty')
+          .eq('leetcode_id', parseInt(problemId))
+          .single();
 
-      if (problemError) throw new Error('Failed to get problem difficulty');
+        if (problemError) {
+          console.error('Failed to get problem difficulty:', problemError);
+          throw new Error('Failed to get problem difficulty');
+        }
 
-      // Get user profile stats
-      const userResult = await supabase.auth.getUser();
-      const userObj = userResult.data.user;
-      if (!userObj) throw new Error('User not authenticated');
+        const difficulty = problemData.difficulty.toLowerCase();
 
-      // Get current stats to calculate new completion percentage
-      const { data: currentStats, error: statsGetError } = await supabase
-        .from('user_profile_stats')
-        .select('total_questions, easy_solved, medium_solved, hard_solved')
-        .eq('user_id', userObj.id)
-        .single();
+        // Get current stats to calculate new completion percentage
+        let { data: currentStats, error: statsGetError } = await supabase
+          .from('user_profiles')
+          .select('total_questions, easy_solved, medium_solved, hard_solved')
+          .eq('user_id', userObj.id)
+          .single();
 
-      if (statsGetError) throw new Error('Failed to get current stats');
+        if (statsGetError) {
+          // If no profile exists, create one
+          const { data: newProfile, error: createError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: userObj.id,
+              name: userObj.user_metadata?.full_name || 'User',
+              total_questions: 0,
+              easy_solved: 0,
+              medium_solved: 0,
+              hard_solved: 0,
+              completion_percentage: 0
+            })
+            .select()
+            .single();
 
-      const newTotalQuestions = (currentStats?.total_questions || 0) + 1;
-      const newCompletionPercentage = Number((newTotalQuestions * 100.0 / 3850).toFixed(2));
+          if (createError) {
+            console.error('Failed to create user profile:', createError);
+            throw new Error('Failed to create user profile');
+          }
 
-      // Update user_profile_stats based on difficulty
-      const { error: statsError } = await supabase
-        .from('user_profile_stats')
-        .upsert({
-          user_id: userObj.id,
+          currentStats = newProfile;
+        }
+
+        // Calculate new stats
+        const newTotalQuestions = (currentStats?.total_questions || 0) + 1;
+        const newCompletionPercentage = Math.round((newTotalQuestions * 100) / 3850);
+
+        // Update difficulty-specific counts
+        const updateData = {
           total_questions: newTotalQuestions,
           completion_percentage: newCompletionPercentage,
-          easy_solved: problemData.difficulty === 'Easy' ? (currentStats?.easy_solved || 0) + 1 : currentStats?.easy_solved || 0,
-          medium_solved: problemData.difficulty === 'Medium' ? (currentStats?.medium_solved || 0) + 1 : currentStats?.medium_solved || 0,
-          hard_solved: problemData.difficulty === 'Hard' ? (currentStats?.hard_solved || 0) + 1 : currentStats?.hard_solved || 0,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
+          easy_solved: difficulty === 'easy' ? (currentStats?.easy_solved || 0) + 1 : (currentStats?.easy_solved || 0),
+          medium_solved: difficulty === 'medium' ? (currentStats?.medium_solved || 0) + 1 : (currentStats?.medium_solved || 0),
+          hard_solved: difficulty === 'hard' ? (currentStats?.hard_solved || 0) + 1 : (currentStats?.hard_solved || 0),
+        };
 
-      if (statsError) throw new Error('Failed to update user stats');
+        // Update user_profiles table
+        console.log('Updating user_profiles with data:', { user_id: userObj.id, ...updateData });
+        const { error: profileUpdateError } = await supabase
+          .from('user_profiles')
+          .upsert({
+            user_id: userObj.id,
+            ...updateData
+          });
 
-      // Step 2: Get today and yesterday at 12am for streak checking
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      const now = new Date();
-
-      // Step 3: Check for previous activities before this completion
-      const { data: previousActivities } = await supabase
-        .from('user_problem_progress')
-        .select('completed_at')
-        .eq('user_id', userObj.id)
-        .not('completed_at', 'is', null)
-        .lt('completed_at', now.toISOString())
-        .order('completed_at', { ascending: false })
-        .limit(1);
-
-      let lastActivity = previousActivities && previousActivities.length > 0 
-        ? new Date(previousActivities[0].completed_at)
-        : null;
-      const isNewStreak = !lastActivity || lastActivity < today;
-
-      if (isNewStreak) {
-        // If last activity was exactly yesterday, increment streak
-        if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
-          await ProfileService.updateStreak(userObj.id, true);
-        } else {
-          await ProfileService.updateStreak(userObj.id, false);
-          await ProfileService.updateStreak(userObj.id, true);
+        if (profileUpdateError) {
+          console.error('Failed to update user profile:', profileUpdateError);
+          throw new Error(`Failed to update user profile: ${profileUpdateError.message}`);
         }
-        // Navigate to streak animation
-        router.push({
-          pathname: '/screens/StreakAnimation',
-          params: {
-            problemTitle: title || '',
-            problemId: problemId?.toString() || '',
-            topicName: params.topicName || '',
-            quizData: '',
-            fromPseudocode: 'true',
-            difficulty: difficulty || '',
-            description: description || '',
-            code: summaryData?.finalCode || '',
-            source: 'codeSummary',
-            from: params.from || 'roadmap'
-          }
-        });
-      } else {
-        // Go directly to PseudocodeComplete
-        router.push({
-          pathname: '/screens/PseudocodeComplete',
-          params: {
-            problemTitle: title || '',
-            problemId: problemId?.toString() || '',
-            topicName: params.topicName || '',
-            difficulty: difficulty || '',
-            description: description || '',
-            code: summaryData?.finalCode || '',
-            source: 'codeSummary',
-            from: params.from || 'roadmap'
-          }
-        });
+
+        console.log('Successfully updated user_profiles table');
       }
+
+      Alert.alert('Success', 'Problem marked as complete!');
+      router.replace('/(tabs)');
     } catch (error) {
       console.error('Error marking problem complete:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to mark problem as complete');

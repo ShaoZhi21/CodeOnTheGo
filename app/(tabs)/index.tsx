@@ -306,7 +306,7 @@ export default function HomeScreen() {
     if (lessonTitles.length === 0) return 'No lessons completed';
     if (lessonTitles.length === 1) return `${lessonTitles[0]}`;
     if (lessonTitles.length === 2) return `${lessonTitles[0]}, ${lessonTitles[1]}`;
-    return `Recap: ${lessonTitles[0]}, ${lessonTitles[1]}, ${lessonTitles[2]}`;
+    return `${lessonTitles[0]} | ${lessonTitles[1]} | ${lessonTitles[2]}`;
   };
 
   const getLastTopic = () => {
@@ -1004,12 +1004,11 @@ const styles = StyleSheet.create({
   // Sections
   section: {
     paddingHorizontal: 20,
-    marginBottom: 24,
   },
   sectionWithTopPadding: {
     paddingHorizontal: 20,
-    marginBottom: 10,
-    paddingTop: 16,
+    marginBottom: 0,
+    paddingTop: 4,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1451,7 +1450,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginTop: 16,
-
   },
   recapIconContainer: {
     width: 50,
