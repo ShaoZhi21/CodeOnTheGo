@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, SafeAreaView, StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedText } from '../../components/ThemedText';
@@ -33,16 +33,7 @@ interface DailyChallenge {
   completed: boolean;
 }
 
-interface LastActivity {
-  problemId: number;
-  problemTitle: string;
-  difficulty: string;
-  topic: string;
-  completedAt: string;
-  type: 'lesson' | 'pseudocode';
-  score?: number;
-  stars?: number;
-}
+
 
 interface RecapLesson {
   problem_id: number;
@@ -108,8 +99,7 @@ export default function HomeScreen() {
   });
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
   const [challengeLoading, setChallengeLoading] = useState(false);
-  const [lastActivities, setLastActivities] = useState<LastActivity[]>([]);
-  const [activitiesLoading, setActivitiesLoading] = useState(false);
+
   const [recapLessons, setRecapLessons] = useState<RecapLesson[]>([]);
   const [recapQuestionCount, setRecapQuestionCount] = useState(0);
 
@@ -121,7 +111,6 @@ export default function HomeScreen() {
       loadTopicsProgress();
       loadAllTopics();
       loadDailyChallenge();
-      loadLastActivities();
       fetchRecapLessons();
     }, [])
   );
@@ -315,104 +304,24 @@ export default function HomeScreen() {
   const formatRecapTag = () => {
     const lessonTitles = recapLessons.map(lesson => lesson.title);
     if (lessonTitles.length === 0) return 'No lessons completed';
-    if (lessonTitles.length === 1) return `Recap: ${lessonTitles[0]}`;
-    if (lessonTitles.length === 2) return `Recap: ${lessonTitles[0]}, ${lessonTitles[1]}`;
+    if (lessonTitles.length === 1) return `${lessonTitles[0]}`;
+    if (lessonTitles.length === 2) return `${lessonTitles[0]}, ${lessonTitles[1]}`;
     return `Recap: ${lessonTitles[0]}, ${lessonTitles[1]}, ${lessonTitles[2]}`;
   };
 
-  const loadLastActivities = async () => {
-    try {
-      console.log('🔄 loadLastActivities: Starting...');
-      setActivitiesLoading(true);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('❌ loadLastActivities: No user found');
-        return;
-      }
-
-      // Get last completed lesson (from user_lesson_completion)
-      const { data: lastLesson } = await supabase
-        .from('user_lesson_completion')
-        .select(`
-          problem_id,
-          completed_at,
-          quiz_score,
-          leetcode_problems (
-            title,
-            difficulty,
-            tags
-          )
-        `)
-        .eq('user_id', user.id)
-        .eq('quiz_completed', true)
-        .order('completed_at', { ascending: false })
-        .limit(1);
-
-      // Get last completed pseudocode (from user_problem_progress)
-      const { data: lastPseudocode } = await supabase
-        .from('user_problem_progress')
-        .select(`
-          problem_id,
-          completed_at,
-          score,
-          stars,
-          leetcode_problems (
-            title,
-            difficulty,
-            tags
-          )
-        `)
-        .eq('user_id', user.id)
-        .eq('is_solved', true)
-        .not('completed_at', 'is', null)
-        .order('completed_at', { ascending: false })
-        .limit(1);
-
-      const activities: LastActivity[] = [];
-
-      // Add last lesson if exists
-      if (lastLesson && lastLesson.length > 0) {
-        const lesson = lastLesson[0];
-        const problem = lesson.leetcode_problems as any;
-        activities.push({
-          problemId: lesson.problem_id,
-          problemTitle: problem?.title || 'Unknown Problem',
-          difficulty: problem?.difficulty || 'Unknown',
-          topic: problem?.tags?.[0] || 'General',
-          completedAt: lesson.completed_at,
-          type: 'lesson',
-          score: lesson.quiz_score
-        });
-      }
-
-      // Add last pseudocode if exists
-      if (lastPseudocode && lastPseudocode.length > 0) {
-        const pseudocode = lastPseudocode[0];
-        const problem = pseudocode.leetcode_problems as any;
-        activities.push({
-          problemId: pseudocode.problem_id,
-          problemTitle: problem?.title || 'Unknown Problem',
-          difficulty: problem?.difficulty || 'Unknown',
-          topic: problem?.tags?.[0] || 'General',
-          completedAt: pseudocode.completed_at,
-          type: 'pseudocode',
-          score: pseudocode.score,
-          stars: pseudocode.stars
-        });
-      }
-
-      // Sort by completion date (most recent first)
-      activities.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
-      
-      setLastActivities(activities.slice(0, 2)); // Show only the 2 most recent activities
-      console.log('✅ loadLastActivities: Loaded', activities.length, 'activities');
-    } catch (error) {
-      console.error('❌ loadLastActivities: Error:', error);
-    } finally {
-      setActivitiesLoading(false);
+  const getLastTopic = () => {
+    if (topicsInProgress.length > 0) {
+      return topicsInProgress[0].name;
     }
+    return 'Arrays'; // Default fallback
   };
+
+  const handleContinueLastTopic = () => {
+    const lastTopic = getLastTopic();
+    handleTopicClick(lastTopic);
+  };
+
+
 
   const fetchRecapLessons = async () => {
     try {
@@ -742,13 +651,13 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <View style={styles.mainContent}>
         {/* Learning Journey - Moved to Top */}
         <View style={styles.sectionWithTopPadding}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <Image 
-                source={require('../../assets/images/icons/book-icon.png')} 
+                source={require('../../assets/images/icons/codeonthego-bird-icon.png')} 
                 style={styles.sectionIcon}
                 tintColor="#8B5CF6"
               />
@@ -758,12 +667,43 @@ export default function HomeScreen() {
           
           {/* Learning Action Buttons */}
           <View style={styles.subsection}>
-            <ThemedText style={styles.subsectionTitle}>Ready to Learn?</ThemedText>
-            
             <View style={styles.learningActionsGrid}>
-              {/* Topical Roadmap Button */}
+              {/* Continue Last Topic Button - 70% width */}
               <TouchableOpacity 
-                style={[styles.learningActionCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]} 
+                style={[styles.learningActionCard, styles.continueLastTopicCard, { backgroundColor: '#E0F2FE', borderColor: '#0288D1' }]} 
+                onPress={handleContinueLastTopic}
+              >
+                <View style={[styles.learningActionIconContainer, { backgroundColor: '#0288D1' }]}>
+                  <Image 
+                    source={require('../../assets/images/icons/lesson-icon.png')} 
+                    style={[styles.learningActionIcon, { tintColor: '#FFFFFF' }]}
+                  />
+                </View>
+                <ThemedText style={[styles.learningActionTitle, { color: '#01579B' }]}>Continue doing {getLastTopic()}!</ThemedText>
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <View 
+                      style={[
+                        styles.progressFill, 
+                        { width: `${topicsInProgress.length > 0 ? topicsInProgress[0].completion_percentage : 0}%` }
+                      ]} 
+                    />
+                  </View>
+                  <ThemedText style={styles.progressText}>
+                    {topicsInProgress.length > 0 ? `${topicsInProgress[0].completion_percentage}%` : '0%'} complete
+                  </ThemedText>
+                </View>
+                <View style={styles.learningActionArrow}>
+                  <Image 
+                    source={require('../../assets/images/icons/up-arrow.png')} 
+                    style={[styles.smallArrowIcon, { tintColor: '#0288D1' }]}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {/* Topical Roadmap Button - 30% width */}
+              <TouchableOpacity 
+                style={[styles.learningActionCard, styles.topicalRoadmapCard, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]} 
                 onPress={() => router.push('/(tabs)/learn')}
               >
                 <View style={[styles.learningActionIconContainer, { backgroundColor: '#F59E0B' }]}>
@@ -773,7 +713,7 @@ export default function HomeScreen() {
                   />
                 </View>
                 <ThemedText style={[styles.learningActionTitle, { color: '#92400E' }]}>Topical Roadmap</ThemedText>
-                <ThemedText style={[styles.learningActionSubtitle, { color: '#B45309' }]}>Explore the roadmap</ThemedText>
+                <ThemedText style={[styles.learningActionSubtitle, { color: '#B45309' }]}>12 topics available</ThemedText>
                 <View style={styles.learningActionArrow}>
                   <Image 
                     source={require('../../assets/images/icons/up-arrow.png')} 
@@ -781,32 +721,15 @@ export default function HomeScreen() {
                   />
                 </View>
               </TouchableOpacity>
-
-              {/* Practice Problems Button */}
-              <TouchableOpacity 
-                style={[styles.learningActionCard, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]} 
-                onPress={() => router.push('/(tabs)/questions')}
-              >
-                <View style={[styles.learningActionIconContainer, { backgroundColor: '#3B82F6' }]}>
-                  <Image 
-                    source={require('../../assets/images/icons/question-icon.png')} 
-                    style={[styles.learningActionIcon, { tintColor: '#FFFFFF' }]}
-                  />
-                </View>
-                <ThemedText style={[styles.learningActionTitle, { color: '#1E40AF' }]}>Practice Problems</ThemedText>
-                <ThemedText style={[styles.learningActionSubtitle, { color: '#1D4ED8' }]}>Solve coding challenges</ThemedText>
-                <View style={styles.learningActionArrow}>
-                  <Image 
-                    source={require('../../assets/images/icons/up-arrow.png')} 
-                    style={[styles.smallArrowIcon, { tintColor: '#3B82F6' }]}
-                  />
-                </View>
-              </TouchableOpacity>
             </View>
 
             {/* Recap Quiz Button - Full Width */}
             <TouchableOpacity 
-              style={[styles.recapCard, { opacity: recapLessons.length === 0 ? 0.6 : 1 }]} 
+              style={[styles.recapCard, { 
+                opacity: recapLessons.length === 0 ? 0.6 : 1,
+                backgroundColor: '#F3E8FF',
+                borderColor: '#8B5CF6'
+              }]} 
               onPress={handleRecapQuiz}
               disabled={recapLessons.length === 0}
             >
@@ -819,11 +742,11 @@ export default function HomeScreen() {
               <View style={styles.recapContent}>
                 <ThemedText style={styles.recapTitle}>Recap Quiz</ThemedText>
                 <ThemedText style={styles.recapDescription}>
-                  Practice questions from your last 3 completed lessons
+                  Recap questions from your last 3 completed lessons
                 </ThemedText>
-                                  <View style={styles.recapTag}>
-                    <ThemedText style={styles.recapTagText}>{formatRecapTag()}</ThemedText>
-                  </View>
+                <View style={styles.recapTag}>
+                  <ThemedText style={styles.recapTagText}>{formatRecapTag()}</ThemedText>
+                </View>
               </View>
               <View style={styles.recapArrow}>
                 <Image 
@@ -833,72 +756,7 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* Recent Activity Card - Full width below the three buttons */}
-            {lastActivities.length > 0 && (
-              <View style={styles.horizontalActivityCard}>
-                {lastActivities.slice(0, 1).map((activity, index) => (
-                  <View key={`${activity.type}-${activity.problemId}`} style={styles.horizontalActivityContent}>
-                    <View style={styles.horizontalActivityLeft}>
-                      <View style={styles.horizontalActivityIconContainer}>
-                        <Image 
-                          source={activity.type === 'lesson' 
-                            ? require('../../assets/images/icons/book-icon.png')
-                            : require('../../assets/images/icons/code-icon.png')
-                          } 
-                          style={styles.horizontalActivityIcon}
-                          tintColor="#8B5CF6"
-                        />
-                      </View>
-                      <View style={styles.horizontalActivityInfo}>
-                        <ThemedText style={styles.horizontalActivityTitle} numberOfLines={1}>
-                          {activity.problemTitle}
-                        </ThemedText>
-                        <View style={styles.horizontalActivityMeta}>
-                          <ThemedText style={[styles.horizontalActivityDifficulty, { color: getDifficultyColor(activity.difficulty) }]}>
-                            {activity.difficulty}
-                          </ThemedText>
-                          <ThemedText style={styles.horizontalActivityTopic}>
-                            • {activity.topic}
-                          </ThemedText>
-                          {activity.score !== undefined && (
-                            <ThemedText style={styles.horizontalActivityScore}>
-                              • {activity.score}%
-                            </ThemedText>
-                          )}
-                          {activity.stars !== undefined && (
-                            <View style={styles.horizontalStarsContainer}>
-                              <ThemedText style={styles.horizontalActivityScore}>• </ThemedText>
-                              {[1, 2, 3].map(star => (
-                                <Image 
-                                  key={star}
-                                  source={require('../../assets/images/icons/star-icon.png')} 
-                                  style={[
-                                    styles.horizontalStarIcon, 
-                                    { opacity: star <= (activity.stars || 0) ? 1 : 0.3 }
-                                  ]}
-                                  tintColor="#FFD700"
-                                />
-                              ))}
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                    
-                    <View style={styles.horizontalActivityRight}>
-                      <View style={styles.horizontalActivityBadge}>
-                        <ThemedText style={styles.horizontalActivityBadgeText}>
-                          {activity.type === 'lesson' ? 'Lesson' : 'Pseudocode'}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.horizontalActivityDate}>
-                        {new Date(activity.completedAt).toLocaleDateString()}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
+
           </View>
         </View>
 
@@ -909,7 +767,7 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleContainer}>
               <Image 
-                source={require('../../assets/images/icons/code-icon.png')} 
+                source={require('../../assets/images/icons/duel-icon.png')} 
                 style={styles.sectionIcon}
                 tintColor="#8B5CF6"
               />
@@ -940,7 +798,7 @@ export default function HomeScreen() {
           </View>
           
           <View style={styles.quickActionsGrid}>
-            {/* Daily Challenge Card */}
+            {/* Daily Question Card */}
             <TouchableOpacity 
               style={[styles.actionCard, { backgroundColor: '#FEF2F2', borderColor: '#EF4444' }]} 
               onPress={handleRandomQuestion}
@@ -952,8 +810,8 @@ export default function HomeScreen() {
                   style={[styles.actionIcon, { tintColor: '#FFFFFF' }]}
                 />
               </View>
-              <ThemedText style={[styles.actionTitle, { color: '#991B1B' }]}>Daily Challenge</ThemedText>
-              <ThemedText style={[styles.actionSubtitle, { color: '#DC2626' }]}>{dailyStats.streak} day streak</ThemedText>
+              <ThemedText style={[styles.actionTitle, { color: '#991B1B' }]}>Daily Question</ThemedText>
+              <ThemedText style={[styles.actionSubtitle, { color: '#DC2626' }]}>Find out the question!</ThemedText>
               <View style={styles.actionArrow}>
                 {challengeLoading ? (
                   <ActivityIndicator size="small" color="#EF4444" />
@@ -966,23 +824,23 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* Quiz Mode Card */}
+            {/* Practice Problems Card */}
             <TouchableOpacity 
-              style={[styles.actionCard, { backgroundColor: '#D1FAE5', borderColor: '#10B981' }]} 
-              onPress={() => router.push('/screens/quiz')}
+              style={[styles.actionCard, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]} 
+              onPress={() => router.push('/(tabs)/questions')}
             >
-              <View style={[styles.actionIconContainer, { backgroundColor: '#10B981' }]}>
+              <View style={[styles.actionIconContainer, { backgroundColor: '#3B82F6' }]}>
                 <Image 
-                  source={require('../../assets/images/icons/quiz-icon.png')} 
+                  source={require('../../assets/images/icons/question-icon.png')} 
                   style={[styles.actionIcon, { tintColor: '#FFFFFF' }]}
                 />
               </View>
-              <ThemedText style={[styles.actionTitle, { color: '#065F46' }]}>Quiz Mode</ThemedText>
-              <ThemedText style={[styles.actionSubtitle, { color: '#047857' }]}>Test yourself</ThemedText>
+              <ThemedText style={[styles.actionTitle, { color: '#1E40AF' }]}>Practice Problems</ThemedText>
+              <ThemedText style={[styles.actionSubtitle, { color: '#1D4ED8' }]}>See all 3800 questions</ThemedText>
               <View style={styles.actionArrow}>
                 <Image 
                   source={require('../../assets/images/icons/up-arrow.png')} 
-                  style={[styles.smallArrowIcon, { tintColor: '#10B981' }]}
+                  style={[styles.smallArrowIcon, { tintColor: '#3B82F6' }]}
                 />
               </View>
             </TouchableOpacity>
@@ -991,7 +849,7 @@ export default function HomeScreen() {
 
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1001,8 +859,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F6FF',
   },
-  scrollView: {
+  mainContent: {
     flex: 1,
+    paddingVertical: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -1119,8 +978,7 @@ const styles = StyleSheet.create({
     flex: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingRight: 22,
+    paddingHorizontal: 25,
   },
   appIconContainer: {
     width: 50,
@@ -1146,11 +1004,11 @@ const styles = StyleSheet.create({
   // Sections
   section: {
     paddingHorizontal: 20,
-    marginBottom: 0,
+    marginBottom: 24,
   },
   sectionWithTopPadding: {
     paddingHorizontal: 20,
-    marginBottom: 0,
+    marginBottom: 10,
     paddingTop: 16,
   },
   sectionHeader: {
@@ -1164,9 +1022,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionIcon: {
-    width: 20,
-    height: 20,
+    width: 25,
+    height: 25,
     marginRight: 8,
+    marginLeft: 4,
   },
   sectionTitle: {
     fontSize: 20,
@@ -1201,6 +1060,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
+    minHeight: 120,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1422,14 +1282,21 @@ const styles = StyleSheet.create({
   // Learning Actions Grid
   learningActionsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    flexWrap: 'nowrap',
+    gap: 8,
+  },
+  continueLastTopicCard: {
+    width: '60%',
+  },
+  topicalRoadmapCard: {
+    width: '40%',
   },
   learningActionCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 16,
+    padding: 12,
+    minHeight: 120,
     shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -1464,8 +1331,8 @@ const styles = StyleSheet.create({
   },
   learningActionArrow: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 12,
+    right: 12,
   },
 
   // Activity Dashboard Styles
@@ -1555,113 +1422,18 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
 
-  // Horizontal Activity Card Styles
-  horizontalActivityCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  horizontalActivityContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  horizontalActivityLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
-  },
-  horizontalActivityIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#F3F0FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  horizontalActivityIcon: {
-    width: 20,
-    height: 20,
-  },
-  horizontalActivityInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  horizontalActivityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  horizontalActivityMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  horizontalActivityDifficulty: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  horizontalActivityTopic: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  horizontalActivityScore: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  horizontalStarsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-  },
-  horizontalStarIcon: {
-    width: 10,
-    height: 10,
-  },
-  horizontalActivityRight: {
-    alignItems: 'flex-end',
-  },
-  horizontalActivityBadge: {
-    backgroundColor: '#8B5CF6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  horizontalActivityBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  horizontalActivityDate: {
-    fontSize: 11,
-    color: '#9CA3AF',
-  },
+
   recapTag: {
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#6366F1',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     alignSelf: 'flex-start',
-
   },
   recapTagText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#8B5CF6',
+    color: '#FFFFFF',
   },
 
   // Recap Quiz Card Styles (from quiz.tsx)
@@ -1679,7 +1451,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginTop: 16,
-    marginBottom: 8,
+
   },
   recapIconContainer: {
     width: 50,
@@ -1709,6 +1481,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 8,
     lineHeight: 20,
+    maxWidth: '90%',
   },
   recapBadge: {
     backgroundColor: '#F3F0FF',
@@ -1730,5 +1503,28 @@ const styles = StyleSheet.create({
     height: 16,
     tintColor: '#8B5CF6',
     transform: [{ rotate: '90deg' }],
+  },
+
+  // Progress Bar Styles
+  progressContainer: {
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
+    marginBottom: 4,
+    width: '80%',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#0288D1',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#0277BD',
+    fontWeight: '500',
   },
 });
