@@ -12,6 +12,7 @@ import {
     View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
+import { supabase } from '../../lib/supabase';
 
 interface QuizQuestion {
   id: number;
@@ -448,6 +449,9 @@ export default function LessonScreen() {
       // Use the environment variable or fallback to localhost
       const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
       
+      // Get current user for skill level
+      const { data: { user } } = await supabase.auth.getUser();
+      
       const response = await fetch(`${apiUrl}/api/generate-quiz`, {
         method: 'POST',
         headers: {
@@ -457,6 +461,7 @@ export default function LessonScreen() {
           problemId: parseInt(currentProblemId as string) || currentProblemId,
           topicName: currentTopicName,
           questionTitle: currentQuestionTitle,
+          userId: user?.id, // Add userId for skill level detection
         }),
       });
 

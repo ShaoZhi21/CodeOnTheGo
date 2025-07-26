@@ -795,28 +795,6 @@ export default function HomeScreen() {
               />
               <ThemedText style={styles.sectionTitle}>Quick Practice</ThemedText>
             </View>
-            <View style={styles.testButtonsContainer}>
-              {/* Reset Streak Button (for testing) */}
-              <TouchableOpacity style={styles.testButton} onPress={resetDailyStreak}>
-                <ThemedText style={styles.testButtonText}>Reset</ThemedText>
-              </TouchableOpacity>
-              
-              {/* Streak Animation Button (for testing) */}
-              <TouchableOpacity 
-                style={styles.testButton} 
-                onPress={() => {
-                  router.push({
-                    pathname: '/screens/StreakAnimation',
-                    params: {
-                      source: 'index',
-                      isTestStreak: 'true'
-                    }
-                  });
-                }}
-              >
-                <ThemedText style={styles.testButtonText}>Test Streak</ThemedText>
-              </TouchableOpacity>
-            </View>
           </View>
           
           <View style={styles.quickActionsGrid}>

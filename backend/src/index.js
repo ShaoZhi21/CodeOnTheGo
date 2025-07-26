@@ -1740,6 +1740,25 @@ app.post('/api/generate-recap-quiz', async (req, res) => {
       return res.status(400).json({ error: 'Lesson titles are required' });
     }
 
+    // Get user skill level (optional - no authentication required)
+    let userSkillLevel = 'Beginner'; // Default to Beginner
+    if (userId) {
+      try {
+        const { getUserProfile } = require('./services/profileService');
+        const userProfile = await getUserProfile(userId);
+        if (userProfile && userProfile.skill_level) {
+          userSkillLevel = userProfile.skill_level;
+          console.log(`📊 Using user skill level for recap quiz: ${userSkillLevel}`);
+        } else {
+          console.log('📊 No user profile found, using default Beginner skill level for recap quiz');
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch user profile for recap quiz, defaulting to Beginner skill level:', error.message);
+      }
+    } else {
+      console.log('📊 No userId provided for recap quiz, using default Beginner skill level');
+    }
+
     // Parse lesson titles
     const lessonTitleArray = lessonTitles.split(',').map(title => title.trim());
 
@@ -1764,6 +1783,24 @@ ${problemsData.map((problem, index) => `
 ${index + 1}. "${problem.title}" (${problem.difficulty})
 `).join('\n')}
 
+🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for ${userSkillLevel === 'Beginner' ? 'ABSOLUTE BEGINNERS' : userSkillLevel} who are learning programming concepts. 
+
+${userSkillLevel === 'Beginner' ? `
+🎯 BEGINNER EXPLANATION REQUIREMENT: For EVERY programming term, immediately explain it in parentheses. For example:
+- "list (order of items)"
+- "sliding window (move the start and ending point of a section)"
+- "hash map (key-value lookup table)"
+- "recursion (function that calls itself)"
+- "stack (last-in, first-out structure)"
+- "queue (first-in, first-out structure)"
+- "binary search (search by repeatedly dividing in half)"
+- "greedy (always take the best option at each step)"
+- "dynamic programming (break problem into overlapping subproblems)"
+- "pointer (reference to a location in memory)"
+- "traverse (go through each item)"
+
+ALL technical terms in questions, options, and explanations MUST include these parenthetical explanations for beginners.` : ''}
+
 REQUIREMENTS:
 - 8 questions total
 - Each question has 4 options (A, B, C, D)
@@ -1771,6 +1808,17 @@ REQUIREMENTS:
 - Questions should cover: data structures, algorithms, time complexity, problem-solving concepts
 - Mix questions from all provided problems
 - Focus on fundamental concepts
+- ALL time/space complexity notations (O(1), O(n), O(log n), etc.) MUST be immediately explained in parentheses
+- ${userSkillLevel === 'Beginner' ? 'ALL programming terms MUST include parenthetical explanations' : 'Use standard technical explanations'}
+
+BEGINNER-FRIENDLY TIME COMPLEXITY EXPLANATIONS:
+When explaining time complexity, ALWAYS include what the notation means in parentheses:
+- O(1) (instant)
+- O(n) (proportional to n)
+- O(log n) (grows slowly as input increases)
+- O(n log n) (a bit slower than linear)
+- O(n^2) (proportional to n squared)
+- O(n^3) (proportional to n cubed)
 
 FORMAT:
 {
@@ -1878,10 +1926,29 @@ app.post('/api/generate-quiz', async (req, res) => {
   }
 
   try {
-    const { problemId, topicName, lessonData } = req.body;
+    const { problemId, topicName, lessonData, userId } = req.body;
 
     if (!problemId || !topicName) {
       return res.status(400).json({ error: 'Problem ID and topic name are required' });
+    }
+
+    // Get user skill level (optional - no authentication required)
+    let userSkillLevel = 'Beginner'; // Default to Beginner
+    if (userId) {
+      try {
+        const { getUserProfile } = require('./services/profileService');
+        const userProfile = await getUserProfile(userId);
+        if (userProfile && userProfile.skill_level) {
+          userSkillLevel = userProfile.skill_level;
+          console.log(`📊 Using user skill level for quiz: ${userSkillLevel}`);
+        } else {
+          console.log('📊 No user profile found, using default Beginner skill level for quiz');
+        }
+      } catch (error) {
+        console.log('⚠️ Could not fetch user profile for quiz, defaulting to Beginner skill level:', error.message);
+      }
+    } else {
+      console.log('📊 No userId provided for quiz, using default Beginner skill level');
     }
 
     // Get problem details from database - fetch full details including description
@@ -1945,8 +2012,31 @@ TASK: Identify the IDEAL solution approach for this problem. Respond with ONLY a
 
 🎯 CRITICAL REQUIREMENT: Every option (A, B, C, D) MUST have a detailed explanation in optionExplanations.
 
-🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for BEGINNERS who are learning programming concepts. 
-ALL time/space complexity notations (O(1), O(n), O(log n), etc.) mentioned ANYWHERE in the quiz (including option explanations) MUST be immediately explained in simple, beginner-friendly terms. For example, if you write 'O(n)', you must immediately say 'O(n) means linear time - the algorithm takes time proportional to the size n of the input.' This is a strict requirement for every mention, not just the main explanation.
+🎯 BEGINNER-FRIENDLY REQUIREMENT: This quiz is for ${userSkillLevel === 'Beginner' ? 'ABSOLUTE BEGINNERS' : userSkillLevel} who are learning programming concepts. 
+
+${userSkillLevel === 'Beginner' ? `
+🎯 BEGINNER EXPLANATION REQUIREMENT: For EVERY programming term, immediately explain it in parentheses. For example:
+- "list (order of items)"
+- "sliding window (move the start and ending point of a section)"
+- "hash map (key-value lookup table)"
+- "recursion (function that calls itself)"
+- "stack (last-in, first-out structure)"
+- "queue (first-in, first-out structure)"
+- "binary search (search by repeatedly dividing in half)"
+- "greedy (always take the best option at each step)"
+- "dynamic programming (break problem into overlapping subproblems)"
+- "pointer (reference to a location in memory)"
+- "traverse (go through each item)"
+
+ALL technical terms in questions, options, and explanations MUST include these parenthetical explanations for beginners.` : ''}
+
+ALL time/space complexity notations (O(1), O(n), O(log n), etc.) mentioned ANYWHERE in the quiz (including option explanations) MUST be immediately explained in parentheses. For example:
+- O(1) (instant)
+- O(n) (proportional to n)
+- O(log n) (grows slowly as input increases)
+- O(n log n) (a bit slower than linear)
+- O(n^2) (proportional to n squared)
+- O(n^3) (proportional to n cubed)
 
 🎯 OPTION LENGTH REQUIREMENT: All options (A, B, C, D) must be strictly within 1 sentence and maximum 12 words each. Do NOT make the correct answer more detailed, longer, or more technical than the others. All options should be plausible and have a similar level of explanation or brevity. This is a strict requirement to avoid making the correct answer obvious.
 
@@ -1958,13 +2048,13 @@ SOLUTION DATA:
 - Why Optimal: ${solutionAnalysis.whyThisApproach}
 
 BEGINNER-FRIENDLY TIME COMPLEXITY EXPLANATIONS:
-When explaining time complexity, ALWAYS include what the notation means:
-- O(1): "O(1) means constant time - the algorithm takes the same amount of time regardless of input size"
-- O(n): "O(n) means linear time - the algorithm takes time proportional to the size n of the input"
-- O(log n): "O(log n) means logarithmic time - the algorithm's time grows very slowly as input size increases"
-- O(n log n): "O(n log n) means the algorithm does n operations, each taking log n time - it's like sorting a list"
-- O(n²): "O(n²) means quadratic time - the algorithm takes time proportional to the square of input size"
-- O(n³): "O(n³) means cubic time - the algorithm takes time proportional to the cube of input size"
+When explaining time complexity, ALWAYS include what the notation means in parentheses:
+- O(1) (instant)
+- O(n) (proportional to n)
+- O(log n) (grows slowly as input increases)
+- O(n log n) (a bit slower than linear)
+- O(n^2) (proportional to n squared)
+- O(n^3) (proportional to n cubed)
 
 EXPLANATION REQUIREMENTS:
 ✅ CORRECT answers: Explain WHY it's correct and what concept it demonstrates (2-3 sentences)
@@ -1982,18 +2072,18 @@ EXPLANATION REQUIREMENTS:
 - Be concise and direct in explaining the concept or misconception
 
 EXAMPLES OF BEGINNER-FRIENDLY EXPLANATIONS:
-❌ Bad: "This has O(n²) complexity"
-✅ Good: "This has O(n²) time complexity - meaning the algorithm takes time proportional to the square of input size, like comparing every person with every other person in a room"
+❌ Bad: "This has O(n^2) complexity"
+✅ Good: "This has O(n^2) (proportional to n squared) time complexity, so it gets very slow as n increases."
 
 ❌ Bad: "Hash table lookup is O(1)"
-✅ Good: "Hash table lookup is O(1) time complexity - meaning it's constant time, like having speed dial where you press one button and immediately get your friend's number"
+✅ Good: "Hash table lookup is O(1) (instant) time complexity."
 
 ❌ Bad: "Binary search is O(log n)"
-✅ Good: "Binary search is O(log n) time complexity - meaning it's logarithmic time, like finding a word in a dictionary by always checking the middle and eliminating half the remaining pages"
+✅ Good: "Binary search is O(log n) (grows slowly as input increases) time complexity."
 
 QUIZ STRUCTURE (6-7 questions):
 1. Data structure definition and how it works
-2. Algorithm usage - when and why to use it  
+2. Algorithm usage - when and why to use it
 3. Time/space complexity of optimal solution (MUST explain what the notation means)
 4. Why this approach is optimal for this problem
 5. Key insight: "${solutionAnalysis.keyInsight}"

@@ -627,20 +627,6 @@ export function AnalysisModal({
                         />
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={[styles.completeButton, isCompletingTask && { opacity: 0.6 }]} 
-                        onPress={handleCompleteTask}
-                        disabled={isCompletingTask}
-                      >
-                        {isCompletingTask ? (
-                          <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                          <Image 
-                            source={require('@/assets/images/icons/complete-icon.png')}
-                            style={styles.iconOnlyButton}
-                          />
-                        )}
-                      </TouchableOpacity>
-                      <TouchableOpacity 
                         style={styles.retryButton} 
                         onPress={handleClose}
                       >
@@ -1188,7 +1174,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 12,
     backgroundColor: '#6564c7',
-    width: '50%',
+    width: '85%',
     shadowColor: '#6564c7',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
