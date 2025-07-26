@@ -315,15 +315,15 @@ export default function AllQuestionsScreen() {
         
       case 'status':
         filtered.sort((a, b) => {
-          const statusOrder = { 'Unsolved': 1, 'Solved': 2 };
+          const statusOrder = { 'Solved': 1, 'Unsolved': 2 };
           const aOrder = statusOrder[a.status as keyof typeof statusOrder];
           const bOrder = statusOrder[b.status as keyof typeof statusOrder];
           
           if (sortOrder === 'asc') {
-            // Unsolved → Solved: Unsolved(1) comes first, then Solved(2)
+            // Solved → Unsolved: Solved(1) comes first, then Unsolved(2)
             return aOrder - bOrder;
           } else {
-            // Solved → Unsolved: Solved(2) comes first, then Unsolved(1)
+            // Unsolved → Solved: Unsolved(2) comes first, then Solved(1)
             return bOrder - aOrder;
           }
         });

@@ -129,7 +129,7 @@ export class NotificationService {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🚀 Time to Code!',
-          body: `You have ${dailyGoal} problem${dailyGoal > 1 ? 's' : ''} to solve today! Keep your streak alive and level up your skills! 💪`,
+          body: 'Increase your streak now!',
           data: { type: 'daily_reminder', dailyGoal },
         },
         trigger: {
@@ -165,7 +165,7 @@ export class NotificationService {
       await Notifications.scheduleNotificationAsync({
         content: {
           title: '🧪 Test Notification!',
-          body: `Perfect! Your daily goal is ${settings.dailyGoal} problem${settings.dailyGoal > 1 ? 's' : ''}. You'll receive daily reminders to keep your coding streak going! 🔥`,
+          body: 'Do your CodeOnTheGo for today!',
           data: { type: 'test_notification' },
         },
         trigger: null, // Send immediately
