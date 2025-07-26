@@ -149,14 +149,25 @@ export default function StreakAnimationScreen() {
 
       // Original navigation logic for all other cases
       const fromPseudocode = params.fromPseudocode === 'true';
+      const fromQuizMCQ = params.from === 'quizMCQ';
+      const isRecapQuiz = params.lessonTitles && params.lessonTitles !== '';
+      
+      // Determine the correct completion page
+      let completionPathname: any = './QuizComplete';
+      if (fromPseudocode) {
+        completionPathname = './PseudocodeComplete';
+      } else if (fromQuizMCQ || isRecapQuiz) {
+        completionPathname = './RecapQuizComplete';
+      }
       
       router.replace({
-        pathname: fromPseudocode ? './PseudocodeComplete' : './QuizComplete',
+        pathname: completionPathname,
         params: {
           problemTitle: params.problemTitle as string || '',
           problemId: params.problemId as string || '',
           topicName: params.topicName as string || '',
           quizData: params.quizData as string || '',
+          lessonTitles: params.lessonTitles as string || '', // Pass lessonTitles for recap quiz
           difficulty: params.difficulty as string || '',
           description: params.description as string || '',
           code: params.code as string || '', // Pass the code for redoing

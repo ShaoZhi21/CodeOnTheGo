@@ -44,6 +44,13 @@ interface LastActivity {
   stars?: number;
 }
 
+interface RecapLesson {
+  problem_id: number;
+  title: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  completed_at: string;
+}
+
 const getTopicIcon = (topicName: string) => {
   const iconMap: { [key: string]: any } = {
     'Array': require('../../assets/images/icons/list-icon.png'),
@@ -103,6 +110,8 @@ export default function HomeScreen() {
   const [challengeLoading, setChallengeLoading] = useState(false);
   const [lastActivities, setLastActivities] = useState<LastActivity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [recapLessons, setRecapLessons] = useState<RecapLesson[]>([]);
+  const [recapQuestionCount, setRecapQuestionCount] = useState(0);
 
   // Refresh data when screen comes into focus (e.g., after lesson/quiz completion)
   useFocusEffect(
@@ -113,6 +122,7 @@ export default function HomeScreen() {
       loadAllTopics();
       loadDailyChallenge();
       loadLastActivities();
+      fetchRecapLessons();
     }, [])
   );
 
@@ -289,6 +299,27 @@ export default function HomeScreen() {
     });
   };
 
+  const handleRecapQuiz = () => {
+    // Navigate to loading quiz with the last 3 lessons
+    console.log('Starting recap quiz');
+    const lessonTitles = recapLessons.map(lesson => lesson.title);
+    console.log('Passing lesson titles:', lessonTitles);
+    router.push({
+      pathname: '/screens/LoadingQuiz',
+      params: {
+        lessonTitles: lessonTitles.join(',')
+      }
+    });
+  };
+
+  const formatRecapTag = () => {
+    const lessonTitles = recapLessons.map(lesson => lesson.title);
+    if (lessonTitles.length === 0) return 'No lessons completed';
+    if (lessonTitles.length === 1) return `Recap: ${lessonTitles[0]}`;
+    if (lessonTitles.length === 2) return `Recap: ${lessonTitles[0]}, ${lessonTitles[1]}`;
+    return `Recap: ${lessonTitles[0]}, ${lessonTitles[1]}, ${lessonTitles[2]}`;
+  };
+
   const loadLastActivities = async () => {
     try {
       console.log('🔄 loadLastActivities: Starting...');
@@ -380,6 +411,57 @@ export default function HomeScreen() {
       console.error('❌ loadLastActivities: Error:', error);
     } finally {
       setActivitiesLoading(false);
+    }
+  };
+
+  const fetchRecapLessons = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Fetch last 3 completed lessons
+      const { data: lessonCompletions, error } = await supabase
+        .from('user_lesson_completion')
+        .select('problem_id, completed_at')
+        .eq('user_id', user.id)
+        .eq('quiz_completed', true)
+        .order('completed_at', { ascending: false })
+        .limit(3);
+
+      if (error) {
+        console.error('Error fetching lesson completions:', error);
+        return;
+      }
+
+      if (lessonCompletions && lessonCompletions.length > 0) {
+        // Get problem details for each completed lesson
+        const problemIds = lessonCompletions.map(lesson => lesson.problem_id);
+        const { data: problems, error: problemsError } = await supabase
+          .from('leetcode_problems')
+          .select('leetcode_id, title, difficulty')
+          .in('leetcode_id', problemIds);
+
+        if (problemsError) {
+          console.error('Error fetching problems:', problemsError);
+          return;
+        }
+
+        // Combine lesson completions with problem details
+        const recapData: RecapLesson[] = lessonCompletions.map(lesson => {
+          const problem = problems?.find(p => p.leetcode_id === lesson.problem_id);
+          return {
+            problem_id: lesson.problem_id,
+            title: problem?.title || 'Unknown Problem',
+            difficulty: (problem?.difficulty as 'Easy' | 'Medium' | 'Hard') || 'Easy',
+            completed_at: lesson.completed_at
+          };
+        });
+
+        setRecapLessons(recapData);
+        setRecapQuestionCount(recapData.length * 3); // 3 questions per lesson
+      }
+    } catch (error) {
+      console.error('Error in fetchRecapLessons:', error);
     }
   };
 
@@ -722,7 +804,36 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Recent Activity Card - Full width below the two buttons */}
+            {/* Recap Quiz Button - Full Width */}
+            <TouchableOpacity 
+              style={[styles.recapCard, { opacity: recapLessons.length === 0 ? 0.6 : 1 }]} 
+              onPress={handleRecapQuiz}
+              disabled={recapLessons.length === 0}
+            >
+              <View style={styles.recapIconContainer}>
+                <Image 
+                  source={require('../../assets/images/icons/retry-icon.png')} 
+                  style={styles.recapIcon}
+                />
+              </View>
+              <View style={styles.recapContent}>
+                <ThemedText style={styles.recapTitle}>Recap Quiz</ThemedText>
+                <ThemedText style={styles.recapDescription}>
+                  Practice questions from your last 3 completed lessons
+                </ThemedText>
+                                  <View style={styles.recapTag}>
+                    <ThemedText style={styles.recapTagText}>{formatRecapTag()}</ThemedText>
+                  </View>
+              </View>
+              <View style={styles.recapArrow}>
+                <Image 
+                  source={require('../../assets/images/icons/up-arrow.png')} 
+                  style={styles.arrowIcon}
+                />
+              </View>
+            </TouchableOpacity>
+
+            {/* Recent Activity Card - Full width below the three buttons */}
             {lastActivities.length > 0 && (
               <View style={styles.horizontalActivityCard}>
                 {lastActivities.slice(0, 1).map((activity, index) => (
@@ -1538,5 +1649,86 @@ const styles = StyleSheet.create({
   horizontalActivityDate: {
     fontSize: 11,
     color: '#9CA3AF',
+  },
+  recapTag: {
+    backgroundColor: '#F3F0FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+
+  },
+  recapTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+
+  // Recap Quiz Card Styles (from quiz.tsx)
+  recapCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  recapIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#F3F0FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  recapIcon: {
+    width: 24,
+    height: 24,
+    tintColor: '#8B5CF6',
+  },
+  recapContent: {
+    flex: 1,
+  },
+  recapTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  recapDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  recapBadge: {
+    backgroundColor: '#F3F0FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+  recapBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8B5CF6',
+  },
+  recapArrow: {
+    marginLeft: 12,
+  },
+  arrowIcon: {
+    width: 16,
+    height: 16,
+    tintColor: '#8B5CF6',
+    transform: [{ rotate: '90deg' }],
   },
 });

@@ -1,21 +1,22 @@
 import { useStreak } from '@/contexts/StreakContext';
 import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    Modal,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
-interface LessonMCQQuestion {
+interface QuizMCQQuestion {
   question: string;
   options: string[];
   correct_answer: string;
@@ -28,73 +29,45 @@ interface LessonMCQQuestion {
   };
 }
 
-interface LessonMCQData {
+interface QuizMCQData {
   introductory_text: string;
-  quiz: LessonMCQQuestion[];
+  quiz: QuizMCQQuestion[];
 }
 
 const { height: screenHeight } = Dimensions.get('window');
 
-export default function LessonMCQScreen() {
+export default function QuizMCQScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
   const { showStreakAnimation } = useStreak();
   
-  // Parse the quiz data from params
-  const quizData: LessonMCQData = params.quizData 
-    ? JSON.parse(params.quizData as string) 
-    : null;
+  // Parse the quiz data from params or AsyncStorage
+  const [quizData, setQuizData] = useState<QuizMCQData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  console.log('🎯 LessonMCQ: Quiz data parsed:', {
-    hasQuizData: !!quizData,
-    quizLength: quizData?.quiz?.length || 0,
-    quizDataKeys: quizData ? Object.keys(quizData) : [],
-    firstQuestion: quizData?.quiz?.[0] ? {
-      question: quizData.quiz[0].question?.substring(0, 50) + '...',
-      optionsCount: quizData.quiz[0].options?.length || 0
-    } : null
-  });
-
-  // Reset state if this is a redo
+  // Load quiz data from AsyncStorage if usePrefetchedData is true
   useEffect(() => {
-    if (params.redo === '1') {
-      // Batch all state updates together to avoid multiple re-renders
-      const resetState = () => {
-      setCurrentQuestionIndex(0);
-      setSelectedAnswers([]);
-      setScore(0);
-      setShowResult(false);
-      setSelectedOption(null);
-      setShowExplanation(false);
-      setHasSubmitted(false);
-      setIsCorrect(false);
-      setQuizCompleted(false);
-      };
-      
-      // Use requestAnimationFrame to ensure we're not in the middle of a render
-      requestAnimationFrame(() => {
-        resetState();
-      });
-    }
-  }, [params.redo]);
-    
-  // Get questionTitle from params
-  const questionTitle = Array.isArray(params.questionTitle) 
-    ? params.questionTitle[0] 
-    : params.questionTitle;
+    const loadQuizData = async () => {
+      try {
+        if (params.usePrefetchedData === 'true' && params.lessonTitles) {
+          const storedData = await AsyncStorage.getItem(`quiz_${params.lessonTitles}`);
+          if (storedData) {
+            const parsedData = JSON.parse(storedData);
+            setQuizData(parsedData);
+            console.log('✅ QuizMCQ: Loaded quiz data from AsyncStorage');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading quiz data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  // Also get problemTitle from params (for consistency)
-  const problemTitle = Array.isArray(params.problemTitle) 
-    ? params.problemTitle[0] 
-    : params.problemTitle;
+    loadQuizData();
+  }, [params.usePrefetchedData, params.lessonTitles]);
 
-  // Use problemTitle if available, otherwise fall back to questionTitle
-  const finalProblemTitle = problemTitle || questionTitle;
 
-  console.log('LessonMCQ - questionTitle:', questionTitle);
-  console.log('LessonMCQ - problemTitle:', problemTitle);
-  console.log('LessonMCQ - finalProblemTitle:', finalProblemTitle);
-  console.log('LessonMCQ - params:', params);
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
@@ -105,7 +78,6 @@ export default function LessonMCQScreen() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
-  const [isLoading, setIsLoading] = useState(!quizData); // Loading state if no quiz data
   
   // Animation values
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -115,60 +87,45 @@ export default function LessonMCQScreen() {
   const modalScaleAnim = useRef(new Animated.Value(0.9)).current;
   const modalOpacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Reset slideAnim if this is a redo (after animation values are declared)
-  useEffect(() => {
-    if (params.redo === '1') {
-      slideAnim.setValue(screenHeight);
-    }
-  }, [params.redo, slideAnim]);
-
   const currentQuestion = quizData?.quiz[currentQuestionIndex];
   const totalQuestions = quizData?.quiz.length || 0;
-
-  // Update loading state when quiz data becomes available
-  useEffect(() => {
-    if (quizData && isLoading) {
-      console.log('✅ Quiz data loaded, setting loading to false');
-      setIsLoading(false);
-    }
-  }, [quizData, isLoading]);
 
   // Bounce animation when question appears
   useEffect(() => {
     // Use requestAnimationFrame to ensure we're not in the middle of a render
     requestAnimationFrame(() => {
-    // Reset animations
-    bounceAnim.setValue(0);
-    fadeAnim.setValue(0);
-    scaleAnim.setValue(0.8);
+      // Reset animations
+      bounceAnim.setValue(0);
+      fadeAnim.setValue(0);
+      scaleAnim.setValue(0.8);
       slideAnim.setValue(screenHeight);
       
       // Reset state
-    setSelectedOption(null);
-    setShowExplanation(false);
-    setHasSubmitted(false);
-    setIsCorrect(false);
+      setSelectedOption(null);
+      setShowExplanation(false);
+      setHasSubmitted(false);
+      setIsCorrect(false);
 
-    // Start bounce animation
-    Animated.parallel([
-      Animated.spring(bounceAnim, {
-        toValue: 1,
-        tension: 100,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
+      // Start bounce animation
+      Animated.parallel([
+        Animated.spring(bounceAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
     });
   }, [currentQuestionIndex, bounceAnim, fadeAnim, scaleAnim, slideAnim]);
 
@@ -247,14 +204,14 @@ export default function LessonMCQScreen() {
     ]).start(() => {
       // Use requestAnimationFrame to ensure we're not in the middle of a render
       requestAnimationFrame(() => {
-      setShowExplanation(false);
-      
-      if (currentQuestionIndex < totalQuestions - 1) {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-      } else {
-        // Quiz completed: check if this is first daily activity
-        checkDailyStreakAndNavigate();
-      }
+        setShowExplanation(false);
+        
+        if (currentQuestionIndex < totalQuestions - 1) {
+          setCurrentQuestionIndex(currentQuestionIndex + 1);
+        } else {
+          // Quiz completed: check if this is first daily activity
+          checkDailyStreakAndNavigate();
+        }
       });
     });
   };
@@ -265,15 +222,13 @@ export default function LessonMCQScreen() {
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log('❌ No user found, going to QuizComplete');
-        // No user, go directly to QuizComplete
+
+        // No user, go directly to RecapQuizComplete
         router.push({
-          pathname: './QuizComplete',
+          pathname: './RecapQuizComplete',
           params: {
-            problemTitle: finalProblemTitle,
-            problemId: params.problemId || '',
-            topicName: params.topicName || '',
-            quizData: params.quizData || '', // Pass the quiz data
+            lessonTitles: params.lessonTitles || '',
+            quizData: JSON.stringify(quizData) || '', // Pass the quiz data
           }
         });
         return;
@@ -330,21 +285,20 @@ export default function LessonMCQScreen() {
         }
       }
 
-      console.log('🎯 Final last activity (before current quiz):', lastActivity ? lastActivity.toISOString() : 'None');
+
 
       // Now save the current quiz completion
       await handleQuizCompletion();
 
       // Check if user had already done activity today (before this quiz)
       if (lastActivity && lastActivity >= today) {
-        console.log('❌ Already did activity today (before this quiz), going to QuizComplete');
-        // Already did activity today, go to QuizComplete
+
+        // Already did activity today, go to RecapQuizComplete
         router.push({
-          pathname: './QuizComplete',
+          pathname: './RecapQuizComplete',
           params: {
-            problemTitle: finalProblemTitle,
-            topicName: params.topicName || '',
-            quizData: params.quizData || '', // Pass the quiz data
+            lessonTitles: params.lessonTitles || '',
+            quizData: JSON.stringify(quizData) || '', // Pass the quiz data
           }
         });
         return;
@@ -378,22 +332,23 @@ export default function LessonMCQScreen() {
       router.push({
         pathname: './StreakAnimation',
         params: {
-          problemTitle: finalProblemTitle,
-          problemId: params.problemId || '',
-          topicName: params.topicName || '',
-          quizData: params.quizData || '', // Pass the quiz data
+          from: 'quizMCQ', // Add from parameter to identify source
+          problemTitle: 'Recap Quiz',
+          problemId: params.lessonTitles || '',
+          topicName: 'Recap',
+          quizData: JSON.stringify(quizData) || '', // Pass the quiz data
+          lessonTitles: params.lessonTitles || '', // Pass lessonTitles for recap quiz
         }
       });
     } catch (error) {
       console.error('❌ Error in checkDailyStreakAndNavigate:', error);
-      // On error, go directly to QuizComplete
+      console.log('🎯 Navigating to RecapQuizComplete with lessonTitles:', params.lessonTitles);
+      // On error, go directly to RecapQuizComplete
       router.push({
-        pathname: './QuizComplete',
+        pathname: './RecapQuizComplete',
         params: {
-          problemTitle: finalProblemTitle,
-          problemId: params.problemId || '',
-          topicName: params.topicName || '',
-          quizData: params.quizData || '', // Pass the quiz data
+          lessonTitles: params.lessonTitles || '',
+          quizData: JSON.stringify(quizData) || '', // Pass the quiz data
         }
       });
     }
@@ -402,19 +357,19 @@ export default function LessonMCQScreen() {
   const handleRetryQuiz = () => {
     // Use requestAnimationFrame to ensure we're not in the middle of a render
     requestAnimationFrame(() => {
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
-    setScore(0);
-    setShowResult(false);
-    setSelectedOption(null);
-    setShowExplanation(false);
-    setHasSubmitted(false);
-    setIsCorrect(false);
-    slideAnim.setValue(screenHeight);
+      setCurrentQuestionIndex(0);
+      setSelectedAnswers([]);
+      setScore(0);
+      setShowResult(false);
+      setSelectedOption(null);
+      setShowExplanation(false);
+      setHasSubmitted(false);
+      setIsCorrect(false);
+      slideAnim.setValue(screenHeight);
     });
   };
 
-  const handleBackToLesson = () => {
+  const handleBackToQuiz = () => {
     router.back();
   };
 
@@ -431,19 +386,10 @@ export default function LessonMCQScreen() {
       const actualScore = Math.min(score, totalQuestions);
       const percentage = Math.round((actualScore / totalQuestions) * 100);
       const passed = percentage >= 70;
-      // Find the problem ID by title
-      let problemId = 0;
-      if (finalProblemTitle) {
-        const { data: problems } = await supabase
-          .from('leetcode_problems')
-          .select('leetcode_id')
-          .eq('title', finalProblemTitle)
-          .limit(1);
-        problemId = problems && problems.length > 0 ? problems[0].leetcode_id : 0;
-      }
-      if (problemId) {
-        await markProblemFullyComplete(problemId, actualScore, Math.ceil(actualScore / 20));
-      }
+      
+      // For recap quiz, we don't need to save to a specific problem
+      // Just mark that the user completed a recap quiz
+      console.log('✅ Recap quiz completed with score:', actualScore, '/', totalQuestions);
     } catch (error) {
       console.error('Error handling quiz completion:', error);
     }
@@ -586,9 +532,9 @@ export default function LessonMCQScreen() {
                   ]).start(() => {
                     // Use requestAnimationFrame to ensure we're not in the middle of a render
                     requestAnimationFrame(() => {
-                    setShowExplanation(false);
-                    setHasSubmitted(false);
-                    setIsCorrect(false);
+                      setShowExplanation(false);
+                      setHasSubmitted(false);
+                      setIsCorrect(false);
                     });
                   });
                 }}
@@ -674,7 +620,7 @@ export default function LessonMCQScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackToLesson} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBackToQuiz} style={styles.backButton}>
             <Image 
               source={require('../../assets/images/icons/back-icon.png')} 
               style={styles.backIcon} 
@@ -701,7 +647,7 @@ export default function LessonMCQScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackToLesson} style={styles.backButton}>
+          <TouchableOpacity onPress={handleBackToQuiz} style={styles.backButton}>
             <Image 
               source={require('../../assets/images/icons/back-icon.png')} 
               style={styles.backIcon} 
@@ -711,7 +657,7 @@ export default function LessonMCQScreen() {
           <View style={styles.headerCenter}>
             <View style={styles.headerTitleBubble}>
               <View style={styles.quizDot} />
-              <Text style={styles.headerTitle}>{finalProblemTitle || 'Quiz'}</Text>
+              <Text style={styles.headerTitle}>Recap Quiz</Text>
             </View>
           </View>
           
@@ -720,10 +666,7 @@ export default function LessonMCQScreen() {
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>No quiz data available</Text>
           <Text style={styles.errorSubtext}>
-            Quiz data was not passed correctly. Please try again.
-          </Text>
-          <Text style={styles.errorSubtext}>
-            Debug: quizData param exists: {params.quizData ? 'Yes' : 'No'}
+            Quiz data was not loaded correctly. Please try again.
           </Text>
         </View>
       </SafeAreaView>
@@ -733,20 +676,20 @@ export default function LessonMCQScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBackToLesson} style={styles.backButton}>
+        <TouchableOpacity onPress={handleBackToQuiz} style={styles.backButton}>
           <Image 
             source={require('../../assets/images/icons/back-icon.png')} 
             style={styles.backIcon} 
           />
         </TouchableOpacity>
         
-                  <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.quizDot} />
-              <Text style={styles.headerTitle}>{finalProblemTitle || 'Quiz'}</Text>
-            </View>
+        <View style={styles.headerCenter}>
+          <View style={styles.headerTitleBubble}>
+            <View style={styles.quizDot} />
+            <Text style={styles.headerTitle}>Recap Quiz</Text>
           </View>
-        
+        </View>
+      
         <View style={styles.headerSpacer} />
       </View>
       
@@ -929,18 +872,6 @@ const styles = StyleSheet.create({
   wrongOptionText: {
     color: '#991B1B',
   },
-  checkmark: {
-    fontSize: 18,
-    color: '#10B981',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  crossmark: {
-    fontSize: 18,
-    color: '#EF4444',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
   submitButton: {
     paddingVertical: 16,
     borderRadius: 12,
@@ -1009,117 +940,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  resultContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  celebrationContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  celebrationEmoji: {
-    fontSize: 80,
-    marginBottom: 16,
-  },
-  resultSubtitle: {
-    fontSize: 18,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  scoreContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-    padding: 24,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 16,
-    width: '100%',
-  },
-  scoreLabel: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  scoreDisplay: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  scorePercentage: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#6564c7',
-    marginBottom: 16,
-  },
-  starsContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  starIcon: {
-    fontSize: 32,
-  },
-  starFilled: {
-    opacity: 1,
-  },
-  starEmpty: {
-    opacity: 0.3,
-  },
-  messageContainer: {
-    marginBottom: 30,
-    paddingHorizontal: 20,
-  },
-  resultTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  resultScore: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#6564c7',
-    marginBottom: 16,
-  },
-  resultMessage: {
-    fontSize: 16,
-    color: '#4B5563',
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-  },
-  resultButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  button: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  retryButton: {
-    backgroundColor: '#6564c7',
-  },
-  retryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  resultBackButton: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  resultBackButtonText: {
-    color: '#374151',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1136,71 +956,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     marginTop: 8,
-  },
-  allExplanations: {
-    marginVertical: 12,
-    gap: 12,
-  },
-  optionExplanation: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  selectedExplanation: {
-    borderColor: '#6564c7',
-    borderWidth: 2,
-    backgroundColor: '#F3E8FF',
-  },
-  optionExplanationHeader: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  correctOptionHeader: {
-    color: '#059669',
-  },
-  wrongOptionHeader: {
-    color: '#DC2626',
-  },
-  optionExplanationText: {
-    fontSize: 14,
-    color: '#4B5563',
-    lineHeight: 20,
-  },
-  selectedAnswerSection: {
-    backgroundColor: '#F3E8FF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  selectedAnswerHeader: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#6564c7',
-    marginBottom: 8,
-  },
-  selectedAnswerText: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  correctAnswerHint: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    marginTop: 12,
-  },
-  correctAnswerText: {
-    fontSize: 16,
-    color: '#065F46',
-    fontWeight: '600',
   },
 }); 

@@ -1723,6 +1723,150 @@ Generate ONLY the JSON object, no other text.`;
   }
 }
 
+// Generate Recap Quiz Endpoint
+app.post('/api/generate-recap-quiz', async (req, res) => {
+  if (!geminiModel) {
+    return res.status(500).json({ error: 'Quiz generation is not configured on the server.' });
+  }
+
+  try {
+    const { lessonTitles, userId } = req.body;
+
+    if (!lessonTitles) {
+      return res.status(400).json({ error: 'Lesson titles are required' });
+    }
+
+    // Parse lesson titles
+    const lessonTitleArray = lessonTitles.split(',').map(title => title.trim());
+
+    // Get problem details for the lessons
+    const { data: problemsData, error: problemsError } = await supabase
+      .from('leetcode_problems')
+      .select('leetcode_id, title, description, description_text, examples, constraints, difficulty, tags')
+      .in('title', lessonTitleArray);
+
+    if (problemsError || !problemsData || problemsData.length === 0) {
+      console.error('Error fetching problems:', problemsError);
+      return res.status(404).json({ error: 'Problems not found' });
+    }
+
+    console.log(`🔍 Generating recap quiz for ${problemsData.length} lessons:`, problemsData.map(p => p.title));
+
+    // Create a comprehensive prompt for recap quiz
+    const recapQuizPrompt = `Create a recap quiz based on these ${problemsData.length} LeetCode problems. Generate 8 multiple choice questions.
+
+PROBLEMS:
+${problemsData.map((problem, index) => `
+${index + 1}. "${problem.title}" (${problem.difficulty})
+`).join('\n')}
+
+REQUIREMENTS:
+- 8 questions total
+- Each question has 4 options (A, B, C, D)
+- Only one correct answer per question
+- Questions should cover: data structures, algorithms, time complexity, problem-solving concepts
+- Mix questions from all provided problems
+- Focus on fundamental concepts
+
+FORMAT:
+{
+  "introductory_text": "Welcome to your recap quiz! Test your understanding of key concepts.",
+  "quiz": [
+    {
+      "question": "Question text here",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct_answer": "Option A",
+      "optionExplanations": {
+        "A": "Brief explanation for option A",
+        "B": "Brief explanation for option B", 
+        "C": "Brief explanation for option C",
+        "D": "Brief explanation for option D"
+      }
+    }
+  ]
+}
+
+Generate ONLY the JSON object, no other text.`;
+
+    const result = await geminiModel.generateContent(recapQuizPrompt);
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    let quizData;
+    try {
+      quizData = JSON.parse(text);
+      
+      // Post-process to ensure completely random positioning of correct answers
+      if (quizData.quiz && Array.isArray(quizData.quiz)) {
+        quizData.quiz.forEach((question, questionIndex) => {
+          // Find the correct answer index
+          const correctAnswerIndex = question.options.findIndex(option => option === question.correct_answer);
+          if (correctAnswerIndex === -1) {
+            console.error(`Question ${questionIndex + 1}: Correct answer not found in options`);
+            return;
+          }
+          
+          const correctOption = question.options[correctAnswerIndex];
+          const correctExplanation = question.optionExplanations?.[Object.keys(question.optionExplanations)[correctAnswerIndex]];
+          
+          // Shuffle options and update correct_answer
+          const shuffledOptions = [...question.options];
+          const shuffledExplanations = { ...question.optionExplanations };
+          
+          // Remove correct answer from current position
+          shuffledOptions.splice(correctAnswerIndex, 1);
+          const optionKeys = ['A', 'B', 'C', 'D'];
+          delete shuffledExplanations[optionKeys[correctAnswerIndex]];
+          
+          // Completely random position (0, 1, 2, or 3)
+          const randomPosition = Math.floor(Math.random() * 4);
+          
+          // Insert correct answer at random position
+          shuffledOptions.splice(randomPosition, 0, correctOption);
+          
+          // Update explanations
+          const newExplanations = {};
+          optionKeys.forEach((key, index) => {
+            if (index === randomPosition) {
+              newExplanations[key] = correctExplanation;
+            } else if (index < randomPosition) {
+              newExplanations[key] = shuffledExplanations[optionKeys[index]];
+            } else {
+              newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
+            }
+          });
+          
+          // Update the question
+          question.options = shuffledOptions;
+          question.correct_answer = correctOption;
+          question.optionExplanations = newExplanations;
+          
+          console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
+        });
+        
+        // Log the final distribution
+        const positionCounts = [0, 0, 0, 0];
+        quizData.quiz.forEach(q => {
+          const correctIndex = q.options.findIndex(option => option === q.correct_answer);
+          if (correctIndex !== -1) positionCounts[correctIndex]++;
+        });
+        console.log(`📊 Final correct answer distribution: A=${positionCounts[0]}, B=${positionCounts[1]}, C=${positionCounts[2]}, D=${positionCounts[3]}`);
+      }
+    } catch (parseError) {
+      console.error('Failed to parse recap quiz JSON:', parseError);
+      return res.status(500).json({ error: 'Failed to generate recap quiz questions' });
+    }
+
+    console.log(`✅ Generated recap quiz with ${quizData.quiz?.length || 0} questions for ${problemsData.length} lessons`);
+    res.json(quizData);
+
+  } catch (err) {
+    console.error('Recap quiz generation error:', err);
+    return res.status(500).json({ error: 'Failed to generate recap quiz', details: err.message });
+  }
+});
+
 // Generate Quiz Endpoint
 app.post('/api/generate-quiz', async (req, res) => {
   if (!geminiModel) {
