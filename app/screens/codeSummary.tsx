@@ -180,7 +180,10 @@ export default function CodeSummary() {
 
       // Only update profile stats if this is a new completion
       if (isNewCompletion) {
+        console.log('🔄 Starting profile stats update for new completion...');
+        
         // Get problem difficulty from leetcode_problems
+        console.log('📊 Fetching problem difficulty for problemId:', problemId);
         const { data: problemData, error: problemError } = await supabase
           .from('leetcode_problems')
           .select('difficulty')
@@ -188,13 +191,16 @@ export default function CodeSummary() {
           .single();
 
         if (problemError) {
-          console.error('Failed to get problem difficulty:', problemError);
+          console.error('❌ Failed to get problem difficulty:', problemError);
           throw new Error('Failed to get problem difficulty');
         }
 
+        console.log('✅ Problem difficulty found:', problemData.difficulty);
         const difficulty = problemData.difficulty.toLowerCase();
+        console.log('🔧 Normalized difficulty:', difficulty);
 
         // Get current stats to calculate new completion percentage
+        console.log('📈 Fetching current user profile stats...');
         let { data: currentStats, error: statsGetError } = await supabase
           .from('user_profiles')
           .select('total_questions, easy_solved, medium_solved, hard_solved')
@@ -202,6 +208,7 @@ export default function CodeSummary() {
           .single();
 
         if (statsGetError) {
+          console.log('⚠️ No existing profile found, creating new one...');
           // If no profile exists, create one
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
@@ -218,16 +225,24 @@ export default function CodeSummary() {
             .single();
 
           if (createError) {
-            console.error('Failed to create user profile:', createError);
+            console.error('❌ Failed to create user profile:', createError);
             throw new Error('Failed to create user profile');
           }
 
+          console.log('✅ New user profile created:', newProfile);
           currentStats = newProfile;
+        } else {
+          console.log('✅ Existing profile stats found:', currentStats);
         }
 
         // Calculate new stats
         const newTotalQuestions = (currentStats?.total_questions || 0) + 1;
         const newCompletionPercentage = Math.round((newTotalQuestions * 100) / 3850);
+
+        console.log('🧮 Calculating new stats:');
+        console.log('  - Current total_questions:', currentStats?.total_questions || 0);
+        console.log('  - New total_questions:', newTotalQuestions);
+        console.log('  - New completion_percentage:', newCompletionPercentage);
 
         // Update difficulty-specific counts
         const updateData = {
@@ -238,8 +253,13 @@ export default function CodeSummary() {
           hard_solved: difficulty === 'hard' ? (currentStats?.hard_solved || 0) + 1 : (currentStats?.hard_solved || 0),
         };
 
+        console.log('📊 Difficulty-specific updates:');
+        console.log('  - easy_solved:', updateData.easy_solved);
+        console.log('  - medium_solved:', updateData.medium_solved);
+        console.log('  - hard_solved:', updateData.hard_solved);
+
         // Update user_profiles table
-        console.log('Updating user_profiles with data:', { user_id: userObj.id, ...updateData });
+        console.log('💾 Updating user_profiles table with data:', { user_id: userObj.id, ...updateData });
         const { error: profileUpdateError } = await supabase
           .from('user_profiles')
           .upsert({
@@ -248,11 +268,13 @@ export default function CodeSummary() {
           });
 
         if (profileUpdateError) {
-          console.error('Failed to update user profile:', profileUpdateError);
+          console.error('❌ Failed to update user profile:', profileUpdateError);
           throw new Error(`Failed to update user profile: ${profileUpdateError.message}`);
         }
 
-        console.log('Successfully updated user_profiles table');
+        console.log('✅ Successfully updated user_profiles table');
+      } else {
+        console.log('ℹ️ Problem already completed, skipping profile stats update');
       }
 
       Alert.alert('Success', 'Problem marked as complete!');

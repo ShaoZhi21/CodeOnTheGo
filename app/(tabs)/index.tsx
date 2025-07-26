@@ -301,14 +301,6 @@ export default function HomeScreen() {
     });
   };
 
-  const formatRecapTag = () => {
-    const lessonTitles = recapLessons.map(lesson => lesson.title);
-    if (lessonTitles.length === 0) return 'No lessons completed';
-    if (lessonTitles.length === 1) return `${lessonTitles[0]}`;
-    if (lessonTitles.length === 2) return `${lessonTitles[0]}, ${lessonTitles[1]}`;
-    return `${lessonTitles[0]} | ${lessonTitles[1]} | ${lessonTitles[2]}`;
-  };
-
   const getLastTopic = () => {
     if (topicsInProgress.length > 0) {
       return topicsInProgress[0].name;
@@ -740,12 +732,22 @@ export default function HomeScreen() {
                 />
               </View>
               <View style={styles.recapContent}>
-                <ThemedText style={styles.recapTitle}>Recap Quiz</ThemedText>
+                <ThemedText style={styles.recapTitle}>Active Recall</ThemedText>
                 <ThemedText style={styles.recapDescription}>
-                  Recap questions from your last 3 completed lessons
+                  Recap questions your last 3 completed lessons
                 </ThemedText>
-                <View style={styles.recapTag}>
-                  <ThemedText style={styles.recapTagText}>{formatRecapTag()}</ThemedText>
+                <View style={styles.recapTagsContainer}>
+                  {recapLessons.length === 0 ? (
+                    <View style={styles.recapTag}>
+                      <ThemedText style={styles.recapTagText}>No lessons completed</ThemedText>
+                    </View>
+                  ) : (
+                    recapLessons.map((lesson, index) => (
+                      <View key={index} style={styles.recapTag}>
+                        <ThemedText style={styles.recapTagText}>{lesson.title}</ThemedText>
+                      </View>
+                    ))
+                  )}
                 </View>
               </View>
               <View style={styles.recapArrow}>
@@ -1430,9 +1432,14 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   recapTagText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  recapTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
   },
 
   // Recap Quiz Card Styles (from quiz.tsx)
