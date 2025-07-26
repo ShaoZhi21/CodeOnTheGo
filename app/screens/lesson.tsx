@@ -1,15 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
 import { supabase } from '../../lib/supabase';
@@ -144,10 +144,7 @@ const getDataStructureImage = (imageName: string) => {
     'array': require('@/assets/images/datastructure/array.png'),
     'linkedlist': require('@/assets/images/datastructure/linkedlist.png'),
     'hashmap': require('@/assets/images/datastructure/hashmap.png'),
-    'binarytree': require('@/assets/images/datastructure/binarytree.png'),
-    'queue': require('@/assets/images/datastructure/queue.png'),
     'priorityqueue': require('@/assets/images/datastructure/priorityqueue.png'),
-    'matrix': require('@/assets/images/datastructure/matrix.png'),
     'trie': require('@/assets/images/datastructure/trie.png'),
     'undirectedgraph': require('@/assets/images/datastructure/undirectedgraph.png'),
     'directedgraph': require('@/assets/images/datastructure/directedgraph.png'),
