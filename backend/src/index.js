@@ -1376,6 +1376,8 @@ STEP 1: First, mentally solve the problem and identify the IDEAL solution approa
 STEP 2: Identify the MOST IMPORTANT data structure and algorithm needed for this ideal solution.
 STEP 3: Create a lesson that teaches these key concepts WITHOUT revealing the solution steps.
 
+TOPIC-SPECIFIC REQUIREMENT: You MUST focus on the most efficient solution that uses the "${topicName}" concept/data structure. If the problem can be solved with multiple approaches, prioritize the approach that best demonstrates the "${topicName}" topic. This ensures the lesson teaches the specific topic the user is studying.
+
 CRITICAL: This is for someone who has NEVER touched code before - imagine explaining to your grandparent or a 10-year-old child.
 
 TEACHING APPROACH FOR COMPLETE BEGINNERS:
@@ -1598,6 +1600,8 @@ async function generateHarderLesson(req, res) {
 STEP 1: First, mentally solve the problem and identify the IDEAL solution approach.
 STEP 2: Identify the MOST IMPORTANT data structure and algorithm needed for this ideal solution.
 STEP 3: Create a lesson that teaches these key concepts WITHOUT revealing the solution steps.
+
+TOPIC-SPECIFIC REQUIREMENT: You MUST focus on the most efficient solution that uses the "${topicName}" concept/data structure. If the problem can be solved with multiple approaches, prioritize the approach that best demonstrates the "${topicName}" topic. This ensures the lesson teaches the specific topic the user is studying.
 
 TEACHING APPROACH:
 - Teach the concept/data structure and algorithm in isolation

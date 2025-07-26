@@ -813,10 +813,12 @@ export default function RoadmapTopic() {
                   const isLeft = index % 2 === 0;
                   const curveX = isLeft ? 40 : -40;
                   
-                  const reversedCurrentIndex = (questions?.length || 0) - 1 - index;
-                  const isPathCompleted = questions && 
-                    questions[reversedCurrentIndex] && 
-                    questions[reversedCurrentIndex].completed;
+                  // FIX: Color path based on the completion of the "next" question (the one the path leads to)
+                  const reversedNextIndex = (questions?.length || 0) - 2 - index;
+                  const nextQuestion = questions && questions[reversedNextIndex];
+                  const hasCompletedLesson = nextQuestion ? lessonProgress[nextQuestion.leetcode_id || 0] : false;
+                  const hasCompletedPseudocode = nextQuestion ? progress[nextQuestion.leetcode_id || 0]?.completed : false;
+                  const isPathCompleted = hasCompletedLesson && hasCompletedPseudocode;
                   
                   return (
                     <Path

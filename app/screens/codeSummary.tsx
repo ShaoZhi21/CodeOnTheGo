@@ -224,39 +224,18 @@ export default function CodeSummary() {
 
         // Get current stats to calculate new completion percentage
         console.log('📈 Fetching current user profile stats...');
-        let { data: currentStats, error: statsGetError } = await supabase
+        const { data: currentStats, error: statsGetError } = await supabase
           .from('user_profiles')
-          .select('total_questions, easy_solved, medium_solved, hard_solved')
+          .select('total_questions, easy_solved, medium_solved, hard_solved, name, skill_level')
           .eq('user_id', userObj.id)
           .single();
 
         if (statsGetError) {
-          console.log('⚠️ No existing profile found, creating new one...');
-          // If no profile exists, create one
-          const { data: newProfile, error: createError } = await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: userObj.id,
-              name: userObj.user_metadata?.full_name || 'User',
-              total_questions: 0,
-              easy_solved: 0,
-              medium_solved: 0,
-              hard_solved: 0,
-              completion_percentage: 0
-            })
-            .select()
-            .single();
-
-          if (createError) {
-            console.error('❌ Failed to create user profile:', createError);
-            throw new Error('Failed to create user profile');
-          }
-
-          console.log('✅ New user profile created:', newProfile);
-          currentStats = newProfile;
-        } else {
-          console.log('✅ Existing profile stats found:', currentStats);
+          console.error('❌ Failed to fetch user profile:', statsGetError);
+          throw new Error('Failed to fetch user profile');
         }
+
+        console.log('✅ Existing profile stats found:', currentStats);
 
         // Calculate new stats
         const newTotalQuestions = (currentStats?.total_questions || 0) + 1;
@@ -282,20 +261,22 @@ export default function CodeSummary() {
         console.log('  - hard_solved:', updateData.hard_solved);
 
         // Update user_profiles table
-        console.log('💾 Updating user_profiles table with data:', { user_id: userObj.id, ...updateData });
+        console.log('💾 [DB] Attempting to update user_profiles with:', { user_id: userObj.id, ...updateData, name: currentStats?.name || 'User', skill_level: currentStats?.skill_level || 'Beginner' });
         const { error: profileUpdateError } = await supabase
           .from('user_profiles')
           .upsert({
             user_id: userObj.id,
+            name: currentStats?.name || 'User', // Preserve existing name
+            skill_level: currentStats?.skill_level || 'Beginner', // Preserve existing skill level
             ...updateData
-          });
-
+          }, { onConflict: 'user_id' });
         if (profileUpdateError) {
-          console.error('❌ Failed to update user profile:', profileUpdateError);
+          console.error('❌ [DB] Failed to update user profile:', profileUpdateError);
           throw new Error(`Failed to update user profile: ${profileUpdateError.message}`);
+        } else {
+          console.log('✅ [DB] Successfully updated user_profiles table for user_id:', userObj.id);
         }
 
-        console.log('✅ Successfully updated user_profiles table');
       } else {
         console.log('ℹ️ Problem already completed, skipping profile stats update');
         console.log('ℹ️ This is a RE-COMPLETION - only updating problem progress');
