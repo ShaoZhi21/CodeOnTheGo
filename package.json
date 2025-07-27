@@ -10,8 +10,8 @@
     "test-complete": "node ./scripts/test-complete-functionality.js",
     "fix-constraints": "echo 'Please run scripts/fix-constraints.sql in your Supabase SQL Editor'",
     "test-best-score": "node ./scripts/test-best-score.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
@@ -62,8 +62,7 @@
     "react-native-web": "~0.20.0",
     "react-native-websocket": "^1.0.2",
     "react-native-webview": "13.13.5",
-    "react-syntax-highlighter": "^15.6.1",
-    "expo-dev-client": "~5.2.4"
+    "react-syntax-highlighter": "^15.6.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

@@ -51,7 +51,7 @@ export default function TournamentJoinModal({ visible, onClose, onJoined }: Tour
 
   const loadTopics = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/topics`);
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://codeonthego-backend.onrender.com')}/topics`);
       if (response.ok) {
         const topicsData = await response.json();
         setTopics(topicsData);

@@ -443,8 +443,8 @@ export default function LessonScreen() {
         return;
       }
       
-      // Use the environment variable or fallback to localhost
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+      // Use the proper API configuration
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://codeonthego-backend.onrender.com');
       
       // Get current user for skill level
       const { data: { user } } = await supabase.auth.getUser();

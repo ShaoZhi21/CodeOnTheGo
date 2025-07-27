@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "codeonthego",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.codeonthego.app",
@@ -58,9 +57,7 @@
       }
     },
     "owner": "shaozhi",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/5028ba7f-437a-4eb7-ac2c-51b6425e93f0"
     }

@@ -4,9 +4,24 @@ import { Platform } from 'react-native';
 const LOCAL_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 const PRODUCTION_API_URL = 'https://codeonthego-backend.onrender.com';
 
-// Always try both URLs in sequence
+// Determine which API URL to use based on environment
 const getApiBaseUrl = () => {
-  return LOCAL_API_URL;
+  // Check if environment variable is set
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    console.log('🌐 Using API URL from environment variable');
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  
+  // Check if we're in development mode
+  const isDevelopment = __DEV__;
+  
+  if (isDevelopment) {
+    console.log('🔧 Development mode detected, using local API');
+    return LOCAL_API_URL;
+  } else {
+    console.log('🚀 Production mode detected, using production API');
+    return PRODUCTION_API_URL;
+  }
 };
 
 export const API_BASE_URL = getApiBaseUrl();

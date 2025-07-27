@@ -106,7 +106,7 @@ export default function TournamentMatch({ match, onMatchComplete }: TournamentMa
       setSubmitted(true);
 
       // Analyze the submission
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000'}/api/analyze`, {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://codeonthego-backend.onrender.com')}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
