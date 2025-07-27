@@ -146,7 +146,7 @@ const getDataStructureImage = (imageName: string) => {
     'linkedlist': require('@/assets/images/datastructure/linkedlist.png'),
     'hashmap': require('@/assets/images/datastructure/hashmap.png'),
     'priorityqueue': require('@/assets/images/datastructure/priorityqueue.png'),
-    'trie': require('@/assets/images/datastructure/trie.png'),
+    'trie': require('@/assets/images/datastructure/trie.svg'),
     'undirectedgraph': require('@/assets/images/datastructure/undirectedgraph.png'),
     'directedgraph': require('@/assets/images/datastructure/directedgraph.png'),
     'weightedgraph': require('@/assets/images/datastructure/weightedgraph.png'),
