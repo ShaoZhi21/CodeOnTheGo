@@ -12,16 +12,9 @@ const getApiBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   
-  // Check if we're in development mode
-  const isDevelopment = __DEV__;
-  
-  if (isDevelopment) {
-    console.log('🔧 Development mode detected, using local API');
-    return LOCAL_API_URL;
-  } else {
-    console.log('🚀 Production mode detected, using production API');
-    return PRODUCTION_API_URL;
-  }
+  // Always use production API as primary (render backend)
+  console.log('🚀 Using production API as primary (render backend)');
+  return PRODUCTION_API_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -29,7 +22,7 @@ export const API_BASE_URL = getApiBaseUrl();
 // Function to make API calls with automatic fallback
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
   const primaryUrl = API_BASE_URL;
-  const fallbackUrl = PRODUCTION_API_URL;
+  const fallbackUrl = LOCAL_API_URL; // Use localhost as fallback
   
   console.log(`🔗 API Call Details:
   Endpoint: ${endpoint}
