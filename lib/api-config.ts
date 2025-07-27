@@ -28,7 +28,7 @@ export const API_BASE_URL = getApiBaseUrl();
 
 // Function to make API calls with automatic fallback
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
-  const primaryUrl = LOCAL_API_URL;
+  const primaryUrl = API_BASE_URL;
   const fallbackUrl = PRODUCTION_API_URL;
   
   console.log(`🔗 API Call Details:
