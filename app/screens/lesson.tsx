@@ -142,7 +142,7 @@ const breakTextIntoChunks = (text: string, maxLength: number = 200): string[] =>
 // Function to get data structure image
 const getDataStructureImage = (imageName: string) => {
   const imageMap: { [key: string]: any } = {
-    'array': require('@/assets/images/datastructure/array.png'),
+    'array': require('@/assets/images/datastructure/array.webp'),
     'linkedlist': require('@/assets/images/datastructure/linkedlist.png'),
     'hashmap': require('@/assets/images/datastructure/hashmap.png'),
     'priorityqueue': require('@/assets/images/datastructure/priorityqueue.png'),
