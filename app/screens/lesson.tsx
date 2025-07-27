@@ -12,6 +12,7 @@ import {
   View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
+import { API_BASE_URL } from '../../lib/api-config';
 import { supabase } from '../../lib/supabase';
 
 interface QuizQuestion {
@@ -444,7 +445,7 @@ export default function LessonScreen() {
       }
       
       // Use the proper API configuration
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://codeonthego-backend.onrender.com');
+      const apiUrl = API_BASE_URL;
       
       // Get current user for skill level
       const { data: { user } } = await supabase.auth.getUser();
