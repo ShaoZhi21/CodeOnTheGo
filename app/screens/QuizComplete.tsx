@@ -15,18 +15,10 @@ export default function QuizComplete() {
     console.log('🎯 handleComplete called with topicName:', topicName);
     console.log('🎯 handleComplete called with problemTitle:', problemTitle);
     console.log('🎯 handleComplete called with problemId:', problemId);
-    try {
-      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
-      if (problemId) {
-        const leetcodeId = parseInt(problemId);
-        if (leetcodeId) {
-          await markProblemFullyComplete(leetcodeId);
-          console.log('🎯 Successfully marked problem fully complete for problemId:', leetcodeId);
-        }
-      }
-    } catch (error) {
-      console.error('Error marking problem fully complete:', error);
-    }
+    
+    // Note: Lesson completion is already handled in LessonMCQ
+    // This screen only handles navigation, no additional database updates needed
+    
     console.log('🎯 Navigating to LoadingRoadMap with topicName:', topicName);
     router.replace({
       pathname: '/screens/LoadingRoadMap',
