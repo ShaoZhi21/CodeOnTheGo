@@ -909,6 +909,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  headerSpacer: {
+    width: 60, // Same width as backButton to balance the layout
+  },
   content: {
     flex: 1,
     padding: 16,
