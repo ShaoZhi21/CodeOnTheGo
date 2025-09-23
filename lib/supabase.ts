@@ -17,12 +17,16 @@ if (!supabaseServiceKey) {
   console.error('Missing EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY - This is required for admin operations');
 }
 
+// Detect SSR/Node during bundling (EAS Update export runs in Node with no window)
+const isSSR = typeof window === 'undefined';
+
 // Regular client for normal operations with session persistence
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
+    // Avoid using AsyncStorage during SSR/export to prevent "window is not defined"
+    storage: isSSR ? undefined : AsyncStorage,
+    autoRefreshToken: !isSSR,
+    persistSession: !isSSR,
     detectSessionInUrl: false
   }
 });
@@ -38,8 +42,10 @@ export const supabaseAdmin = supabaseServiceKey
   : null;
 
 // Log configuration status
-console.log('Supabase Configuration:');
-console.log('- URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
-console.log('- Anon Key:', supabaseAnonKey ? '✅ Set' : '❌ Missing');
-console.log('- Service Key:', supabaseServiceKey ? '✅ Set' : '❌ Missing');
-console.log('- Admin Client:', supabaseAdmin ? '✅ Available' : '❌ Not Available'); 
+if (!isSSR) {
+  console.log('Supabase Configuration:');
+  console.log('- URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
+  console.log('- Anon Key:', supabaseAnonKey ? '✅ Set' : '❌ Missing');
+  console.log('- Service Key:', supabaseServiceKey ? '✅ Set' : '❌ Missing');
+  console.log('- Admin Client:', supabaseAdmin ? '✅ Available' : '❌ Not Available');
+}
