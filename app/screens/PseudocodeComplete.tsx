@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Purple, Neutral } from '../../constants/Colors';
 
 export default function PseudocodeComplete() {
   const router = useRouter();
@@ -46,12 +47,15 @@ export default function PseudocodeComplete() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.content}>
         {/* Completion Header */}
         <View style={styles.completionSection}>
-          <Text style={styles.completionEmoji}>✨</Text>
-          <Text style={styles.completionTitle}>You&apos;ve completed the pseudocode for</Text>
+          <View style={styles.iconCircle}>
+            <Text style={styles.checkmark}>✓</Text>
+          </View>
+          <Text style={styles.completionTitle}>Pseudocode Complete</Text>
+          <Text style={styles.completionSubtitle}>You've completed the pseudocode for</Text>
         </View>
 
         {/* Problem Title Card */}
@@ -80,60 +84,79 @@ export default function PseudocodeComplete() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: Neutral.white,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 40,
   },
   completionSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  completionEmoji: {
-    fontSize: 80,
-    marginBottom: 16,
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Purple.tint,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: Purple.primary,
+  },
+  checkmark: {
+    fontSize: 40,
+    color: Purple.primary,
+    fontWeight: '700',
   },
   completionTitle: {
-    color: '#7C3AED',
-    fontSize: 22,
-    fontWeight: '600',
+    color: Neutral.text,
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  completionSubtitle: {
+    color: Neutral.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  problemCard: {
+    backgroundColor: Neutral.white,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderRadius: 16,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: Neutral.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+    minWidth: 280,
+    maxWidth: '90%',
+  },
+  problemTitle: {
+    color: Purple.primary,
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
     lineHeight: 28,
   },
-  problemCard: {
-    backgroundColor: 'white',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginBottom: 32,
-    borderWidth: 2,
-    borderColor: '#7C3AED',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    minWidth: 200,
-  },
-  problemTitle: {
-    color: '#7C3AED',
-    fontSize: 24,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 32,
-  },
   successSection: {
     paddingHorizontal: 20,
+    maxWidth: 400,
   },
   successText: {
-    color: '#5B21B6',
-    fontSize: 18,
+    color: Neutral.textSecondary,
+    fontSize: 16,
     textAlign: 'center',
-    lineHeight: 26,
+    lineHeight: 24,
   },
   buttonContainer: {
     paddingHorizontal: 24,
@@ -141,20 +164,21 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   continueButton: {
-    backgroundColor: '#7C3AED',
-    paddingVertical: 18,
-    borderRadius: 16,
+    backgroundColor: Purple.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: Purple.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
   continueButtonText: {
-    color: 'white',
+    color: Neutral.white,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-}); 
+});

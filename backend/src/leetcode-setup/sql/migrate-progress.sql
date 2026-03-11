@@ -81,22 +81,52 @@ CREATE TRIGGER update_progress_on_solution
 
 -- Update topic_stats view to include best scores
 CREATE OR REPLACE VIEW topic_stats AS
-SELECT 
-    t.name as topic_name,
-    COUNT(*) as total_problems,
-    COUNT(*) FILTER (WHERE p.difficulty = 'Easy') as easy_problems,
-    COUNT(*) FILTER (WHERE p.difficulty = 'Medium') as medium_problems,
-    COUNT(*) FILTER (WHERE p.difficulty = 'Hard') as hard_problems,
-    AVG(p.acceptance_rate) as avg_acceptance_rate,
-    COALESCE(SUM(upp.stars), 0) as total_stars,
-    COALESCE(AVG(upp.best_score), 0) as avg_best_score,
-    ROUND(
-        (COUNT(*) FILTER (WHERE upp.is_solved = true)::float / 
-        NULLIF(COUNT(*), 0) * 100)::numeric, 
-        1
-    ) as completion_percentage
-FROM topics t
-JOIN problem_topics pt ON t.id = pt.topic_id
-JOIN leetcode_problems p ON pt.problem_id = p.id
-LEFT JOIN user_problem_progress upp ON p.leetcode_id = upp.problem_id
-GROUP BY t.name; 
+WITH topic_problem_counts AS (
+  SELECT
+    t.name AS topic_name,
+    COUNT(DISTINCT p.leetcode_id) AS total_problems
+  FROM topics t
+  JOIN topic_problems tp ON t.name = tp.topic_name
+  JOIN leetcode_problems p ON tp.leetcode_id = p.leetcode_id
+  GROUP BY t.name
+),
+user_progress AS (
+  SELECT
+    tp.topic_name,
+    auth.uid() AS user_id,
+    COUNT(
+      DISTINCT CASE
+        WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.problem_id
+      END
+    ) AS completed_problems,
+    COALESCE(
+      SUM(
+        CASE
+          WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.stars
+          ELSE 0
+        END
+      ),
+      0
+    ) AS total_stars
+  FROM topic_problems tp
+  LEFT JOIN user_problem_progress upp
+    ON upp.problem_id = tp.leetcode_id
+   AND upp.user_id = auth.uid()
+  LEFT JOIN user_lesson_completion ulc
+    ON ulc.problem_id = tp.leetcode_id
+   AND ulc.user_id = auth.uid()
+  GROUP BY tp.topic_name, auth.uid()
+)
+SELECT
+  tpc.topic_name,
+  up.user_id,
+  tpc.total_problems,
+  COALESCE(up.total_stars, 0) AS total_stars,
+  CASE
+    WHEN tpc.total_problems > 0 THEN
+      ROUND((COALESCE(up.completed_problems, 0)::float / tpc.total_problems * 100)::numeric, 2)
+    ELSE 0
+  END AS completion_percentage,
+  COALESCE(up.completed_problems, 0) AS completed_problems
+FROM topic_problem_counts tpc
+LEFT JOIN user_progress up ON tpc.topic_name = up.topic_name;

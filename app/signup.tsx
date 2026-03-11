@@ -66,48 +66,8 @@ export default function SignupScreen() {
       return;
     }
 
-    // Test email/password with Supabase before proceeding to onboarding
     try {
-      const { supabaseAdmin } = await import('@/lib/supabase');
-      
-      if (!supabaseAdmin) {
-        setFormErrors(['Configuration error. Please try again later.']);
-        setLoading(false);
-        return;
-      }
-
-      // Test if we can create a user with these credentials
-      const { data: testData, error: testError } = await supabaseAdmin.auth.admin.createUser({
-        email: email,
-        password: password,
-        user_metadata: {
-          full_name: name,
-          test_user: true, // Mark as test so we can delete it
-        },
-        email_confirm: true,
-      });
-
-      if (testError) {
-        // Handle specific Supabase errors
-        if (testError.message.includes('already been registered')) {
-          setFormErrors(['An account with this email already exists. Please use a different email or try logging in.']);
-        } else if (testError.message.includes('Password')) {
-          setPasswordErrors(['Password does not meet security requirements. Please use a stronger password.']);
-        } else if (testError.message.includes('Email')) {
-          setFormErrors(['Invalid email format. Please check your email address.']);
-        } else {
-          setFormErrors([`Account validation failed: ${testError.message}`]);
-        }
-        setLoading(false);
-        return;
-      }
-
-      // If test user creation succeeded, delete the test user and proceed
-      if (testData.user) {
-        await supabaseAdmin.auth.admin.deleteUser(testData.user.id);
-      }
-
-      // Navigate to onboarding with validated credentials
+      // Navigate to onboarding. Account creation is done on the backend to keep service-role keys off the client.
       router.push({
         pathname: '/onboarding',
         params: {

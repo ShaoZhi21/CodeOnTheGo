@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Purple, Neutral } from '../../constants/Colors';
 
 export default function QuizComplete() {
   const router = useRouter();
@@ -30,12 +31,15 @@ export default function QuizComplete() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.content}>
         {/* Completion Header */}
         <View style={styles.completionSection}>
-          <Text style={styles.completionEmoji}>✨</Text>
-          <Text style={styles.completionTitle}>You&apos;ve completed the quiz for</Text>
+          <View style={styles.iconCircle}>
+            <Text style={styles.checkmark}>✓</Text>
+          </View>
+          <Text style={styles.completionTitle}>Quiz Complete</Text>
+          <Text style={styles.completionSubtitle}>You've completed the quiz for</Text>
         </View>
 
         {/* Problem Title Card */}
@@ -46,7 +50,7 @@ export default function QuizComplete() {
         {/* Success Message */}
         <View style={styles.successSection}>
           <Text style={styles.successText}>
-            Great job! You&apos;ve mastered this concept and are one step closer to becoming a coding expert.
+            Great job! You've mastered this concept and are one step closer to becoming a coding expert.
           </Text>
         </View>
       </View>
@@ -64,82 +68,101 @@ export default function QuizComplete() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3E8FF', // More vibrant purple background
+    backgroundColor: Neutral.white,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60, // Add top margin
+    paddingTop: 40,
   },
   completionSection: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  completionEmoji: {
-    fontSize: 80,
-    marginBottom: 16,
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Purple.tint,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: Purple.primary,
+  },
+  checkmark: {
+    fontSize: 40,
+    color: Purple.primary,
+    fontWeight: '700',
   },
   completionTitle: {
-    color: '#7C3AED', // More vibrant purple text
-    fontSize: 22, // Reduced from 28
-    fontWeight: '600',
+    color: Neutral.text,
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
-    lineHeight: 28, // Reduced from 36
+    marginBottom: 8,
+  },
+  completionSubtitle: {
+    color: Neutral.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
   },
   problemCard: {
-    backgroundColor: 'white', // Changed to white
+    backgroundColor: Neutral.white,
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingVertical: 20,
     borderRadius: 16,
     marginBottom: 32,
-    borderWidth: 2,
-    borderColor: '#7C3AED', // More vibrant purple border
+    borderWidth: 1,
+    borderColor: Neutral.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    elevation: 4,
-    minWidth: 200,
+    elevation: 3,
+    minWidth: 280,
+    maxWidth: '90%',
   },
   problemTitle: {
-    color: '#7C3AED', // More vibrant purple text on white background
-    fontSize: 24,
-    fontWeight: '600',
+    color: Purple.primary,
+    fontSize: 20,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 28,
   },
   successSection: {
     paddingHorizontal: 20,
+    maxWidth: 400,
   },
   successText: {
-    color: '#5B21B6', // Darker purple text for more color
-    fontSize: 18,
+    color: Neutral.textSecondary,
+    fontSize: 16,
     textAlign: 'center',
-    lineHeight: 26,
+    lineHeight: 24,
   },
   buttonContainer: {
     paddingHorizontal: 24,
-    paddingBottom: 40, // Push button to bottom
+    paddingBottom: 40,
     paddingTop: 20,
   },
   continueButton: {
-    backgroundColor: '#7C3AED', // More vibrant purple
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    borderRadius: 16,
+    backgroundColor: Purple.primary,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: Purple.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 4,
   },
   continueButtonText: {
-    color: 'white',
+    color: Neutral.white,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-}); 
+});

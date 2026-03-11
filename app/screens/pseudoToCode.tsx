@@ -1,6 +1,6 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiCall } from '@/lib/api-config';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -65,16 +65,53 @@ export default function PseudoToCode() {
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [loadedMCQCount, setLoadedMCQCount] = useState(0);
   const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
-  const [typedPseudocode, setTypedPseudocode] = useState('');
+
+  const getParam = (key: string): string | undefined => {
+    const value = (params as any)?.[key];
+    if (Array.isArray(value)) return value[0];
+    return typeof value === 'string' ? value : undefined;
+  };
 
   // Parse the passed parameters
-  const problemId = params.problemId as string;
-  const title = params.title as string;
-  const difficulty = params.difficulty as string;
-  const description = params.description as string;
-  const examples: Example[] = params.examples ? JSON.parse(params.examples as string) : [];
-  const constraints: string[] = params.constraints ? JSON.parse(params.constraints as string) : [];
-  const pseudocode = params.pseudocode as string;
+  const problemId = getParam('problemId');
+  const title = getParam('title') ?? getParam('problemTitle') ?? '';
+  const difficulty = getParam('difficulty') ?? '';
+  const description = getParam('description') ?? '';
+  const examples: Example[] = getParam('examples') ? JSON.parse(getParam('examples') as string) : [];
+  const pseudocode = getParam('pseudocode') ?? '';
+
+  const source = getParam('source') ?? getParam('from');
+  const topicName = getParam('topicName') ?? getParam('topic');
+  const planId = getParam('planId');
+
+  const handleBack = () => {
+    if (source === 'studyplan') {
+      if (planId) {
+        router.replace({
+          pathname: '/screens/StudyPlanDetail',
+          params: { planId },
+        });
+      } else {
+        router.replace('/(tabs)/learn');
+      }
+      return;
+    }
+
+    // Roadmap flows: return to topic roadmap if possible
+    if (topicName) {
+      router.replace({
+        pathname: '/screens/roadmaptopic',
+        params: {
+          topic: topicName,
+          from: (source || 'pseudocode') as string,
+        },
+      });
+    } else if (source === 'allquestions') {
+      router.replace('/(tabs)/questions');
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
 
   // Initialize pseudocode steps and start loading all MCQs
   useEffect(() => {
@@ -95,6 +132,8 @@ export default function PseudoToCode() {
         loadAllMCQs(steps);
       }
     }
+    // `loadAllMCQs` is intentionally not in deps (would retrigger on each render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pseudocode]);
 
   // Update current MCQ when step changes or MCQs are loaded
@@ -121,16 +160,9 @@ export default function PseudoToCode() {
         handleFinish();
       }, 1000);
     }
+    // `handleFinish` is intentionally not in deps (it depends on large param objects).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pseudocodeSteps, hasNavigatedToSummary]);
-
-  const getDifficultyColor = (diff: string) => {
-    switch (diff) {
-      case 'Easy': return '#00B8A3';
-      case 'Medium': return '#FFA116';
-      case 'Hard': return '#FF375F';
-      default: return '#6564c7';
-    }
-  };
 
   const getDifficultyBubbleColor = (diff: string) => {
     switch (diff) {
@@ -161,20 +193,17 @@ export default function PseudoToCode() {
         // Check if there's a next step to provide context about nesting
         const nextStep = stepIndex + 1 < steps.length ? steps[stepIndex + 1].text : null;
         
-        const response = await fetch(`${API_BASE_URL}/api/generate-mcq`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        const response = await apiCall('/api/generate-mcq', {
+          method: 'POST',
+          body: JSON.stringify({
             pseudocodeLine: steps[stepIndex].text,
             language: selectedLanguage,
             context: `This is step ${stepIndex + 1} of ${steps.length} in converting pseudocode to ${selectedLanguage} code.`,
             nextStep: nextStep,
             problemTitle: title,
             problemDescription: description
-        }),
-      });
+          }),
+        });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -221,11 +250,8 @@ export default function PseudoToCode() {
       // Check if there's a next step to provide context about nesting
       const nextStep = stepIndex + 1 < steps.length ? steps[stepIndex + 1].text : null;
       
-      const response = await fetch(`${API_BASE_URL}/api/generate-mcq`, {
+      const response = await apiCall('/api/generate-mcq', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           pseudocodeLine: steps[stepIndex].text,
           language: selectedLanguage,
@@ -558,7 +584,7 @@ export default function PseudoToCode() {
     <SafeAreaView style={styles.container}>
       {/* Header with title bubble (match question.tsx) */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(tabs)')}>
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>

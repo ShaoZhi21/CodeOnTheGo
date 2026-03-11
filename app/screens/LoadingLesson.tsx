@@ -14,14 +14,14 @@ interface LoadingLessonProps {
   onDataFetched?: (data: any) => void;
 }
 
-export default function LoadingLesson({ 
-  onLoadingComplete, 
+export default function LoadingLesson({
+  onLoadingComplete,
   onProgressUpdate,
   onDataFetched
 }: LoadingLessonProps) {
   const params = useLocalSearchParams();
   const { questionId, questionTitle, questionDescription, topicName, questionDifficulty } = params;
-  
+
   const [isReady, setIsReady] = useState(false);
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
@@ -29,7 +29,8 @@ export default function LoadingLesson({
   const [apiCompleted, setApiCompleted] = useState(false);
   const [userSkillLevel, setUserSkillLevel] = useState<string>('Beginner');
   const [personalizedMessage, setPersonalizedMessage] = useState<string>('Generating your personalized lesson...');
-  
+  const [fullDescription, setFullDescription] = useState<string>(questionDescription as string || '');
+
   // Animation values
   const progressAnim = useRef(new Animated.Value(0)).current;
   const birdFloatAnim = useRef(new Animated.Value(0)).current;
@@ -100,7 +101,7 @@ export default function LoadingLesson({
         if (userProfile && userProfile.skill_level) {
           setUserSkillLevel(userProfile.skill_level);
           console.log(`User skill level: ${userProfile.skill_level}`);
-          
+
           // Set a random personalized message based on skill level
           const messages = getPersonalizedMessages(userProfile.skill_level);
           const randomMessage = messages[Math.floor(Math.random() * messages.length)];
@@ -117,11 +118,11 @@ export default function LoadingLesson({
   const fetchLessonData = useCallback(async () => {
     try {
       console.log('🔄 Fetching lesson data...');
-      
+
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       console.log('👤 User found for lesson generation:', !!user);
-      
+
       const response = await apiCall('/api/generate-topic-lesson', {
         method: 'POST',
         body: JSON.stringify({
@@ -140,33 +141,73 @@ export default function LoadingLesson({
         console.log('✅ Lesson data fetched successfully');
         setFetchedData(lessonData);
         setApiCompleted(true);
-        
+
         if (onDataFetchedRef.current) {
           onDataFetchedRef.current(lessonData);
         }
       } else {
-        console.error('❌ Failed to fetch lesson data');
+        console.error('❌ Failed to fetch lesson data (likely AI quota exceeded)');
+        // Fallback: Proceed without AI lesson data, let the Lesson screen handle it
         setApiCompleted(true);
+        // We still need to notify that "data fetched" (even if empty) so progress completes
+        if (onDataFetchedRef.current) {
+          onDataFetchedRef.current(null);
+        }
       }
     } catch (error) {
       console.error('❌ Error fetching lesson data:', error);
+      // Fallback: Proceed anyway
       setApiCompleted(true);
+      if (onDataFetchedRef.current) {
+        onDataFetchedRef.current(null);
+      }
     }
   }, [questionId, questionTitle, questionDescription, topicName, questionDifficulty]);
 
+  // Fetch problem details if description is missing
+  const fetchProblemDetails = useCallback(async () => {
+    if (fullDescription) return;
+
+    try {
+      console.log('🔄 Fetching problem details live...');
+      // Use the new proxy endpoint - pass title for fallback fetching
+      const encodedTitle = encodeURIComponent((questionTitle as string) || '');
+      const response = await apiCall(`/api/problems/${questionId}?title=${encodedTitle}`, {
+        method: 'GET'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Problem details fetched');
+        if (data.description_text || data.description) {
+          setFullDescription(data.description_text || data.description);
+        }
+      } else {
+        console.error('❌ Failed to fetch problem details');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching problem details:', error);
+    }
+  }, [questionId, fullDescription]);
+
   // Start lesson generation and progress simulation
   useEffect(() => {
-    if (effectRun.current) return;
+    // In dev, React StrictMode mounts/unmounts effects twice.
+    // If we guard with a ref, the first cleanup clears timers and the second mount won't re-run,
+    // leaving progress stuck at 0%. So we always (re)start, after clearing any prior timers.
+    timeoutsRef.current.forEach(clearTimeout);
+    timeoutsRef.current = [];
     effectRun.current = true;
-    
+
     console.log('🔄 Starting lesson generation...');
-    
+
     // Fetch user skill level first
     fetchUserSkillLevel();
-    
+
     // Start actual lesson generation
     fetchLessonData();
-    
+    fetchProblemDetails();
+
     // Progress steps - 10% every second, stops at 90% until API completes
     const progressSteps = [
       { time: 1000, progress: 10 },
@@ -197,8 +238,9 @@ export default function LoadingLesson({
     return () => {
       timeoutsRef.current.forEach(clearTimeout);
       timeoutsRef.current = [];
+      effectRun.current = false;
     };
-  }, [fetchLessonData, fetchUserSkillLevel]);
+  }, [fetchLessonData, fetchUserSkillLevel, fetchProblemDetails]);
 
   // Complete progress when API is done
   useEffect(() => {
@@ -218,9 +260,9 @@ export default function LoadingLesson({
           pathname: '/screens/lesson',
           params: {
             questionId: questionId as string,
-            problemId: questionId as string, // Add problemId for consistency
+            problemId: questionId as string,
             questionTitle: questionTitle as string,
-            questionDescription: questionDescription as string,
+            questionDescription: fullDescription,
             topicName: topicName as string,
             preFetchedData: JSON.stringify(fetchedData)
           }
@@ -363,14 +405,14 @@ export default function LoadingLesson({
               },
             ]}
           >
-            {fetchProgress < 50 
-              ? "Generating your lesson..." 
-              : fetchProgress < 90 
-                ? "Just a little more to go..." 
+            {fetchProgress < 50
+              ? "Generating your lesson..."
+              : fetchProgress < 90
+                ? "Just a little more to go..."
                 : "Be patient! We're almost done..."
             }
           </Animated.Text>
-          
+
           {/* Progress Bar */}
           <View style={styles.progressContainer}>
             <View style={styles.progressBarBackground}>

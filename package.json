@@ -73,6 +73,7 @@
     "@types/jest": "^30.0.0",
     "@types/react": "~19.1.10",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "baseline-browser-mapping": "^2.10.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "jest-expo": "~54.0.12",

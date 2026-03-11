@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface QuestionActionModalProps {
   visible: boolean;
@@ -15,6 +15,8 @@ interface QuestionActionModalProps {
   topicName: string;
   isQuestionOnLeft?: boolean;
   bubblePosition?: { x: number; y: number };
+  origin?: 'roadmap' | 'allquestions' | 'studyplan';
+  planId?: string;
 }
 
 export default function QuestionActionModal({
@@ -30,17 +32,11 @@ export default function QuestionActionModal({
   isQuestionSolved,
   topicName,
   isQuestionOnLeft = false,
-  bubblePosition = { x: 0, y: 0 }
+  bubblePosition = { x: 0, y: 0 },
+  origin = 'roadmap',
+  planId,
 }: QuestionActionModalProps) {
   const handleViewLesson = () => {
-    console.log('🎯 handleViewLesson called');
-    console.log('🎯 Navigation params:', {
-      questionId: questionId.toString(),
-      questionTitle: questionTitle,
-      questionDescription: questionDescription,
-      topicName: topicName,
-    });
-    
     // Navigate to loading lesson screen first
     router.push({
       pathname: '/screens/LoadingLesson',
@@ -51,37 +47,29 @@ export default function QuestionActionModal({
         questionDescription: questionDescription,
         topicName: topicName,
         questionDifficulty: questionDifficulty,
-        from: 'roadmaptopic', // Add source for back navigation
+        source: origin,
+        ...(planId ? { planId } : {}),
       },
     });
     onClose();
   };
 
-  const handleSolveProblem = () => {
-    // Check if lesson is required but not completed
-    if (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) {
-      Alert.alert(
-        "Lesson Required",
-        "You must complete the lesson before attempting this question."
-      );
-      return;
-    }
-    
+  // Let the user choose Lesson OR Pseudocode first (no gating).
+  // We treat "Pseudocode" as entering the in-app question flow (where they can write pseudocode).
+  const handleStartPseudocode = () => {
     router.push({
       pathname: '/screens/question',
       params: {
         id: questionId.toString(),
         name: questionTitle,
         difficulty: questionDifficulty,
-        source: 'roadmap',
-        topicName: topicName
+        source: origin,
+        topicName: topicName,
+        ...(planId ? { planId } : {}),
       },
     });
     onClose();
   };
-
-  // Determine if the pseudocode button should be locked
-  const isPseudocodeLocked = isLessonRequired && !hasCompletedLesson && !isQuestionSolved;
 
   // Get difficulty color
   const getDifficultyColor = (difficulty: string) => {
@@ -151,18 +139,10 @@ export default function QuestionActionModal({
 
               {/* Pseudocode Button */}
               <TouchableOpacity 
-                style={[
-                  styles.squareButton, 
-                  styles.pseudocodeButton,
-                  isPseudocodeLocked && styles.lockedButton
-                ]} 
-                onPress={handleSolveProblem}
-                disabled={isPseudocodeLocked}
+                style={[styles.squareButton, styles.pseudocodeButton]} 
+                onPress={handleStartPseudocode}
               >
                 <View style={styles.buttonContent}>
-                  {isPseudocodeLocked && (
-                    <Text style={styles.lockedText}>Locked</Text>
-                  )}
                   <Image 
                     source={require('../assets/images/icons/pseudocode-icon.png')} 
                     style={styles.buttonIcon} 
@@ -297,10 +277,6 @@ const styles = StyleSheet.create({
   pseudocodeButton: {
     backgroundColor: '#2979FF',
   },
-  lockedButton: {
-    backgroundColor: '#2979FF',
-    opacity: 0.4,
-  },
   buttonContent: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -310,14 +286,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-  },
-  lockedText: {
-    color: '#FF0000',
-    fontWeight: '700',
-    fontSize: 10,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-    marginBottom: 2,
   },
   buttonIcon: {
     width: 48,

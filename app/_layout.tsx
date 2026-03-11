@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import StreakAnimation from '@/components/StreakAnimation';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -25,10 +26,10 @@ function AppContent() {
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" />
       </Stack>
-      <StatusBar style="light" />
-      
+      <StatusBar style="dark" />
+
       {/* Global Streak Animation */}
-      <StreakAnimation 
+      <StreakAnimation
         visible={streakAnimationVisible}
         streakCount={currentStreakCount}
         onComplete={hideStreakAnimation}
@@ -39,12 +40,14 @@ function AppContent() {
 
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <StreakProvider>
-          <AppContent />
-        </StreakProvider>
-      </AuthProvider>
-    </GestureHandlerRootView>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthProvider>
+          <StreakProvider>
+            <AppContent />
+          </StreakProvider>
+        </AuthProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

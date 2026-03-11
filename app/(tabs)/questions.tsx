@@ -2,8 +2,9 @@ import { ThemedText } from '@/components/ThemedText';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { Animated, ScrollView, StatusBar, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Neutral, Purple } from '../../constants/Colors';
 import { supabase } from '@/lib/supabase';
 
 interface Problem {
@@ -13,12 +14,20 @@ interface Problem {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   tags: string[];
   is_premium: boolean;
+  slug?: string;
 }
 
 interface ProblemWithStatus extends Problem {
   status: 'Solved' | 'Unsolved';
   score?: number;
   stars?: number;
+}
+
+interface StudyPlan {
+  id: number;
+  name: string;
+  description: string;
+  image_url: string;
 }
 
 const PROBLEMS_PER_PAGE = 100;
@@ -36,24 +45,11 @@ const getDifficultyColor = (difficulty: Problem['difficulty']) => {
   }
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'Solved':
-      return '#00B8A3';
-    case 'Unsolved':
-      return '#b4aaf4';
-    default:
-      return '#6564c7';
-  }
-};
 
 export default function AllQuestionsScreen() {
   const [problems, setProblems] = useState<ProblemWithStatus[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shouldRefreshStatus, setShouldRefreshStatus] = useState(false);
-  const [refreshingStatus, setRefreshingStatus] = useState(false);
-  const [isLoadingFromCache, setIsLoadingFromCache] = useState(false);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -67,13 +63,12 @@ export default function AllQuestionsScreen() {
   const [isSearching, setIsSearching] = useState(false);
   
   // Sorting and filtering options
-  const [sortOption, setSortOption] = useState<'id-asc' | 'id-desc' | 'name-asc' | 'status-asc'>('id-asc');
+  const [sortOption, setSortOption] = useState<'name-asc' | 'status-asc'>('name-asc');
   const [difficultyFilter, setDifficultyFilter] = useState<'All' | 'Easy' | 'Medium' | 'Hard'>('All');
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [showDifficultyFilter, setShowDifficultyFilter] = useState(false);
   
   // Scroll position tracking
-  const [scrollPosition, setScrollPosition] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
   const lastScrollPosition = useRef(0);
   
@@ -117,7 +112,6 @@ export default function AllQuestionsScreen() {
   const handleScroll = (event: any) => {
     const currentPosition = event.nativeEvent.contentOffset.y;
     lastScrollPosition.current = currentPosition;
-    setScrollPosition(currentPosition);
     
     // Debounce scroll position saving to avoid excessive writes
     if (scrollTimeout.current) {
@@ -197,7 +191,14 @@ export default function AllQuestionsScreen() {
   // Load from cache first, then fetch fresh data
   const loadQuestionsWithCache = async (search: string = '') => {
     try {
-      // Try to load from cache first
+      // If there's a search query, always fetch from database to search entire dataset
+      if (search.trim()) {
+        console.log('🔍 Search query detected, fetching from database to search entire dataset...');
+        await fetchProblems(search, false);
+        return;
+      }
+      
+      // Try to load from cache first (only for non-search queries)
       const cachedData = await AsyncStorage.getItem(CACHE_KEY);
       const cacheTimestamp = await AsyncStorage.getItem(CACHE_TIMESTAMP_KEY);
       
@@ -207,19 +208,9 @@ export default function AllQuestionsScreen() {
         
         if (isCacheValid) {
           console.log('📦 Loading from cache...');
-          setIsLoadingFromCache(true);
           const cachedProblems = JSON.parse(cachedData);
           
-          // Apply search filter to cached data
           let filteredProblems = cachedProblems;
-          if (search.trim()) {
-            const searchLower = search.toLowerCase();
-            filteredProblems = cachedProblems.filter((problem: ProblemWithStatus) =>
-              problem.title.toLowerCase().includes(searchLower) ||
-              problem.leetcode_id.toString().includes(search)
-            );
-            console.log(`🔄 CACHE: Applied search filter, from ${cachedProblems.length} to ${filteredProblems.length} problems`);
-          }
           
           console.log(`🔄 CACHE: Before sorting/filtering, have ${filteredProblems.length} problems`);
           
@@ -229,13 +220,11 @@ export default function AllQuestionsScreen() {
           console.log(`🔄 CACHE: After sorting/filtering, have ${filteredProblems.length} problems`);
           
           setProblems(filteredProblems);
-          setLoading(false);
-          setIsLoadingFromCache(false);
           
           // Fetch fresh data in background if cache is older than 2 minutes
           if (Date.now() - timestamp > 2 * 60 * 1000) {
             console.log('🔄 Cache is getting stale, fetching fresh data in background...');
-            fetchProblems(search, true); // true = background fetch
+            fetchProblems('', true); // true = background fetch
           }
           return;
         }
@@ -243,13 +232,14 @@ export default function AllQuestionsScreen() {
       
       // No valid cache, fetch fresh data
       console.log('🔄 No valid cache, fetching fresh data...');
-      await fetchProblems(search, false);
+      await fetchProblems('', false);
     } catch (error) {
       console.error('Error loading from cache:', error);
       // Fallback to fresh fetch
-      await fetchProblems(search, false);
+      await fetchProblems('', false);
     }
   };
+
 
   // Save to cache
   const saveToCache = async (problemsData: ProblemWithStatus[]) => {
@@ -296,12 +286,6 @@ export default function AllQuestionsScreen() {
     console.log(`🔄 SORTING: ${sortField} ${sortOrder}`);
     
     switch (sortField) {
-      case 'id':
-        filtered.sort((a, b) => {
-          return sortOrder === 'asc' ? a.leetcode_id - b.leetcode_id : b.leetcode_id - a.leetcode_id;
-        });
-        break;
-        
       case 'name':
         filtered.sort((a, b) => {
           return a.title.localeCompare(b.title);
@@ -314,13 +298,8 @@ export default function AllQuestionsScreen() {
           const aOrder = statusOrder[a.status as keyof typeof statusOrder];
           const bOrder = statusOrder[b.status as keyof typeof statusOrder];
           
-          if (sortOrder === 'asc') {
-            // Solved → Unsolved: Solved(1) comes first, then Unsolved(2)
-            return aOrder - bOrder;
-          } else {
-            // Unsolved → Solved: Unsolved(2) comes first, then Solved(1)
-            return bOrder - aOrder;
-          }
+          // Solved → Unsolved: Solved(1) comes first, then Unsolved(2)
+          return aOrder - bOrder;
         });
         break;
     }
@@ -341,9 +320,6 @@ export default function AllQuestionsScreen() {
     try {
       console.log('🔄 fetchProblems called - search:', search, 'sortOption:', sortOption, 'background:', backgroundFetch, 'page:', page);
       
-      if (!backgroundFetch && !append) {
-        setLoading(true);
-      }
       if (append) {
         setIsLoadingMore(true);
       }
@@ -355,19 +331,17 @@ export default function AllQuestionsScreen() {
       // Build base query with proper ordering based on sort option
       let query = supabase
         .from('leetcode_problems')
-        .select('id, leetcode_id, title, difficulty, tags, is_premium');
+        .select('id, leetcode_id, title, difficulty, tags, is_premium, slug');
 
       // Apply ordering based on sort option
-      const [sortField, sortOrder] = sortOption.split('-');
-      if (sortField === 'id') {
-        query = query.order('leetcode_id', { ascending: sortOrder === 'asc' });
-      } else if (sortField === 'name') {
+      const [sortField] = sortOption.split('-');
+      if (sortField === 'name') {
         query = query.order('title', { ascending: true });
       } else if (sortField === 'status') {
         // For status sorting, we'll need to fetch all and sort in JS
-        query = query.order('leetcode_id', { ascending: true });
+        query = query.order('title', { ascending: true });
       } else {
-        query = query.order('leetcode_id', { ascending: true });
+        query = query.order('title', { ascending: true });
       }
 
       // Apply difficulty filter at database level if possible
@@ -382,17 +356,6 @@ export default function AllQuestionsScreen() {
 
       // Apply pagination
       query = query.range(offset, offset + PROBLEMS_PER_PAGE - 1);
-
-      // Test query to check if table exists and has data
-      const { data: testData, error: testError } = await supabase
-        .from('leetcode_problems')
-        .select('id')
-        .limit(1);
-      
-      if (testError) {
-        console.error('🔄 Test query error:', testError);
-        throw testError;
-      }
 
       // Get problems
       const { data, error } = await query;
@@ -430,9 +393,13 @@ export default function AllQuestionsScreen() {
 
       // Handle pagination
       if (append) {
-        // Append to existing problems
-        setAllProblems(prev => [...prev, ...problemsWithStatus]);
-        setProblems(prev => [...prev, ...problemsWithStatus]);
+        // Append to existing problems and re-sort the entire list
+        const combinedProblems = [...allProblems, ...problemsWithStatus];
+        setAllProblems(combinedProblems);
+        
+        // Apply sorting and filtering to the combined list
+        const sortedAndFiltered = sortAndFilterProblems(combinedProblems, sortOption, difficultyFilter);
+        setProblems(sortedAndFiltered);
       } else {
         // Replace all problems
         setAllProblems(problemsWithStatus);
@@ -446,12 +413,9 @@ export default function AllQuestionsScreen() {
     } catch (err) {
       console.error('Error fetching problems:', err);
       if (!backgroundFetch) {
-      setError('Failed to load problems. Please try again.');
+        setError('Failed to load problems. Please try again.');
       }
     } finally {
-      if (!backgroundFetch && !append) {
-        setLoading(false);
-      }
       if (append) {
         setIsLoadingMore(false);
       }
@@ -480,7 +444,6 @@ export default function AllQuestionsScreen() {
     
     // Reset scroll position when search changes
     if (query !== searchQuery) {
-      setScrollPosition(0);
       saveScrollPosition(0);
     }
     
@@ -561,8 +524,6 @@ export default function AllQuestionsScreen() {
     try {
       if (problems.length === 0) return;
 
-      setRefreshingStatus(true);
-
       // Get user progress for current problems
       const { getUnifiedCompletionStatus } = await import('@/lib/services/userProgress');
       const problemIds = problems.map(p => p.leetcode_id);
@@ -599,8 +560,6 @@ export default function AllQuestionsScreen() {
     } catch (err) {
       console.error('Error refreshing problem status:', err);
       // Don't show error to user for status refresh, just log it
-    } finally {
-      setRefreshingStatus(false);
     }
   };
 
@@ -618,49 +577,47 @@ export default function AllQuestionsScreen() {
 
   const getSortDisplayText = () => {
     switch (sortOption) {
-      case 'id-asc':
-        return 'ID ↑';
-      case 'id-desc':
-        return 'ID ↓';
       case 'name-asc':
-        return 'Name A-Z';
+        return 'Alphabetical';
       case 'status-asc':
         return 'Status';
       default:
-        return 'ID ↑';
+        return 'Alphabetical';
     }
   };
 
   const getDifficultyFilterDisplayText = () => {
     switch (difficultyFilter) {
       case 'All':
-        return 'All Difficulties';
+        return 'All';
       case 'Easy':
-        return 'Easy Only';
+        return 'Easy';
       case 'Medium':
-        return 'Medium Only';
+        return 'Medium';
       case 'Hard':
-        return 'Hard Only';
+        return 'Hard';
         default:
-        return 'All Difficulties';
+        return 'All';
     }
   };
 
   const handleProblemPress = (problem: Problem) => {
-    // Replace current screen with loading screen
-    router.replace({
-      pathname: '/loading',
+    // Route to the in-app Question screen (keep frontend behavior consistent)
+    router.push({
+      pathname: '/screens/question',
       params: {
-        problemId: problem.leetcode_id.toString(),
-        questionTitle: problem.title,
-        questionDifficulty: problem.difficulty
+        id: problem.leetcode_id.toString(),
+        name: problem.title,
+        difficulty: problem.difficulty,
+        source: 'allquestions',
       }
     });
   };
 
+
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchProblems(searchQuery)}>
@@ -672,17 +629,29 @@ export default function AllQuestionsScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" />
+      {/* Backdrop to close dropdowns */}
+      {(showDifficultyFilter || showSortOptions) && (
+        <TouchableOpacity 
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={() => {
+            setShowDifficultyFilter(false);
+            setShowSortOptions(false);
+          }}
+        />
+      )}
+
+      {/* Header Section */}
+      <View style={styles.headerSection}>
+        {/* Search Bar */}
         <View style={styles.searchInputContainer}>
-          <View style={styles.searchIconContainer}>
-            <ThemedText style={styles.searchIcon}>🔍</ThemedText>
-          </View>
+          <ThemedText style={styles.searchIcon}>🔍</ThemedText>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search problems by title or ID..."
-            placeholderTextColor="#94A3B8"
+            placeholder="Search..."
+            placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={handleSearch}
             autoCapitalize="none"
@@ -698,30 +667,25 @@ export default function AllQuestionsScreen() {
           )}
         </View>
 
-      </View>
-
-      {/* Sorting and Filtering */}
-      <View style={styles.sortingContainer}>
+        {/* Filter Row */}
         <View style={styles.filterRow}>
-          {/* Difficulty Filter */}
-        <TouchableOpacity 
+          <TouchableOpacity 
             style={styles.filterBubble}
             onPress={() => setShowDifficultyFilter(!showDifficultyFilter)}
-          activeOpacity={0.7}
-        >
+            activeOpacity={0.7}
+          >
             <ThemedText style={styles.filterBubbleText}>{getDifficultyFilterDisplayText()}</ThemedText>
             <ThemedText style={styles.filterBubbleIcon}>▼</ThemedText>
-        </TouchableOpacity>
+          </TouchableOpacity>
 
-          {/* Sort Options */}
-        <TouchableOpacity 
+          <TouchableOpacity 
             style={styles.sortingBubble}
             onPress={() => setShowSortOptions(!showSortOptions)}
-          activeOpacity={0.7}
-        >
-            <ThemedText style={styles.sortingBubbleText}>Sort: {getSortDisplayText()}</ThemedText>
+            activeOpacity={0.7}
+          >
+            <ThemedText style={styles.sortingBubbleText}>{getSortDisplayText()}</ThemedText>
             <ThemedText style={styles.sortingBubbleIcon}>▼</ThemedText>
-        </TouchableOpacity>
+          </TouchableOpacity>
         </View>
         
         {/* Difficulty Filter Options */}
@@ -739,7 +703,7 @@ export default function AllQuestionsScreen() {
               }}
         >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'All' && styles.activeFilterOptionText]}>
-                All Difficulties
+                All
               </ThemedText>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -754,7 +718,7 @@ export default function AllQuestionsScreen() {
               }}
             >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Easy' && styles.activeFilterOptionText]}>
-                Easy Only
+                Easy
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -769,7 +733,7 @@ export default function AllQuestionsScreen() {
               }}
         >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Medium' && styles.activeFilterOptionText]}>
-                Medium Only
+                Medium
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -784,7 +748,7 @@ export default function AllQuestionsScreen() {
               }}
             >
               <ThemedText style={[styles.filterOptionText, difficultyFilter === 'Hard' && styles.activeFilterOptionText]}>
-                Hard Only
+                Hard
               </ThemedText>
         </TouchableOpacity>
           </View>
@@ -794,27 +758,11 @@ export default function AllQuestionsScreen() {
         {showSortOptions && (
           <View style={styles.sortOptionsContainer}>
             <TouchableOpacity 
-              style={[styles.sortOption, sortOption === 'id-asc' && styles.activeSortOption]}
-              onPress={() => handleSortOptionChange('id-asc')}
-            >
-              <ThemedText style={[styles.sortOptionText, sortOption === 'id-asc' && styles.activeSortOptionText]}>
-                ID ↑
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortOption === 'id-desc' && styles.activeSortOption]}
-              onPress={() => handleSortOptionChange('id-desc')}
-            >
-              <ThemedText style={[styles.sortOptionText, sortOption === 'id-desc' && styles.activeSortOptionText]}>
-                ID ↓
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity 
               style={[styles.sortOption, sortOption === 'name-asc' && styles.activeSortOption]}
               onPress={() => handleSortOptionChange('name-asc')}
             >
               <ThemedText style={[styles.sortOptionText, sortOption === 'name-asc' && styles.activeSortOptionText]}>
-                Name A-Z
+                Alphabetical (A-Z)
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity 
@@ -822,95 +770,88 @@ export default function AllQuestionsScreen() {
               onPress={() => handleSortOptionChange('status-asc')}
             >
               <ThemedText style={[styles.sortOptionText, sortOption === 'status-asc' && styles.activeSortOptionText]}>
-                Status
+                Status (Solved/Unsolved)
               </ThemedText>
             </TouchableOpacity>
           </View>
         )}
         
-        {/* Cache indicator */}
-        {isLoadingFromCache && (
-          <View style={styles.cacheIndicator}>
-            <ThemedText style={styles.cacheIndicatorText}>📦 Loaded from cache</ThemedText>
+      </View>
+
+      <View style={styles.tableWrapper}>
+        <View style={styles.tableHeader}>
+          <View style={[styles.headerCell, { flex: 5 }]}>
+            <ThemedText style={styles.headerCellText}>Problem</ThemedText>
           </View>
-        )}
-      </View>
+          <View style={[styles.headerCell, { flex: 2 }]}>
+            <ThemedText style={styles.headerCellText}>Difficulty</ThemedText>
+          </View>
+          <View style={[styles.headerCell, { flex: 2 }]}>
+            <ThemedText style={styles.headerCellText}>Status</ThemedText>
+          </View>
+        </View>
 
-      <View style={styles.tableHeader}>
-        <View style={[styles.headerCell, { flex: 1.3 }]}>
-          <ThemedText style={styles.headerCellText}>ID</ThemedText>
-        </View>
-        <View style={[styles.headerCell, { flex: 4 }]}>
-          <ThemedText style={styles.headerCellText}>Name</ThemedText>
-        </View>
-        <View style={[styles.headerCell, { flex: 3.2 }]}>
-          <ThemedText style={styles.headerCellText}>Difficulty</ThemedText>
-        </View>
-        <View style={[styles.headerCell, { flex: 3.5 }]}>
-          <ThemedText style={styles.headerCellText}>Status</ThemedText>
-        </View>
-      </View>
-
-      <ScrollView 
-        ref={scrollViewRef}
-        style={styles.tableContainer}
-        showsVerticalScrollIndicator={true}
-        onTouchStart={() => {
-          if (showSortOptions) {
-            setShowSortOptions(false);
-          }
-        }}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-      >
-        {problems.map((problem, index) => (
-          <View key={problem.id}>
-            <TouchableOpacity 
-              style={styles.row}
-              onPress={() => handleProblemPress(problem)}
-            >
-              <ThemedText style={[styles.cell, { flex: 1.3 }]}>{problem.leetcode_id}</ThemedText>
-              <View style={[styles.cell, styles.titleCell, { flex: 4 }]}>
-                <ThemedText style={styles.titleText} numberOfLines={2} ellipsizeMode="tail">
-                  {problem.title}
-                </ThemedText>
-              </View>
-              <View style={[
-                styles.difficultyCell, 
-                { 
-                  flex: 2.5,
-                  borderWidth: 1,
-                  borderColor: getDifficultyColor(problem.difficulty)
-                }
-              ]}>
-                <ThemedText style={[styles.difficultyText, { color: getDifficultyColor(problem.difficulty) }]}>
-                  {problem.difficulty}
-                </ThemedText>
-              </View>
-              <View style={[styles.statusCell, { flex: 3.5 }]}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(problem.status) }]}>
-                  <ThemedText style={styles.statusText}>{problem.status}</ThemedText>
-                </View>
-              </View>
-            </TouchableOpacity>
-            
-            {/* See More Button appears after the last problem */}
-            {index === problems.length - 1 && hasMoreProblems && (
-              <View style={styles.seeMoreContainer}>
-                <TouchableOpacity
-                  style={[styles.seeMoreButton, isLoadingMore && styles.seeMoreButtonDisabled]}
-                  onPress={loadMoreProblems}
-                  disabled={isLoadingMore}
-                >
-                  <ThemedText style={styles.seeMoreButtonText}>
-                    {isLoadingMore ? 'Loading...' : 'See More'}
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.tableContainer}
+          contentContainerStyle={styles.tableContent}
+          showsVerticalScrollIndicator={true}
+          onTouchStart={() => {
+            if (showSortOptions) {
+              setShowSortOptions(false);
+            }
+          }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {problems.map((problem, index) => (
+            <View key={problem.id}>
+              <TouchableOpacity 
+                style={styles.row}
+                onPress={() => handleProblemPress(problem)}
+              >
+                <View style={[styles.cell, styles.titleCell, { flex: 5 }]}>
+                  <ThemedText style={styles.titleText} numberOfLines={2} ellipsizeMode="tail">
+                    {problem.title}
                   </ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        ))}
-      </ScrollView>
+                </View>
+                <View style={[
+                  styles.difficultyCell, 
+                  { 
+                    flex: 2,
+                    backgroundColor: getDifficultyColor(problem.difficulty) + '15',
+                  }
+                ]}>
+                  <ThemedText style={[styles.difficultyText, { color: getDifficultyColor(problem.difficulty) }]}>
+                    {problem.difficulty}
+                  </ThemedText>
+                </View>
+                <View style={[styles.statusCell, { flex: 2 }]}>
+                  <View style={[styles.statusBadge, { backgroundColor: problem.status === 'Solved' ? Purple.primary : Neutral.border }]}>
+                    <ThemedText style={[styles.statusText, { color: problem.status === 'Solved' ? Neutral.white : Neutral.textSecondary }]}>
+                      {problem.status === 'Solved' ? '✓' : '○'}
+                    </ThemedText>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              
+              {index === problems.length - 1 && hasMoreProblems && (
+                <View style={styles.seeMoreContainer}>
+                  <TouchableOpacity
+                    style={[styles.seeMoreButton, isLoadingMore && styles.seeMoreButtonDisabled]}
+                    onPress={loadMoreProblems}
+                    disabled={isLoadingMore}
+                  >
+                    <ThemedText style={styles.seeMoreButtonText}>
+                      {isLoadingMore ? 'Loading...' : 'See More'}
+                    </ThemedText>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -918,8 +859,16 @@ export default function AllQuestionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F6FF', // Purple-tinted background like duel.tsx
-    paddingBottom: 50, // Add padding to prevent tab bar blocking
+    backgroundColor: Neutral.white,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    zIndex: 50,
   },
     header: {
     backgroundColor: '#8B5CF6',
@@ -1049,14 +998,21 @@ const styles = StyleSheet.create({
   },
 
   tableContainer: {
-    backgroundColor: '#F8F6FF',
+    backgroundColor: Neutral.white,
     flex: 1,
+  },
+  tableContent: {
+    paddingBottom: 8,
+  },
+  tableWrapper: {
+    flex: 1,
+    backgroundColor: Neutral.white,
   },
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#8B5CF6',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    backgroundColor: Purple.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
     alignItems: 'center',
   },
   headerCell: {
@@ -1066,18 +1022,18 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   headerCellText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: Neutral.white,
+    fontWeight: '700',
     fontSize: 14,
     textAlign: 'left',
   },
   row: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: Neutral.white,
     paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1ecfd',
+    borderBottomColor: Neutral.border,
     minHeight: 70,
     alignItems: 'center',
   },
@@ -1095,8 +1051,8 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#2d2d2d',
+    fontWeight: '600',
+    color: Neutral.text,
     textAlign: 'left',
     lineHeight: 20,
     flexWrap: 'wrap',
@@ -1105,17 +1061,15 @@ const styles = StyleSheet.create({
   difficultyCell: {
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 8,
+    borderRadius: 8,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     marginRight: 8,
-    minHeight: 32,
   },
   difficultyText: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 18,
   },
   statusCell: {
     justifyContent: 'center',
@@ -1125,21 +1079,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    alignSelf: 'center',
-    minWidth: 90,
-    minHeight: 36,
-    justifyContent: 'center', // Center text vertically
-    alignItems: 'center', // Center text horizontally
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   statusText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 18,
   },
   loadingContainer: {
     flex: 1,
@@ -1177,37 +1126,34 @@ const styles = StyleSheet.create({
   refreshIndicator: {
     marginLeft: 8,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#8B5CF6',
+  headerSection: {
+    backgroundColor: Neutral.white,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Neutral.border,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: Purple.tint,
+    borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderWidth: 0,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  searchIconContainer: {
-    marginRight: 12,
-    opacity: 0.7,
+    paddingVertical: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: Neutral.border,
   },
   searchIcon: {
-    fontSize: 20,
-    color: '#8B5CF6',
+    fontSize: 18,
+    color: Purple.primary,
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1F2937',
+    color: Neutral.text,
     paddingVertical: 0,
     fontWeight: '500',
   },
@@ -1215,16 +1161,16 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: Neutral.light,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: Neutral.border,
   },
   clearButtonText: {
     fontSize: 16,
-    color: '#64748B',
+    color: Neutral.textSecondary,
     fontWeight: '600',
   },
   searchingIndicator: {
@@ -1262,57 +1208,48 @@ const styles = StyleSheet.create({
     color: '#6564c7',
     fontWeight: '600',
   },
-  sortingContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    backgroundColor: '#8B5CF6',
-  },
   filterRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    gap: 8,
   },
   filterBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: Neutral.white,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     flex: 1,
-    marginRight: 6,
+    borderWidth: 1,
+    borderColor: Neutral.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
   },
   filterBubbleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2d2d2d',
+    color: Purple.primary,
     marginRight: 6,
   },
   filterBubbleIcon: {
-    fontSize: 13,
-    color: '#6564c7',
+    fontSize: 10,
+    color: Purple.primary,
   },
   filterOptionsContainer: {
     position: 'absolute',
-    top: 50,
+    top: 150,
     left: 16,
     right: 16,
-    backgroundColor: '#fff',
+    backgroundColor: Neutral.white,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Neutral.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 5,
     zIndex: 100,
@@ -1324,58 +1261,56 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   activeFilterOption: {
-    backgroundColor: '#f1ecfd',
-    borderColor: '#6564c7',
+    backgroundColor: Purple.tint,
+    borderColor: Purple.primary,
     borderWidth: 1,
   },
   filterOptionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2d2d2d',
+    color: Neutral.text,
   },
   activeFilterOptionText: {
-    color: '#6564c7',
+    color: Purple.primary,
   },
   sortingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: Neutral.white,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     flex: 1,
-    marginLeft: 6,
+    borderWidth: 1,
+    borderColor: Neutral.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
   },
   sortingBubbleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2d2d2d',
+    color: Purple.primary,
     marginRight: 6,
   },
   sortingBubbleIcon: {
-    fontSize: 13,
-    color: '#6564c7',
+    fontSize: 10,
+    color: Purple.primary,
   },
   sortOptionsContainer: {
     position: 'absolute',
-    top: 50, // Adjust based on bubble height
+    top: 150,
     left: 16,
     right: 16,
-    backgroundColor: '#fff',
+    backgroundColor: Neutral.white,
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: Neutral.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 5,
     zIndex: 100,
@@ -1385,19 +1320,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     marginBottom: 8,
+    backgroundColor: Neutral.light,
+    borderWidth: 1,
+    borderColor: Neutral.border,
   },
   activeSortOption: {
-    backgroundColor: '#f1ecfd',
-    borderColor: '#6564c7',
+    backgroundColor: Purple.tint,
+    borderColor: Purple.primary,
     borderWidth: 1,
   },
   sortOptionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2d2d2d',
+    color: Neutral.text,
   },
   activeSortOptionText: {
-    color: '#6564c7',
+    color: Purple.primary,
   },
   cacheIndicator: {
     marginTop: 8,
@@ -1418,7 +1356,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   seeMoreButton: {
-    backgroundColor: '#6564c7',
+    backgroundColor: Purple.primary,
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
@@ -1429,7 +1367,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   seeMoreButtonText: {
-    color: '#fff',
+    color: Neutral.white,
     fontSize: 16,
     fontWeight: '600',
   },

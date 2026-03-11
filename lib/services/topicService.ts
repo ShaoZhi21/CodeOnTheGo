@@ -83,26 +83,35 @@ export class TopicService {
 
   /**
    * Get statistics for a specific topic
+   * Note: topic_stats is a view with one row per user per topic.
+   * For global stats (total_problems, etc.), we can use any row since they're the same.
    */
-  static async getTopicStats(topicName: string): Promise<TopicStats | null> {
+  static async getTopicStats(topicName: string, userId?: string): Promise<TopicStats | null> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('topic_stats')
         .select('*')
-        .eq('topic_name', topicName)
-        .single();
+        .eq('topic_name', topicName);
+
+      // If userId is provided, filter by user for user-specific stats
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+
+      const { data, error } = await query.limit(1);
 
       if (error) {
         console.error('Error fetching topic stats:', error);
         throw new Error(`Failed to fetch stats for topic ${topicName}: ${error.message}`);
       }
       
-      if (!data) {
+      if (!data || data.length === 0) {
         console.warn(`No stats found for topic ${topicName}`);
         return null;
       }
       
-      return data;
+      // Return the first row (total_problems, easy_problems, etc. are the same for all users)
+      return data[0];
     } catch (error) {
       console.error('Error in getTopicStats:', error);
       throw error;

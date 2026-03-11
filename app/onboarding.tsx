@@ -1,5 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
-import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { apiCall } from '@/lib/api-config';
+import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
@@ -190,79 +191,41 @@ export default function OnboardingScreen() {
       console.log('Name:', name);
       console.log('Selected Level:', selectedLevel);
       
-      // Debug environment variables
-      console.log('Environment check:');
-      console.log('EXPO_PUBLIC_SUPABASE_URL:', process.env.EXPO_PUBLIC_SUPABASE_URL);
-      console.log('EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY:', process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY ? 'Set (length: ' + process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY.length + ')' : 'Not set');
-
-      // Check if admin client is available
-      if (!supabaseAdmin) {
-        Alert.alert('Error', 'Unable to create account. Please try again.');
-        return;
-      }
-
-      // Create user account using admin API (credentials already validated in signup)
-      const { data: adminData, error: adminError } = await supabaseAdmin.auth.admin.createUser({
-        email: email as string,
-        password: password as string,
-        user_metadata: {
-          full_name: name as string,
-          skill_level: selectedLevel,
-        },
-        email_confirm: true,
+      // Create user via backend (service-role key stays on server)
+      const resp = await apiCall('/api/auth/create-user', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: email as string,
+          password: password as string,
+          name: name as string,
+          skillLevel: selectedLevel,
+        }),
       });
 
-      if (adminError) {
-        console.error('Admin API Error:', adminError);
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.error('Create user failed:', errText);
         Alert.alert('Account Creation Error', 'Failed to create account. Please try again.');
         return;
       }
 
-      if (adminData.user) {
-        console.log('User created successfully!');
-        
-        // Create user profile manually since we disabled the trigger
-        try {
-          const { error: profileError } = await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: adminData.user.id,
-              name: name as string,
-              skill_level: selectedLevel,
-              available_hints: 5
-            });
+      // Sign in the user to establish a session
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email as string,
+        password: password as string,
+      });
 
-          if (profileError) {
-            console.error('Profile creation error:', profileError);
-            // Don't fail the signup for this - user can create profile later
-          } else {
-            console.log('User profile created successfully');
-          }
-        } catch (profileErr) {
-          console.error('Profile creation failed:', profileErr);
-        }
-
-        // Now sign in the user so they have an active session
-        console.log('Signing in user...');
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email as string,
-          password: password as string,
-        });
-
-        if (signInError) {
-          console.error('Sign in error:', signInError);
-          // Even if sign-in fails, account was created, so navigate to login
-          Alert.alert(
-            'Account Created', 
-            'Your account was created successfully, but automatic sign-in failed. Please log in manually.',
-            [{ text: 'OK', onPress: () => router.replace('/login') }]
-          );
-          return;
-        }
-
-        console.log('Sign in successful, navigating to app...');
-        router.replace('/(tabs)');
+      if (signInError) {
+        console.error('Sign in error:', signInError);
+        Alert.alert(
+          'Account Created',
+          'Your account was created successfully. Please log in.',
+          [{ text: 'OK', onPress: () => router.replace('/login') }]
+        );
+        return;
       }
+
+      router.replace('/(tabs)');
     } catch (error: any) {
       console.error('Unexpected Error:', error);
       Alert.alert('Error', `Unexpected error: ${error.message}`);

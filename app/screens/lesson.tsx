@@ -12,7 +12,7 @@ import {
   View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
-import { API_BASE_URL } from '../../lib/api-config';
+import { apiCall } from '../../lib/api-config';
 import { supabase } from '../../lib/supabase';
 
 interface QuizQuestion {
@@ -113,11 +113,11 @@ const decodeHtmlEntities = (text: string): string => {
 // Helper function to break text into readable chunks
 const breakTextIntoChunks = (text: string, maxLength: number = 200): string[] => {
   if (!text || typeof text !== 'string' || text.length <= maxLength) return text ? [text] : [];
-  
+
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
   const chunks: string[] = [];
   let currentChunk = '';
-  
+
   for (const sentence of sentences) {
     const trimmedSentence = sentence.trim();
     if (currentChunk.length + trimmedSentence.length + 1 <= maxLength) {
@@ -131,18 +131,19 @@ const breakTextIntoChunks = (text: string, maxLength: number = 200): string[] =>
       }
     }
   }
-  
+
   if (currentChunk) {
     chunks.push(currentChunk + '.');
   }
-  
+
   return chunks;
 };
 
 // Function to get data structure image
 const getDataStructureImage = (imageName: string) => {
   const imageMap: { [key: string]: any } = {
-    'array': require('@/assets/images/datastructure/array.webp'),
+    // Use PNG for best cross-platform compatibility (iOS support for local WEBP can be flaky).
+    'array': require('@/assets/images/datastructure/array.png'),
     'linkedlist': require('@/assets/images/datastructure/linkedlist.png'),
     'hashmap': require('@/assets/images/datastructure/hashmap.png'),
     'priorityqueue': require('@/assets/images/datastructure/priorityqueue.png'),
@@ -150,28 +151,28 @@ const getDataStructureImage = (imageName: string) => {
     'directedgraph': require('@/assets/images/datastructure/directedgraph.png'),
     'weightedgraph': require('@/assets/images/datastructure/weightedgraph.png'),
   };
-  
+
   return imageMap[imageName] || null;
 };
 
 // Data Structure Image Component
 const DataStructureImage = ({ imageName }: { imageName: string }) => {
   const imageSource = getDataStructureImage(imageName);
-  
+
   if (!imageSource) {
     return null;
   }
-  
+
   return (
     <View style={styles.dataStructureImageContainer}>
       <ThemedText style={styles.dataStructureImageTitle}>Visual Representation</ThemedText>
-      <Image 
-        source={imageSource} 
+      <Image
+        source={imageSource}
         style={styles.dataStructureImage}
         resizeMode="contain"
       />
-      </View>
-    );
+    </View>
+  );
 };
 
 // Enhanced complexity explanation function
@@ -184,7 +185,7 @@ const getComplexityExplanation = (complexity: string): string => {
     'O(n²)': 'Quadratic time - Time grows with the square of input size (less efficient for large inputs)',
     'O(2^n)': 'Exponential time - Time doubles with each additional input (very inefficient)',
   };
-  
+
   return explanations[complexity] || 'Time complexity varies based on the operation';
 };
 
@@ -193,68 +194,68 @@ const ComplexityTable = ({ complexity }: { complexity: NonNullable<LessonCard['c
   <View style={styles.complexityTable}>
     <View style={styles.complexitySection}>
       <ThemedText style={styles.complexityHeader}>Time Complexity</ThemedText>
-      
-    <View style={styles.complexityRow}>
+
+      <View style={styles.complexityRow}>
         <View style={styles.complexityLabelContainer}>
-      <ThemedText style={styles.complexityLabel}>Best Case:</ThemedText>
-      <ThemedText style={styles.complexityValue}>{complexity.best}</ThemedText>
-    </View>
+          <ThemedText style={styles.complexityLabel}>Best Case:</ThemedText>
+          <ThemedText style={styles.complexityValue}>{complexity.best}</ThemedText>
+        </View>
         <ThemedText style={styles.complexityExplanation}>
           {getComplexityExplanation(complexity.best)}
         </ThemedText>
       </View>
-      
-    <View style={styles.complexityRow}>
+
+      <View style={styles.complexityRow}>
         <View style={styles.complexityLabelContainer}>
-      <ThemedText style={styles.complexityLabel}>Average Case:</ThemedText>
-      <ThemedText style={styles.complexityValue}>{complexity.average}</ThemedText>
-    </View>
+          <ThemedText style={styles.complexityLabel}>Average Case:</ThemedText>
+          <ThemedText style={styles.complexityValue}>{complexity.average}</ThemedText>
+        </View>
         <ThemedText style={styles.complexityExplanation}>
           {getComplexityExplanation(complexity.average)}
         </ThemedText>
       </View>
-      
-    <View style={styles.complexityRow}>
+
+      <View style={styles.complexityRow}>
         <View style={styles.complexityLabelContainer}>
-      <ThemedText style={styles.complexityLabel}>Worst Case:</ThemedText>
-      <ThemedText style={styles.complexityValue}>{complexity.worst}</ThemedText>
-    </View>
+          <ThemedText style={styles.complexityLabel}>Worst Case:</ThemedText>
+          <ThemedText style={styles.complexityValue}>{complexity.worst}</ThemedText>
+        </View>
         <ThemedText style={styles.complexityExplanation}>
           {getComplexityExplanation(complexity.worst)}
         </ThemedText>
       </View>
     </View>
-    
+
     <View style={styles.complexitySection}>
       <ThemedText style={styles.complexityHeader}>Space Complexity</ThemedText>
-    <View style={styles.complexityRow}>
+      <View style={styles.complexityRow}>
         <View style={styles.complexityLabelContainer}>
-      <ThemedText style={styles.complexityLabel}>Space:</ThemedText>
-      <ThemedText style={styles.complexityValue}>{complexity.space}</ThemedText>
-    </View>
+          <ThemedText style={styles.complexityLabel}>Space:</ThemedText>
+          <ThemedText style={styles.complexityValue}>{complexity.space}</ThemedText>
+        </View>
         <ThemedText style={styles.complexityExplanation}>
           {getComplexityExplanation(complexity.space)}
         </ThemedText>
-  </View>
+      </View>
     </View>
   </View>
 );
 
 // Enhanced Lesson Card Component
-const LessonCardComponent = ({ card, lessonData, isFirstPart }: { 
-  card: LessonCard; 
-  lessonData?: LessonData; 
-  isFirstPart?: boolean; 
+const LessonCardComponent = ({ card, lessonData, isFirstPart }: {
+  card: LessonCard;
+  lessonData?: LessonData;
+  isFirstPart?: boolean;
 }) => {
   const textChunks = breakTextIntoChunks(card.content);
-  
+
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <ThemedText style={styles.cardIcon}>{card.icon}</ThemedText>
         <ThemedText style={styles.cardTitle}>{card.title}</ThemedText>
       </View>
-      
+
       <View style={styles.cardContent}>
         {card.type === 'complexity' ? (
           <View style={styles.efficiencyContainer}>
@@ -286,8 +287,8 @@ const LessonCardComponent = ({ card, lessonData, isFirstPart }: {
                 {(() => {
                   // Extract space complexity from content
                   const spaceMatch = card.content.match(/space[^.]*?O\([^)]+\)[^.]*\./i);
-                  const spaceText = spaceMatch ? spaceMatch[0] : 
-                    card.content.includes('space') ? 
+                  const spaceText = spaceMatch ? spaceMatch[0] :
+                    card.content.includes('space') ?
                       card.content.split('.').find(s => s.toLowerCase().includes('space')) + '.' :
                       'Space complexity varies based on implementation.';
                   return (
@@ -302,16 +303,16 @@ const LessonCardComponent = ({ card, lessonData, isFirstPart }: {
             {/* Parse definition content - handle both numbered and plain text formats */}
             {(() => {
               console.log('Definition content:', card.content); // Debug log
-              
+
               // First try to split by numbered points
               let points = card.content.split(/\d+\)/).filter(item => item.trim());
-              
+
               // If we don't get 3 points, try splitting by sentences and create our own structure
               if (points.length < 3) {
                 const sentences = card.content.split(/[.!?]+/).filter(s => s.trim().length > 0);
                 if (sentences.length >= 3) {
                   points = [sentences[0], sentences[1], sentences.slice(2).join('. ')];
-    } else {
+                } else {
                   // Fallback: split the text into 3 roughly equal parts
                   const text = card.content.trim();
                   const third = Math.ceil(text.length / 3);
@@ -322,12 +323,12 @@ const LessonCardComponent = ({ card, lessonData, isFirstPart }: {
                   ];
                 }
               }
-              
+
               const labels = ['What it is:', 'How it works:', 'Advantages:'];
-              
+
               return points.slice(0, 3).map((point, index) => {
                 const cleanPoint = point.trim().replace(/^(What it is:|How it works:|Advantages:)/i, '').trim();
-                
+
                 return (
                   <View key={index}>
                     <View style={styles.definitionChunk}>
@@ -388,20 +389,20 @@ export default function LessonScreen() {
   const params = useLocalSearchParams();
   const { topicName, problemId, questionTitle, questionId } = params;
   const router = useRouter();
-  
+
   // Get the actual problem ID from either problemId or questionId
   const actualProblemId = problemId || questionId;
-  
+
   const [lessonData, setLessonData] = useState<LessonData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPartIndex, setCurrentPartIndex] = useState(0);
   const [quizData, setQuizData] = useState<QuizQuestion[] | null>(null);
   const [quizLoading, setQuizLoading] = useState(false);
-  
+
   // LessonMCQ Data State
   const [lessonMCQData, setLessonMCQData] = useState<LessonMCQData | null>(null);
-  
+
   // Animation refs for glowing button
   const glowAnimation = useRef(new Animated.Value(0)).current;
 
@@ -423,7 +424,7 @@ export default function LessonScreen() {
   // Prefetch quiz data in background
   const prefetchQuiz = async () => {
     if (quizLoading || quizData) return; // Don't fetch if already loading or have data
-    
+
     setQuizLoading(true);
     try {
       // Get the problemId from params, ensure it's a number
@@ -431,10 +432,10 @@ export default function LessonScreen() {
       const currentTopicName = Array.isArray(topicName) ? topicName[0] : topicName;
       const currentQuestionTitle = Array.isArray(questionTitle) ? questionTitle[0] : questionTitle;
 
-      console.log('🎯 Prefetching quiz for:', { 
-        problemId: currentProblemId, 
-        topicName: currentTopicName, 
-        questionTitle: currentQuestionTitle 
+      console.log('🎯 Prefetching quiz for:', {
+        problemId: currentProblemId,
+        topicName: currentTopicName,
+        questionTitle: currentQuestionTitle
       });
 
       // Check if we have required data
@@ -442,18 +443,12 @@ export default function LessonScreen() {
         console.warn('⚠️ Missing required data for quiz generation:', { currentProblemId, currentTopicName });
         return;
       }
-      
-      // Use the proper API configuration
-      const apiUrl = API_BASE_URL;
-      
+
       // Get current user for skill level
       const { data: { user } } = await supabase.auth.getUser();
-      
-      const response = await fetch(`${apiUrl}/api/generate-quiz`, {
+
+      const response = await apiCall('/api/generate-quiz', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           problemId: parseInt(currentProblemId as string) || currentProblemId,
           topicName: currentTopicName,
@@ -467,14 +462,14 @@ export default function LessonScreen() {
       }
 
       const quizResponse = await response.json();
-      
+
       // Handle both direct array and {questions: []} format
       const questions = Array.isArray(quizResponse) ? quizResponse : quizResponse.questions || [];
-      
+
       setQuizData(questions);
       console.log('✅ Quiz prefetched successfully:', questions.length, 'questions');
       console.log('🔍 Setting quizData state to:', questions.length, 'questions');
-      
+
       // Quiz data is ready, no need for waiting state
       console.log('✅ Quiz data loaded successfully');
     } catch (error) {
@@ -488,15 +483,15 @@ export default function LessonScreen() {
 
   // Auto-transform quiz data when it's loaded
   useEffect(() => {
-    console.log('🔄 Auto-transform effect triggered:', { 
-      quizDataLength: quizData?.length, 
-      lessonMCQData: !!lessonMCQData 
+    console.log('🔄 Auto-transform effect triggered:', {
+      quizDataLength: quizData?.length,
+      lessonMCQData: !!lessonMCQData
     });
     if (quizData && quizData.length > 0 && !lessonMCQData) {
       const transformedData = transformQuizData(quizData);
       setLessonMCQData(transformedData);
       console.log('✅ Quiz data auto-transformed and ready for LessonMCQ');
-      
+
       // Quiz data is ready
       console.log('✅ Quiz data is ready for use');
     }
@@ -506,7 +501,7 @@ export default function LessonScreen() {
   useEffect(() => {
     console.log('🚀 Component mounted, starting immediate quiz prefetch...');
     console.log('🔍 Available params:', { topicName, problemId, questionId, questionTitle, actualProblemId });
-    
+
     // Start prefetching immediately if we have the required data
     if (actualProblemId && topicName) {
       prefetchQuiz();
@@ -541,7 +536,7 @@ export default function LessonScreen() {
           ])
         ).start();
       };
-      
+
       // Start the animation after a short delay
       const timeout = setTimeout(startGlowAnimation, 500);
       return () => clearTimeout(timeout);
@@ -594,8 +589,18 @@ export default function LessonScreen() {
         setError(null);
 
         if (!params.preFetchedData) {
-          console.error('❌ No prefetched data found in params');
-          throw new Error('No prefetched data available');
+          console.warn('⚠️ No prefetched data found in params (possibly due to AI quota)');
+          // Instead of throwing, set a fallback state or empty data
+          setLessonData({
+            title: Array.isArray(questionTitle) ? questionTitle[0] : questionTitle || 'Lesson',
+            content: 'Lesson content could not be generated at this time. Please try again later.',
+            keyConcepts: [],
+            example: '',
+            hint: '',
+            commonMistake: ''
+          });
+          setLoading(false);
+          return;
         }
 
         console.log('📦 Raw prefetched data:', params.preFetchedData);
@@ -603,10 +608,24 @@ export default function LessonScreen() {
         // Parse the prefetched data
         let parsedData: LessonData;
         try {
-          parsedData = typeof params.preFetchedData === 'string' 
+          parsedData = typeof params.preFetchedData === 'string' && params.preFetchedData !== 'null'
             ? JSON.parse(params.preFetchedData)
             : params.preFetchedData;
-          
+
+          if (!parsedData || params.preFetchedData === 'null') {
+            console.warn('⚠️ Prefetched data is null (likely AI quota)');
+            setLessonData({
+              title: Array.isArray(questionTitle) ? questionTitle[0] : questionTitle || 'Lesson',
+              content: 'Lesson content could not be generated at this time due to high server load. You can still access the question/quiz.',
+              keyConcepts: [],
+              example: '',
+              hint: '',
+              commonMistake: ''
+            });
+            setLoading(false);
+            return;
+          }
+
           console.log('✅ Successfully parsed lesson data:', {
             title: parsedData?.title,
             hasParts: !!parsedData?.parts,
@@ -635,7 +654,7 @@ export default function LessonScreen() {
 
         // Quiz prefetching is handled separately in the immediate useEffect
 
-    } catch (error) {
+      } catch (error) {
         console.error('❌ Error loading lesson:', error);
         setError(error instanceof Error ? error.message : 'Failed to load lesson');
         router.back();
@@ -696,76 +715,76 @@ export default function LessonScreen() {
   }
 
   // Render main content
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
-            <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
-          </TouchableOpacity>
-          
-          <View style={styles.headerCenter}>
-            <View style={styles.headerTitleBubble}>
-              <View style={styles.lessonDot} />
-              <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.backButton}>
+          <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />
+        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <View style={styles.headerTitleBubble}>
+            <View style={styles.lessonDot} />
+            <ThemedText style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
               {decodeHtmlEntities((Array.isArray(questionTitle) ? questionTitle[0] : questionTitle) || (Array.isArray(topicName) ? topicName[0] : topicName) || 'Lesson')}
-              </ThemedText>
-            </View>
+            </ThemedText>
           </View>
-          
-          <View style={styles.headerSpacer} />
         </View>
 
-        {/* Progress Indicator */}
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {/* Progress Indicator */}
       {lessonData?.parts && lessonData.parts.length > 0 && (
-          <View style={styles.progressContainer}>
-            <ThemedText style={styles.progressText}>
+        <View style={styles.progressContainer}>
+          <ThemedText style={styles.progressText}>
             Part {currentPartIndex + 1} of {lessonData.parts.length}
-            </ThemedText>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
+          </ThemedText>
+          <View style={styles.progressBar}>
+            <View
+              style={[
+                styles.progressFill,
                 { width: `${((currentPartIndex + 1) / lessonData.parts.length) * 100}%` }
-                ]} 
-              />
-            </View>
+              ]}
+            />
           </View>
-        )}
+        </View>
+      )}
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.lessonContainer}>
-            {currentPart ? (
-              <>
-                <ThemedText style={styles.lessonTitle}>
-                  {currentPart.title}
-                </ThemedText>
-                
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.lessonContainer}>
+          {currentPart ? (
+            <>
+              <ThemedText style={styles.lessonTitle}>
+                {currentPart.title}
+              </ThemedText>
 
-                
+
+
               <View style={styles.cardsContainer}>
                 {currentPart.cards?.map((card, index) => (
-                  <LessonCardComponent 
-                    key={index} 
-                    card={card} 
+                  <LessonCardComponent
+                    key={index}
+                    card={card}
                     lessonData={lessonData || undefined}
                     isFirstPart={currentPartIndex === 0}
                   />
                 )) ?? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#6564c7" />
-                    <ThemedText style={styles.loadingText}>Loading lesson content...</ThemedText>
-                  </View>
-                )}
-                </View>
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="large" color="#6564c7" />
+                      <ThemedText style={styles.loadingText}>Loading lesson content...</ThemedText>
+                    </View>
+                  )}
+              </View>
 
 
-              </>
-            ) : (
-              <View style={styles.lessonContainer}>
-                <ThemedText style={styles.lessonTitle}>
-                  {lessonData?.title || questionTitle}
-                </ThemedText>
-              
+            </>
+          ) : (
+            <View style={styles.lessonContainer}>
+              <ThemedText style={styles.lessonTitle}>
+                {lessonData?.title || questionTitle}
+              </ThemedText>
+
               {/* Show lesson content if available */}
               {lessonData?.content ? (
                 <View style={styles.lessonContent}>
@@ -778,30 +797,30 @@ export default function LessonScreen() {
                   Loading structured lesson content...
                 </ThemedText>
               )}
-              </View>
-            )}
-          </View>
-        </ScrollView>
+            </View>
+          )}
+        </View>
+      </ScrollView>
 
-        <View style={styles.footer}>
+      <View style={styles.footer}>
         <View style={[styles.navigationButtons, currentPartIndex === 0 && styles.navigationButtonsFirstPage]}>
-            {currentPartIndex > 0 && (
-              <TouchableOpacity 
-                style={styles.prevButton} 
-                onPress={() => setCurrentPartIndex(currentPartIndex - 1)}
-              >
-                <ThemedText style={styles.prevButtonText}>← Previous</ThemedText>
-              </TouchableOpacity>
-            )}
-            
+          {currentPartIndex > 0 && (
+            <TouchableOpacity
+              style={styles.prevButton}
+              onPress={() => setCurrentPartIndex(currentPartIndex - 1)}
+            >
+              <ThemedText style={styles.prevButtonText}>← Previous</ThemedText>
+            </TouchableOpacity>
+          )}
+
           {currentPart && currentPartIndex < (lessonData?.parts?.length || 0) - 1 ? (
-              <TouchableOpacity 
-                style={styles.nextButton} 
-                onPress={() => setCurrentPartIndex(currentPartIndex + 1)}
-              >
-                <ThemedText style={styles.nextButtonText}>Next →</ThemedText>
-              </TouchableOpacity>
-            ) : (
+            <TouchableOpacity
+              style={styles.nextButton}
+              onPress={() => setCurrentPartIndex(currentPartIndex + 1)}
+            >
+              <ThemedText style={styles.nextButtonText}>Next →</ThemedText>
+            </TouchableOpacity>
+          ) : (
             <Animated.View
               style={[
                 styles.nextButton,
@@ -828,22 +847,22 @@ export default function LessonScreen() {
                 }
               ]}
             >
-              <TouchableOpacity 
-                style={styles.completeButtonInner} 
+              <TouchableOpacity
+                style={styles.completeButtonInner}
                 onPress={handleCompleteLesson}
               >
                 <ThemedText style={styles.nextButtonText}>
                   {(() => {
                     console.log('🔍 Quiz button state:', { quizLoading, quizDataLength: quizData?.length, lessonMCQData: !!lessonMCQData });
-                    return quizLoading && !quizData 
-                      ? '⏳ Loading...' 
+                    return quizLoading && !quizData
+                      ? '⏳ Loading...'
                       : '🎉 Quiz Time!';
                   })()}
                 </ThemedText>
               </TouchableOpacity>
             </Animated.View>
-            )}
-          </View>
+          )}
+        </View>
       </View>
 
 
@@ -1031,7 +1050,7 @@ const styles = StyleSheet.create({
   cardContent: {
     flex: 1,
   },
-  
+
   // Definition card styles
   definitionContent: {
     gap: 12,
@@ -1059,7 +1078,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#6564c7',
   },
-  
+
   // Usage card styles
   usageContent: {
     gap: 16,
@@ -1089,7 +1108,7 @@ const styles = StyleSheet.create({
     color: '#444',
     flex: 1,
   },
-  
+
   // Advantages card styles
   advantagesContent: {
     gap: 12,
@@ -1111,7 +1130,7 @@ const styles = StyleSheet.create({
     color: '#444',
     flex: 1,
   },
-  
+
   // Default content styles
   defaultContent: {
     gap: 12,
@@ -1122,7 +1141,7 @@ const styles = StyleSheet.create({
     color: '#444',
     marginBottom: 8,
   },
-  
+
   // Enhanced complexity table styles
   complexityTable: {
     gap: 20,
@@ -1168,9 +1187,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
   },
-  
 
-  
+
+
   // Operations list styles
   operationsList: {
     gap: 12,
@@ -1197,7 +1216,7 @@ const styles = StyleSheet.create({
     color: '#444',
     flex: 1,
   },
-  
+
   // Efficiency grid styles
   efficiencyGrid: {
     gap: 12,
@@ -1227,7 +1246,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: 'italic',
   },
-  
+
   // Steps list styles
   stepsList: {
     gap: 16,
@@ -1257,7 +1276,7 @@ const styles = StyleSheet.create({
     color: '#444',
     flex: 1,
   },
-  
+
   // Algorithm complexity styles
   algorithmComplexity: {
     gap: 16,
@@ -1287,7 +1306,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontStyle: 'italic',
   },
-  
+
   // Footer styles
   footer: {
     padding: 20,
@@ -1334,7 +1353,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  
+
   // Data structure image styles
   dataStructureImageContainer: {
     backgroundColor: 'white',

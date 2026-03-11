@@ -1,392 +1,248 @@
-import { ThemedText } from '@/components/ThemedText';
-import { TopicService } from '@/lib/services/topicService';
-import { supabase } from '@/lib/supabase';
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
-} from 'react-native';
 
-interface Topic {
+import { ThemedText } from '@/components/ThemedText';
+import { supabase } from '@/lib/supabase';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Neutral, Purple } from '../../constants/Colors';
+
+/* -------------------------------------------------------------------------- */
+/*                                Types                                       */
+/* -------------------------------------------------------------------------- */
+
+interface StudyPlan {
   id: number;
   name: string;
   description: string;
+  image_url: string;
+  total_problems?: number;
+  solved_problems?: number;
 }
 
-interface TopicProgress {
-  topic_name: string;
-  completed_problems: number;
-  total_problems: number;
-  completion_percentage: number;
-}
-
-interface TopicProgressHome {
-  name: string;
-  completion_percentage: number;
-  lastEdited: string;
-}
-
-interface TopicCardProps {
-  topic: Topic;
-  index: number;
-  progress?: TopicProgress;
-  onPress: () => void;
-}
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 2; // 2 cards per row with 16px margins
-const STATS_CARD_WIDTH = (width - 64) / 3; // 3 cards per row with margins and gaps
-
-// Topic icon mapping
-const getTopicIcon = (topicName: string) => {
-  const topicIcons: { [key: string]: any } = {
-    'Arrays': require('@/assets/images/icons/list-icon.png'),
-    'Strings': require('@/assets/images/icons/code-icon.png'),
-    'Linked Lists': require('@/assets/images/icons/suggestion-icon.png'),
-    'Trees': require('@/assets/images/icons/efficient-icon.png'),
-    'Graphs': require('@/assets/images/icons/magnifying-glass-icon.png'),
-    'Dynamic Programming': require('@/assets/images/icons/star-icon.png'),
-    'Sorting': require('@/assets/images/icons/shuffle-icon.png'),
-    'Searching': require('@/assets/images/icons/search-icon.png'),
-    'Recursion': require('@/assets/images/icons/fire-icon.png'),
-    'Hash Tables': require('@/assets/images/icons/checklist-icon.png'),
-    'Two Pointers': require('@/assets/images/icons/duel-icon.png'),
-    'Stack': require('@/assets/images/icons/trophy-icon.png'),
-    'Queue': require('@/assets/images/icons/question-icon.png'),
-    'Heap': require('@/assets/images/icons/up-arrow.png'),
-    'Greedy': require('@/assets/images/icons/correct-icon.png'),
-    'Backtracking': require('@/assets/images/icons/retry-icon.png'),
-  };
-  
-  return topicIcons[topicName] || require('@/assets/images/icons/book-icon.png');
-};
-
-// Topic color mapping - pastel variety
-const getTopicColors = (index: number) => {
-  const colorSchemes = [
-    { bg: '#F3F0FF', border: '#E0D7FF', accent: '#8B5CF6' }, // Purple
-    { bg: '#FFF3E0', border: '#FFE0B2', accent: '#FF9800' }, // Orange
-    { bg: '#E8F5E8', border: '#C8E6C9', accent: '#4CAF50' }, // Green
-    { bg: '#E3F2FD', border: '#BBDEFB', accent: '#2196F3' }, // Blue
-    { bg: '#FCE4EC', border: '#F8BBD9', accent: '#E91E63' }, // Pink
-    { bg: '#F3E5F5', border: '#E1BEE7', accent: '#9C27B0' }, // Purple variant
-    { bg: '#FFF8E1', border: '#FFECB3', accent: '#FFC107' }, // Amber
-    { bg: '#E0F2F1', border: '#B2DFDB', accent: '#009688' }, // Teal
-    { bg: '#FFEBEE', border: '#FFCDD2', accent: '#F44336' }, // Red
-    { bg: '#F1F8E9', border: '#DCEDC8', accent: '#8BC34A' }, // Light Green
-  ];
-  
-  return colorSchemes[index % colorSchemes.length];
-};
-
-const TopicCard: React.FC<TopicCardProps> = ({ topic, index, progress, onPress }) => {
-  const colors = getTopicColors(index);
-  
-  // Always have a default progress object, even if progress is undefined
-  const displayProgress = {
-    topic_name: topic.name,
-    completed_problems: progress?.completed_problems || 0,
-    total_problems: progress?.total_problems || 0,
-    completion_percentage: progress?.completion_percentage || 0
-  };
-  
-  return (
-    <TouchableOpacity 
-      style={[styles.topicCard, { backgroundColor: colors.bg, borderColor: colors.border }]} 
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <View style={styles.cardHeader}>
-        <View style={[styles.iconContainer, { backgroundColor: colors.accent }]}>
-          <Image 
-            source={getTopicIcon(topic.name)} 
-            style={styles.topicIcon}
-            tintColor="#FFFFFF"
-          />
-        </View>
-        
-        {/* ALWAYS show progress badge - NO CONDITIONAL */}
-        <View style={styles.progressBadge}>
-          <ThemedText style={styles.progressText}>
-            {displayProgress.completed_problems}/{displayProgress.total_problems || '?'}
-          </ThemedText>
-        </View>
-      </View>
-      
-      <View style={styles.cardContent}>
-        <ThemedText style={[styles.topicTitle, { color: colors.accent }]} numberOfLines={2}>
-          {topic.name}
-        </ThemedText>
-        
-        <ThemedText style={styles.topicDescription} numberOfLines={2}>
-          {topic.description}
-        </ThemedText>
-        
-        {/* ALWAYS show progress container - NO CONDITIONAL */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { 
-                  width: `${displayProgress.completion_percentage}%`,
-                  backgroundColor: colors.accent 
-                }
-              ]} 
-            />
-          </View>
-          <ThemedText style={styles.progressLabel}>
-            {Math.round(displayProgress.completion_percentage)}% complete
-          </ThemedText>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
+/* -------------------------------------------------------------------------- */
+/*                                Component                                   */
+/* -------------------------------------------------------------------------- */
 
 export default function LearnScreen() {
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [topicProgress, setTopicProgress] = useState<{ [key: string]: TopicProgress }>({});
-  const [topicsInProgress, setTopicsInProgress] = useState<TopicProgressHome[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userStats, setUserStats] = useState({ totalSolved: 0, streak: 0 });
+  const [planSort, setPlanSort] = useState<'featured' | 'short' | 'long'>('featured');
 
-  useEffect(() => {
-    loadTopics();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
 
-  // Load progress when topics are available
-  useEffect(() => {
-    if (topics.length > 0) {
-      loadTopicProgress();
-      loadTopicsProgress();
-    }
-  }, [topics]);
-
-  const loadTopics = async () => {
+  const fetchData = async () => {
     try {
-      const topicsData = await TopicService.getAllTopics();
-      setTopics(topicsData);
+      // 1. Fetch Plans
+      const { data: plansData, error: plansError } = await supabase
+        .from('study_plans')
+        .select('*')
+        .order('id');
+
+      if (plansError) throw plansError;
+
+      // 2. Fetch User Stats (Total Solved)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Get total solved count
+        const { count } = await supabase
+          .from('user_problem_progress')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('is_solved', true);
+
+        // Get streak (mocked for now or fetch from profile)
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('current_streak')
+          .eq('user_id', user.id)
+          .single();
+
+        setUserStats({
+          totalSolved: count || 0,
+          streak: profile?.current_streak || 0
+        });
+      }
+
+      setPlans(plansData || []);
     } catch (error) {
-      console.error('Error loading topics:', error);
+      console.error('❌ Error fetching learn data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const loadTopicProgress = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && topics.length > 0) {
-        // Use the same topic_stats view that "Your Progress" uses for consistency
-        const { data: topicStats, error: statsError } = await supabase
-          .from('topic_stats')
-          .select('*')
-          .eq('user_id', user.id);
-
-        if (statsError) {
-          console.error('Error loading topic stats:', statsError);
-          return;
-        }
-
-        // Create progress map from topic_stats data
-        const progressMap: { [key: string]: TopicProgress } = {};
-        
-        for (const topic of topics) {
-          const topicStat = topicStats.find(stat => stat.topic_name === topic.name);
-          
-          if (topicStat) {
-            progressMap[topic.name] = {
-              topic_name: topic.name,
-              completed_problems: topicStat.completed_problems || 0,
-              total_problems: topicStat.total_problems || 0,
-              completion_percentage: topicStat.completion_percentage || 0,
-            };
-          } else {
-            // If no stats found for this topic, set default values
-            progressMap[topic.name] = {
-              topic_name: topic.name,
-              completed_problems: 0,
-              total_problems: 0,
-              completion_percentage: 0,
-            };
-          }
-        }
-
-        setTopicProgress(progressMap);
-      }
-    } catch (error) {
-      console.error('Error loading topic progress:', error);
-    }
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
   };
 
-  const loadTopicsProgress = useCallback(async () => {
-    try {
-      console.log('Loading topics progress');
-
-      // Get user ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.error('No user found');
-        return;
-      }
-
-      // Get all topics and their stats
-      const { data: topicStats, error: statsError } = await supabase
-        .from('topic_stats')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (statsError) {
-        console.error('Error loading topic stats:', statsError);
-        return;
-      }
-
-      // Convert to TopicProgress format and sort by completion percentage
-      const progress = topicStats
-        .map((stat): TopicProgressHome => ({
-          name: stat.topic_name,
-          completion_percentage: stat.completion_percentage || 0,
-          lastEdited: new Date().toISOString()
-        }))
-        .sort((a, b) => b.completion_percentage - a.completion_percentage)
-        .slice(0, 3); // Only take top 3 by completion percentage
-
-      setTopicsInProgress(progress);
-    } catch (error) {
-      console.error('Error loading topics progress:', error);
-    }
-  }, []);
-
-  const handleTopicPress = async (topic: Topic) => {
-    try {
-      // Navigate to loading screen first
-      router.replace({
-        pathname: '/screens/LoadingRoadMap',
-        params: {
-          topicName: topic.name,
-          from: 'learn'
-        }
-      });
-    } catch (error) {
-      console.error('Error navigating to topic:', error);
-    }
+  const handlePlanPress = (plan: StudyPlan) => {
+    router.push({
+      pathname: '/screens/StudyPlanDetail',
+      params: { planId: plan.id }
+    });
   };
 
-  if (loading) {
+  const PlanCard = ({ plan, index }: { plan: StudyPlan; index: number }) => {
+    // Subtle purple/white gradients that stay within the theme
+    const colors = ([
+      [Purple.tint, Neutral.white],
+      [Neutral.white, Purple.tint],
+      [Neutral.white, '#F8F9FA'],
+    ] as const)[index % 3];
+
+    const progress = plan.total_problems
+      ? Math.min(100, Math.round(((plan.solved_problems || 0) / plan.total_problems) * 100))
+      : 0;
+
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6564c7" />
-          <ThemedText style={styles.loadingText}>Loading topics...</ThemedText>
+      <TouchableOpacity
+        style={styles.cardContainer}
+        activeOpacity={0.9}
+        onPress={() => handlePlanPress(plan)}
+      >
+        <View style={styles.timeline}>
+          <View style={styles.timelineNode}>
+            <ThemedText style={styles.timelineIndex}>{index + 1}</ThemedText>
+          </View>
+          <View style={styles.timelineLine} />
         </View>
+
+        <LinearGradient colors={colors} style={styles.cardContent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardMeta}>
+              <ThemedText style={styles.cardLabel}>Study plan</ThemedText>
+              <ThemedText style={styles.cardTitle}>{plan.name}</ThemedText>
+              <ThemedText style={styles.cardDescription} numberOfLines={2}>
+                {plan.description}
+              </ThemedText>
+            </View>
+            <Image
+              source={{ uri: plan.image_url || 'https://images.unsplash.com/photo-1523475472560-d2df97ec485c?auto=format&fit=crop&w=400&q=60' }}
+              style={styles.cardImage}
+            />
+          </View>
+
+          <View style={styles.progressRow}>
+            <View style={styles.progressBar}>
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
+            </View>
+            <ThemedText style={styles.progressText}>{progress}%</ThemedText>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    );
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#6564c7" />
       </SafeAreaView>
     );
   }
 
-  const allTopicsData = topics;
-
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <ThemedText style={styles.mainTitle}>Learn & Practice</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            Master data structures and algorithms through interactive lessons
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <StatusBar barStyle="dark-content" />
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6564c7" />
+        }
+      >
+        {/* Header Section */}
+        <View style={styles.headerSection}>
+          <ThemedText style={styles.headerTitle}>Study Plans</ThemedText>
+          <ThemedText style={styles.headerSubtitle}>
+            Choose a learning path to get started
+          </ThemedText>
+          
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statLabel}>Solved</ThemedText>
+              <ThemedText style={styles.statValue}>{userStats.totalSolved}</ThemedText>
+            </View>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statLabel}>Plans</ThemedText>
+              <ThemedText style={styles.statValue}>{plans.length}</ThemedText>
+            </View>
+            <View style={styles.statCard}>
+              <ThemedText style={styles.statLabel}>Streak</ThemedText>
+              <ThemedText style={styles.statValue}>{userStats.streak}</ThemedText>
+            </View>
+          </View>
+        </View>
+
+        {/* Sort toggles */}
+        <View style={styles.sortRow}>
+          {(['featured', 'short', 'long'] as const).map(option => (
+            <TouchableOpacity
+              key={option}
+              style={[styles.sortChip, planSort === option && styles.sortChipActive]}
+              onPress={() => setPlanSort(option)}
+            >
+              <ThemedText style={[styles.sortChipText, planSort === option && styles.sortChipTextActive]}>
+                {option === 'featured' ? 'Featured' : option === 'short' ? 'Quick wins' : 'Deep dives'}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle}>Plans by study vibe</ThemedText>
+          <ThemedText style={styles.sectionSubtitle}>Glanceable cards, organized like a feed.</ThemedText>
+        </View>
+
+        {/* Plans List */}
+        <View style={styles.plansList}>
+          {plans.length > 0 ? (
+            [...plans]
+              .sort((a, b) => {
+                if (planSort === 'short') {
+                  return (a.total_problems || 0) - (b.total_problems || 0);
+                }
+                if (planSort === 'long') {
+                  return (b.total_problems || 0) - (a.total_problems || 0);
+                }
+                return a.id - b.id;
+              })
+              .map((plan, index) => (
+                <PlanCard key={plan.id} plan={plan} index={index} />
+              ))
+          ) : (
+            <View style={styles.emptyState}>
+              <ThemedText style={styles.emptyText}>No study plans available yet.</ThemedText>
+            </View>
+          )}
+        </View>
+
+        {/* Helper Note */}
+        <View style={styles.noteContainer}>
+          <ThemedText style={styles.noteText}>
+            More study plans coming soon! We focus on quality over quantity.
           </ThemedText>
         </View>
 
-        {/* Progress Statistics Section */}
-        {topicsInProgress.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Image 
-                  source={require('@/assets/images/icons/trophy-icon.png')} 
-                  style={styles.sectionIcon}
-                  tintColor="#6564c7"
-                />
-                <ThemedText style={styles.sectionTitle}>Your Progress</ThemedText>
-              </View>
-            </View>
-            
-            <View style={styles.progressGrid}>
-              {topicsInProgress.map((topic, index) => (
-                <TouchableOpacity 
-                  key={topic.name} 
-                  style={[styles.progressCard, { backgroundColor: getTopicColors(index).bg }]} 
-                  onPress={() => {
-                    const topicObj = topics.find(t => t.name === topic.name);
-                    if (topicObj) {
-                      handleTopicPress(topicObj);
-                    }
-                  }}
-                >
-                  <View style={styles.progressCircleContainer}>
-                    <View style={[styles.progressCircle, { borderColor: getTopicColors(index).accent }]}>
-                      <View 
-                        style={[
-                          styles.progressCircleFill, 
-                          { 
-                            backgroundColor: getTopicColors(index).accent,
-                            transform: [{ rotate: `${(topic.completion_percentage / 100) * 360}deg` }]
-                          }
-                        ]} 
-                      />
-                      <View style={styles.progressCircleInner}>
-                        <ThemedText style={styles.progressPercentage}>{Math.round(topic.completion_percentage)}%</ThemedText>
-                      </View>
-                    </View>
-                  </View>
-                  <ThemedText 
-                    style={[styles.progressTopicName, { color: getTopicColors(index).accent }]}
-                    numberOfLines={2}
-                    ellipsizeMode="tail"
-                  >
-                    {topic.name}
-                  </ThemedText>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* All Topics Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleContainer}>
-              <Image 
-                source={require('@/assets/images/icons/book-icon.png')} 
-                style={styles.sectionIcon}
-                tintColor="#6564c7"
-              />
-              <ThemedText style={styles.sectionTitle}>All Topics</ThemedText>
-            </View>
-            <ThemedText style={styles.topicCount}>{allTopicsData.length} topics</ThemedText>
-          </View>
-          
-          <View style={styles.topicsGrid}>
-            {allTopicsData.map((topic, index) => (
-              <TopicCard 
-                key={topic.id} 
-                topic={topic} 
-                index={index} 
-                progress={topicProgress[topic.name]}
-                onPress={() => handleTopicPress(topic)} 
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* Bottom Spacing */}
-        <View style={styles.bottomSpacing} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -395,240 +251,228 @@ export default function LearnScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F6FF', // Purple-tinted background like duel.tsx
+    backgroundColor: Neutral.white,
   },
-  scrollView: {
-    flex: 1,
+  safeArea: {
+    backgroundColor: Neutral.white,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F6FF',
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
+  scrollContent: {
+    paddingBottom: 48,
+    paddingHorizontal: 20,
+    paddingTop: 48,
   },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+
+  // Header Section
+  headerSection: {
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: Neutral.text,
+    marginBottom: 8,
+    paddingTop: 8
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    color: Neutral.textSecondary,
+    lineHeight: 22,
     marginBottom: 20,
   },
-  mainTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Purple.tint,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Neutral.border,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Neutral.textSecondary,
+    marginBottom: 6,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Purple.primary,
+  },
+
+  sortRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
     marginBottom: 8,
-    lineHeight: 40,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    lineHeight: 22,
+  sortChip: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: Purple.tint,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Neutral.border,
   },
-  section: {
-    marginBottom: 10,
+  sortChipActive: {
+    backgroundColor: Purple.primary,
+    borderColor: Purple.primary,
   },
+  sortChipText: {
+    color: Neutral.textSecondary,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  sortChipTextActive: {
+    color: Neutral.white,
+  },
+
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
+    marginTop: 8,
     marginBottom: 16,
-  },
-  sectionTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  sectionIcon: {
-    width: 20,
-    height: 20,
-    marginRight: 8,
   },
   sectionTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: Neutral.text,
   },
-  topicCount: {
+  sectionSubtitle: {
+    marginTop: 4,
+    color: Neutral.textSecondary,
     fontSize: 14,
-    color: '#666',
-    backgroundColor: '#F3F0FF',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E0D7FF',
   },
-  topicsGrid: {
+
+  plansList: {
+    gap: 14,
+    paddingBottom: 12,
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#9CA3AF',
+  },
+
+  cardContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    justifyContent: 'space-between',
+    alignItems: 'stretch',
   },
-  topicCard: {
-    width: CARD_WIDTH,
-    backgroundColor: '#F3F0FF',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#E0D7FF',
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+  timeline: {
+    width: 28,
+    alignItems: 'center',
+  },
+  timelineNode: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Purple.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  timelineIndex: {
+    color: Neutral.white,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    backgroundColor: Neutral.border,
+    marginTop: 4,
+    borderRadius: 999,
+  },
+
+  cardContent: {
+    flex: 1,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: Neutral.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
     elevation: 3,
+    backgroundColor: Neutral.white,
   },
   cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#8B5CF6', // This will be overridden by dynamic colors
-    borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  topicIcon: {
-    width: 20,
-    height: 20,
-  },
-  progressBadge: {
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  progressText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#666',
-  },
-  cardContent: {
+  cardMeta: {
     flex: 1,
   },
-  topicTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#8B5CF6', // This will be overridden by dynamic colors
-    marginBottom: 6,
-    lineHeight: 18,
-  },
-  topicDescription: {
+  cardLabel: {
     fontSize: 12,
-    color: '#666',
-    lineHeight: 16,
-    marginBottom: 8,
+    fontWeight: '700',
+    color: Neutral.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
-  progressContainer: {
-    marginBottom: 8,
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Neutral.text,
+    marginTop: 4,
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: Neutral.textSecondary,
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  cardImage: {
+    width: 68,
+    height: 68,
+    borderRadius: 16,
+    marginLeft: 12,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
   },
   progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    borderRadius: 2,
-    marginBottom: 4,
+    flex: 1,
+    height: 8,
+    borderRadius: 12,
+    backgroundColor: Neutral.border,
+    overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 2,
+    borderRadius: 12,
+    backgroundColor: Purple.primary,
   },
-  progressLabel: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '500',
+  progressText: {
+    marginLeft: 10,
+    fontWeight: '700',
+    color: Neutral.text,
+    fontSize: 14,
   },
-  bottomSpacing: {
-    height: 32,
-  },
-  progressGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  progressCard: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 4,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 150,
-  },
-  progressCircleContainer: {
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  progressCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    borderWidth: 5,
-    borderColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  progressCircleFill: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    borderRadius: 35,
-    borderWidth: 5,
-    borderColor: 'transparent',
-    borderTopColor: 'currentColor',
-    borderRightColor: 'currentColor',
-  },
-  progressCircleInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
+
+  noteContainer: {
+    marginTop: 30,
+    marginBottom: 16,
+    paddingHorizontal: 24,
     alignItems: 'center',
   },
-  progressPercentage: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  progressTopicName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#666',
+  noteText: {
+    fontSize: 12,
+    color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 18,
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    display: 'flex',
   },
-}); 
+});

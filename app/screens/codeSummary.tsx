@@ -32,6 +32,8 @@ export default function CodeSummary() {
   const difficulty = params.difficulty as string;
   const description = params.description as string;
   const pseudocode = params.pseudocode as string;
+  const topicName = (params.topicName as string) || '';
+  const from = (params.from as string) || 'roadmap';
   const mcqAnswers = params.mcqAnswers ? JSON.parse(params.mcqAnswers as string) : [];
   const language = params.language as string || 'javascript';
   const preGeneratedSummary = params.preGeneratedSummary ? JSON.parse(params.preGeneratedSummary as string) : null;
@@ -154,7 +156,9 @@ export default function CodeSummary() {
       // Get user profile
       const userResult = await supabase.auth.getUser();
       const userObj = userResult.data.user;
-      if (!userObj) throw new Error('User not authenticated');
+      if (!userObj) {
+        console.warn('User not authenticated; skipping completion sync.');
+      } else {
 
       // First check if this problem has already been completed
       const { data: existingProgress, error: checkError } = await supabase
@@ -198,7 +202,9 @@ export default function CodeSummary() {
       const score = 85; // Or use a real score if available
       const stars = Math.ceil(score / 20); // 1-5 stars
       const result = await markProblemFullyComplete(parseInt(problemId), score, Math.min(stars, 3));
-      if (!result.success) throw new Error(result.error || 'Failed to mark problem as complete');
+      if (!result.success) {
+        console.warn('Completion sync failed (non-blocking):', result.error);
+      }
 
       // Only update profile stats if this is a new completion
       if (isNewCompletion) {
@@ -282,13 +288,28 @@ export default function CodeSummary() {
         console.log('ℹ️ This is a RE-COMPLETION - only updating problem progress');
       }
 
-      Alert.alert('Success', 'Problem marked as complete!');
-      router.replace('/(tabs)');
+      Alert.alert('Success', 'Saved! Continuing…');
+      }
     } catch (error) {
       console.error('Error marking problem complete:', error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to mark problem as complete');
+      // Non-blocking: allow user to continue even if sync fails (RLS/offline/etc.)
     } finally {
       setIsMarkingComplete(false);
+
+      // Always allow user to move forward; do not trap them on this screen.
+      router.replace({
+        pathname: '/screens/PseudocodeComplete',
+        params: {
+          problemTitle: title || '',
+          problemId: problemId || '',
+          topicName,
+          difficulty: difficulty || '',
+          description: description || '',
+          code: summaryData?.finalCode || '',
+          from,
+          source: 'roadmap',
+        }
+      });
     }
   };
 
