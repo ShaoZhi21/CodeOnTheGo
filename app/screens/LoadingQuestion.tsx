@@ -1,15 +1,10 @@
 import { apiCall } from '@/lib/api-config';
+import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
-
-// Supabase configuration
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface LoadingScreenProps {
   onLoadingComplete?: () => void;
