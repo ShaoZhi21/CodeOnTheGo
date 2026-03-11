@@ -1,5 +1,3 @@
-import { useStreak } from '@/contexts/StreakContext';
-import { ProfileService } from '@/lib/services/profileService';
 import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -38,7 +36,6 @@ const { height: screenHeight } = Dimensions.get('window');
 export default function LessonMCQScreen() {
   const params = useLocalSearchParams();
   const router = useRouter();
-  const { showStreakAnimation } = useStreak();
   
   // Parse the quiz data from params
   const quizData: LessonMCQData = params.quizData 
@@ -63,7 +60,6 @@ export default function LessonMCQScreen() {
       setCurrentQuestionIndex(0);
       setSelectedAnswers([]);
       setScore(0);
-      setShowResult(false);
       setSelectedOption(null);
       setShowExplanation(false);
       setHasSubmitted(false);
@@ -98,7 +94,6 @@ export default function LessonMCQScreen() {
 
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
-  const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
@@ -106,6 +101,7 @@ export default function LessonMCQScreen() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(!quizData); // Loading state if no quiz data
+  const [isFinishingQuiz, setIsFinishingQuiz] = useState(false);
   
   // Animation values
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -252,165 +248,43 @@ export default function LessonMCQScreen() {
       if (currentQuestionIndex < totalQuestions - 1) {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
       } else {
-        // Quiz completed: check if this is first daily activity
-        checkDailyStreakAndNavigate();
+        // Quiz completed: save completion (best-effort) and immediately continue.
+        completeQuizAndGoToPseudocode();
       }
       });
     });
   };
 
-  const checkDailyStreakAndNavigate = async () => {
+  const completeQuizAndGoToPseudocode = () => {
+    if (isFinishingQuiz) return;
+    setIsFinishingQuiz(true);
+
+    // Best-effort: record quiz completion, but never block navigation on it.
+    // This avoids the app appearing "hung" if Supabase is slow/unreachable.
     try {
-      console.log('🎯 checkDailyStreakAndNavigate: Starting...');
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('❌ No user found, going to QuizComplete');
-        // No user, go directly to QuizComplete
-        router.push({
-          pathname: './QuizComplete',
-          params: {
-            problemTitle: finalProblemTitle,
-            problemId: params.problemId || '',
-            topicName: params.topicName || '',
-            quizData: params.quizData || '', // Pass the quiz data
-          }
-        });
-        return;
-      }
-
-      // Get today and yesterday at 12am
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      const now = new Date(); // Current time for comparison
-
-      console.log('📅 Date check:', {
-        today: today.toISOString(),
-        yesterday: yesterday.toISOString(),
-        currentTime: now.toISOString()
-      });
-
-      // Get activities BEFORE the current quiz completion (exclude the quiz we just completed)
-      const [{ data: problemData }, { data: lessonData }] = await Promise.all([
-        supabase
-          .from('user_problem_progress')
-          .select('created_at')
-          .eq('user_id', user.id)
-          .lt('created_at', now.toISOString()) // Only activities before now
-          .order('created_at', { ascending: false })
-          .limit(1),
-        supabase
-          .from('user_lesson_completion')
-          .select('completed_at')
-          .eq('user_id', user.id)
-          .lt('completed_at', now.toISOString()) // Only activities before now
-          .order('completed_at', { ascending: false })
-          .limit(1)
-      ]);
-
-      console.log('🔍 Activity data (before current quiz):', {
-        problemData: problemData,
-        lessonData: lessonData
-      });
-
-      // Find the latest activity date (excluding current quiz)
-      let lastActivity: Date | null = null;
-      if (problemData && problemData.length > 0) {
-        lastActivity = new Date(problemData[0].created_at);
-        console.log('📊 Last problem activity (before current):', lastActivity.toISOString());
-      }
-      if (lessonData && lessonData.length > 0) {
-        const lessonDate = new Date(lessonData[0].completed_at);
-        console.log('📊 Last lesson activity (before current):', lessonDate.toISOString());
-        if (!lastActivity || lessonDate > lastActivity) {
-          lastActivity = lessonDate;
-          console.log('📊 Updated last activity to lesson (before current):', lastActivity.toISOString());
-        }
-      }
-
-      console.log('🎯 Final last activity (before current quiz):', lastActivity ? lastActivity.toISOString() : 'None');
-
-      // Now save the current quiz completion
-      await handleQuizCompletion();
-
-      // Check if user had already done activity today (before this quiz)
-      if (lastActivity && lastActivity >= today) {
-        console.log('❌ Already did activity today (before this quiz), going to QuizComplete');
-        // Already did activity today, go to QuizComplete
-        router.push({
-          pathname: './QuizComplete',
-          params: {
-            problemTitle: finalProblemTitle,
-            topicName: params.topicName || '',
-            quizData: params.quizData || '', // Pass the quiz data
-          }
-        });
-        return;
-      }
-
-      // If last activity was exactly yesterday, increment streak
-      if (lastActivity && lastActivity >= yesterday && lastActivity < today) {
-        console.log('✅ Consecutive day detected, incrementing streak');
-        // Consecutive day, increment streak
-        const updatedProfile = await ProfileService.updateStreak(user.id, true);
-        if (updatedProfile) {
-          console.log('✅ Streak incremented:', updatedProfile.current_streak);
-        } else {
-          console.error('❌ Failed to increment streak');
-        }
-      } else {
-        console.log('🔄 Missed a day or first activity, resetting streak to 1');
-        // Missed a day or first activity ever, reset streak to 1
-        const updatedProfile = await ProfileService.updateStreak(user.id, false); // reset to 0
-        if (updatedProfile) {
-          // Now increment to 1 for today
-          const finalProfile = await ProfileService.updateStreak(user.id, true);
-          console.log('✅ Streak reset and started at 1:', finalProfile?.current_streak);
-        } else {
-          console.error('❌ Failed to reset streak');
-        }
-      }
-
-      console.log('🎬 Navigating to StreakAnimation...');
-      // Show streak animation
-      router.push({
-        pathname: './StreakAnimation',
-        params: {
-          problemTitle: finalProblemTitle,
-          problemId: params.problemId || '',
-          topicName: params.topicName || '',
-          quizData: params.quizData || '', // Pass the quiz data
-        }
-      });
-    } catch (error) {
-      console.error('❌ Error in checkDailyStreakAndNavigate:', error);
-      // On error, go directly to QuizComplete
-      router.push({
-        pathname: './QuizComplete',
-        params: {
-          problemTitle: finalProblemTitle,
-          problemId: params.problemId || '',
-          topicName: params.topicName || '',
-          quizData: params.quizData || '', // Pass the quiz data
-        }
-      });
+      void handleQuizCompletion();
+    } catch {
+      // ignore
     }
-  };
 
-  const handleRetryQuiz = () => {
-    // Use requestAnimationFrame to ensure we're not in the middle of a render
-    requestAnimationFrame(() => {
-    setCurrentQuestionIndex(0);
-    setSelectedAnswers([]);
-    setScore(0);
-    setShowResult(false);
-    setSelectedOption(null);
-    setShowExplanation(false);
-    setHasSubmitted(false);
-    setIsCorrect(false);
-    slideAnim.setValue(screenHeight);
+    const id =
+      (Array.isArray(params.problemId) ? params.problemId[0] : params.problemId) ||
+      (Array.isArray(params.questionId) ? params.questionId[0] : params.questionId) ||
+      '';
+
+    const name = finalProblemTitle || '';
+    const difficulty =
+      (Array.isArray(params.difficulty) ? params.difficulty[0] : params.difficulty) || '';
+
+    router.replace({
+      pathname: '/screens/LoadingQuestion' as any,
+      params: {
+        id,
+        name,
+        difficulty,
+        source: 'roadmap',
+        topicName: (Array.isArray(params.topicName) ? params.topicName[0] : params.topicName) || '',
+      },
     });
   };
 
@@ -428,8 +302,6 @@ export default function LessonMCQScreen() {
       if (!user) return;
       // Calculate final score
       const actualScore = Math.min(score, totalQuestions);
-      const percentage = Math.round((actualScore / totalQuestions) * 100);
-      const passed = percentage >= 70;
       // Find the problem ID by title
       let problemId = 0;
       if (finalProblemTitle) {
@@ -646,7 +518,6 @@ export default function LessonMCQScreen() {
         {/* Options */}
         <View style={styles.optionsContainer}>
           {currentQuestion.options.map((option, index) => {
-            const isSelected = selectedOption === option;
             const isCorrect = option === currentQuestion.correct_answer;
             
             return (

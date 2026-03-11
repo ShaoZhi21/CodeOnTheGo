@@ -19,6 +19,7 @@ export default function LoginScreen() {
   const [successMessage, setSuccessMessage] = useState('');
   const params = useLocalSearchParams();
   const { user } = useAuth();
+  const requireVerifiedEmail = process.env.EXPO_PUBLIC_REQUIRE_EMAIL_VERIFICATION === 'true';
 
   // Redirect if user is already logged in
   useEffect(() => {
@@ -58,12 +59,19 @@ export default function LoginScreen() {
       });
 
       if (error) {
-        setFormErrors([error.message]);
+        const msg = error.message || 'Login failed';
+        if (msg.toLowerCase().includes('network request failed')) {
+          setFormErrors([
+            'Network request failed. Check your Supabase URL/keys and internet connection.',
+          ]);
+        } else {
+          setFormErrors([msg]);
+        }
         return;
       }
 
       // Check if the user's email is verified
-      if (!data.user?.email_confirmed_at) {
+      if (requireVerifiedEmail && !data.user?.email_confirmed_at) {
         await supabase.auth.signOut();
         setFormErrors(['Email not verified. Please verify your email before logging in.']);
         return;
@@ -72,7 +80,14 @@ export default function LoginScreen() {
       // Navigation will be handled by the auth context
       router.replace('/(tabs)');
     } catch (error: any) {
-      setFormErrors([error.message]);
+      const msg = error?.message || 'Login failed';
+      if (String(msg).toLowerCase().includes('network request failed')) {
+        setFormErrors([
+          'Network request failed. Check your Supabase URL/keys and internet connection.',
+        ]);
+      } else {
+        setFormErrors([msg]);
+      }
     } finally {
       setLoading(false);
     }

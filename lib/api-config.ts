@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { supabase } from './supabase';
 
 // Configuration for API endpoints
 const LOCAL_API_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
@@ -12,9 +13,9 @@ const getApiBaseUrl = () => {
     return process.env.EXPO_PUBLIC_API_URL;
   }
   
-  // Always use production API as primary (render backend)
-  console.log('🚀 Using production API as primary (render backend)');
-  return PRODUCTION_API_URL;
+  // Use local API as primary for development
+  console.log('🏠 Using local API as primary (localhost)');
+  return LOCAL_API_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -22,7 +23,7 @@ export const API_BASE_URL = getApiBaseUrl();
 // Function to make API calls with automatic fallback
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
   const primaryUrl = API_BASE_URL;
-  const fallbackUrl = LOCAL_API_URL; // Use localhost as fallback
+  const fallbackUrl = PRODUCTION_API_URL; // Use production as fallback
   
   console.log(`🔗 API Call Details:
   Endpoint: ${endpoint}
@@ -33,6 +34,22 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
   `);
   
   try {
+    // Attach auth token if available (required for AI endpoints)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as any),
+    };
+    if (!headers.Authorization && !headers.authorization) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     // Create AbortController for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -43,10 +60,7 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
     const response = await fetch(`${primaryUrl}${endpoint}`, {
       ...options,
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
     
     clearTimeout(timeoutId);
@@ -76,10 +90,7 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
       const fallbackResponse = await fetch(`${fallbackUrl}${endpoint}`, {
         ...options,
         signal: fallbackController.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
+        headers,
       });
       
       clearTimeout(fallbackTimeoutId);

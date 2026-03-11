@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface QuestionActionModalProps {
   visible: boolean;
@@ -57,16 +57,9 @@ export default function QuestionActionModal({
     onClose();
   };
 
-  const handleSolveProblem = () => {
-    // Check if lesson is required but not completed
-    if (isLessonRequired && !hasCompletedLesson && !isQuestionSolved) {
-      Alert.alert(
-        "Lesson Required",
-        "You must complete the lesson before attempting this question."
-      );
-      return;
-    }
-    
+  // Let the user choose Lesson OR Pseudocode first (no gating).
+  // We treat "Pseudocode" as entering the in-app question flow (where they can write pseudocode).
+  const handleStartPseudocode = () => {
     router.push({
       pathname: '/screens/question',
       params: {
@@ -79,9 +72,6 @@ export default function QuestionActionModal({
     });
     onClose();
   };
-
-  // Determine if the pseudocode button should be locked
-  const isPseudocodeLocked = isLessonRequired && !hasCompletedLesson && !isQuestionSolved;
 
   // Get difficulty color
   const getDifficultyColor = (difficulty: string) => {
@@ -151,18 +141,10 @@ export default function QuestionActionModal({
 
               {/* Pseudocode Button */}
               <TouchableOpacity 
-                style={[
-                  styles.squareButton, 
-                  styles.pseudocodeButton,
-                  isPseudocodeLocked && styles.lockedButton
-                ]} 
-                onPress={handleSolveProblem}
-                disabled={isPseudocodeLocked}
+                style={[styles.squareButton, styles.pseudocodeButton]} 
+                onPress={handleStartPseudocode}
               >
                 <View style={styles.buttonContent}>
-                  {isPseudocodeLocked && (
-                    <Text style={styles.lockedText}>Locked</Text>
-                  )}
                   <Image 
                     source={require('../assets/images/icons/pseudocode-icon.png')} 
                     style={styles.buttonIcon} 
@@ -297,10 +279,6 @@ const styles = StyleSheet.create({
   pseudocodeButton: {
     backgroundColor: '#2979FF',
   },
-  lockedButton: {
-    backgroundColor: '#2979FF',
-    opacity: 0.4,
-  },
   buttonContent: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -310,14 +288,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 8,
-  },
-  lockedText: {
-    color: '#FF0000',
-    fontWeight: '700',
-    fontSize: 10,
-    textAlign: 'center',
-    letterSpacing: 0.3,
-    marginBottom: 2,
   },
   buttonIcon: {
     width: 48,

@@ -5,13 +5,15 @@ import { useEffect } from 'react';
 export function useProtectedRoute() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const authDisabled = process.env.EXPO_PUBLIC_DISABLE_AUTH === 'true';
 
   useEffect(() => {
+    if (authDisabled) return;
     if (!loading && !user) {
       // User is not authenticated, redirect to login
       router.replace('/login');
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, authDisabled]);
 
-  return { user, loading };
+  return { user, loading: authDisabled ? false : loading };
 } 

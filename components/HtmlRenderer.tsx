@@ -41,6 +41,17 @@ export function HtmlRenderer({ htmlContent, style }: HtmlRendererProps) {
 
   const generateHtmlContent = (description: string) => {
     const { width } = Dimensions.get('window');
+
+    // LeetCode descriptions sometimes use lazy-loaded images (data-src) or protocol-relative URLs (//...)
+    // or relative paths (/...), which won't load correctly inside a WebView HTML string unless we normalize them.
+    const normalizedDescription = (description || '')
+      // Convert lazy-load attributes to src
+      .replace(/<img([^>]*?)\sdata-src="([^"]+)"([^>]*?)>/gi, '<img$1 src="$2"$3>')
+      .replace(/<img([^>]*?)\sdata-original="([^"]+)"([^>]*?)>/gi, '<img$1 src="$2"$3>')
+      // Protocol-relative URLs -> https
+      .replace(/src="\/\/([^"]+)"/gi, 'src="https://$1"')
+      // Relative URLs -> leetcode.com
+      .replace(/src="\/(?!\/)([^"]+)"/gi, 'src="https://leetcode.com/$1"');
     
     return `
       <!DOCTYPE html>
@@ -174,7 +185,7 @@ export function HtmlRenderer({ htmlContent, style }: HtmlRendererProps) {
         </style>
       </head>
       <body>
-        ${description}
+        ${normalizedDescription}
       </body>
       </html>
     `;
@@ -185,15 +196,35 @@ export function HtmlRenderer({ htmlContent, style }: HtmlRendererProps) {
       <WebView
         source={{ html: generateHtmlContent(htmlContent || 'No content available') }}
         style={styles.webview}
+        originWhitelist={['*']}
         scrollEnabled={true}
         showsVerticalScrollIndicator={true}
         showsHorizontalScrollIndicator={false}
         javaScriptEnabled={true}
-        domStorageEnabled={false}
+        domStorageEnabled={true}
         startInLoadingState={true}
         scalesPageToFit={true}
         onScroll={handleScroll}
+        // Android: allow https images even if the base URL is about:blank
+        mixedContentMode="always"
         injectedJavaScript={`
+          (function() {
+            // Defensive: ensure any remaining lazy images get a src so they can render.
+            var imgs = document.getElementsByTagName('img');
+            for (var i = 0; i < imgs.length; i++) {
+              var img = imgs[i];
+              if (!img.getAttribute('src')) {
+                var ds = img.getAttribute('data-src') || img.getAttribute('data-original');
+                if (ds) img.setAttribute('src', ds);
+              }
+              var src = img.getAttribute('src') || '';
+              if (src.startsWith('//')) img.setAttribute('src', 'https:' + src);
+              if (src.startsWith('/')) img.setAttribute('src', 'https://leetcode.com' + src);
+              // Avoid huge images breaking layout.
+              img.style.maxWidth = '100%';
+              img.style.height = 'auto';
+            }
+          })();
           window.addEventListener('scroll', function() {
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'scroll',

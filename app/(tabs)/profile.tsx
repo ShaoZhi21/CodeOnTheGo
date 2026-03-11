@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import type { UserProfileStats } from '@/lib/types/profile';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Image, SafeAreaView, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
   const [profile, setProfile] = useState<UserProfileStats | null>(null);
@@ -95,14 +96,6 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleTestNotification = async () => {
-    try {
-      await NotificationService.sendTestNotification();
-    } catch (error) {
-      console.error('Error sending test notification:', error);
-    }
-  };
-
   const updateSkillLevel = async (level: 'Beginner' | 'Intermediate' | 'Advanced') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -114,32 +107,15 @@ export default function ProfileScreen() {
 
       if (updatedProfile) {
         setProfile(prev => prev ? { ...prev, skill_level: level } : null);
-        Alert.alert('Success', 'Skill level updated successfully!');
+        // Auto-save: no alert needed for better UX
       }
     } catch (error) {
       console.error('Error updating skill level:', error);
+      // Silently fail or show subtle feedback if needed
       Alert.alert('Error', 'Failed to update skill level');
     }
   };
 
-  const handleSaveSkillLevel = () => {
-    Alert.alert(
-      'Confirm Skill Level Change',
-      `Are you sure you want to change your skill level to ${selectedLevel}? This will affect your gameplay experience.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Save',
-          style: 'default',
-          onPress: () => updateSkillLevel(selectedLevel),
-        },
-      ],
-      { cancelable: true }
-    );
-  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -181,12 +157,15 @@ export default function ProfileScreen() {
   const renderLevelButton = (level: 'Beginner' | 'Intermediate' | 'Advanced') => (
     <TouchableOpacity
       key={level}
-              style={[
-          styles.levelButton,
-          selectedLevel === level && styles.levelButtonActive,
-          selectedLevel === level && { borderColor: levelColors[level] }
-        ]}
-        onPress={() => setSelectedLevel(level)}
+      style={[
+        styles.levelButton,
+        selectedLevel === level && styles.levelButtonActive,
+        selectedLevel === level && { borderColor: levelColors[level] }
+      ]}
+      onPress={() => {
+        setSelectedLevel(level);
+        updateSkillLevel(level);
+      }}
     >
       <ThemedText style={[
         styles.levelButtonText,
@@ -223,7 +202,7 @@ export default function ProfileScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#6564c7" />
           <ThemedText style={styles.loadingText}>Loading profile...</ThemedText>
@@ -234,7 +213,7 @@ export default function ProfileScreen() {
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.errorContainer}>
           <ThemedText style={styles.errorText}>Failed to load profile</ThemedText>
           <TouchableOpacity style={styles.retryButton} onPress={loadProfile}>
@@ -246,7 +225,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Profile Header */}
         <View style={styles.profileHeader}>
@@ -295,20 +274,11 @@ export default function ProfileScreen() {
           
           {/* Skill Level Setting */}
           <View style={styles.settingCard}>
-            <View style={styles.settingHeader}>
-              <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
-                <ThemedText style={styles.settingDescription}>Choose your coding experience level</ThemedText>
-              </View>
-              <TouchableOpacity style={styles.saveButton} onPress={handleSaveSkillLevel}>
-                <ThemedText style={styles.saveButtonText}>Save</ThemedText>
-              </TouchableOpacity>
+            <View style={styles.settingInfo}>
+              <ThemedText style={styles.settingLabel}>Skill Level</ThemedText>
+              <ThemedText style={styles.settingDescription}>Choose your coding experience level</ThemedText>
             </View>
             
-            {/* Warning Note */}
-            <ThemedText style={styles.warningText}>
-              Note: the skill level will affect gameplay.
-            </ThemedText>
             
             <View style={styles.levelButtons}>
               {(['Beginner', 'Intermediate', 'Advanced'] as const).map(renderLevelButton)}
@@ -340,14 +310,6 @@ export default function ProfileScreen() {
                 <ThemedText style={styles.toggleText}>{notificationEnabled ? 'ON' : 'OFF'}</ThemedText>
               </TouchableOpacity>
             </View>
-            {notificationEnabled && (
-              <TouchableOpacity 
-                style={styles.testNotificationButton} 
-                onPress={handleTestNotification}
-              >
-                <ThemedText style={styles.testNotificationText}>Test Notification</ThemedText>
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* Logout Button */}
@@ -371,7 +333,7 @@ const styles = StyleSheet.create({
   },
   profileHeader: {
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 8,
     paddingBottom: 30,
   },
   profileImageContainer: {
@@ -505,23 +467,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
-  },
-  settingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  saveButton: {
-    backgroundColor: '#6564c7',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  saveButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
   },
   settingRow: {
     flexDirection: 'row',
@@ -702,25 +647,6 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: 'white',
     fontSize: 16,
-    fontWeight: '600',
-  },
-  testNotificationButton: {
-    backgroundColor: '#6564c7',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 12,
-    shadowColor: '#6564c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  testNotificationText: {
-    color: '#FFFFFF',
-    fontSize: 14,
     fontWeight: '600',
   },
   settingLabel: {

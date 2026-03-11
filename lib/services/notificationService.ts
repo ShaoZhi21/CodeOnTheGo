@@ -128,8 +128,8 @@ export class NotificationService {
       // Schedule new daily reminder at 12 PM
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '🚀 Time to Code!',
-          body: 'Increase your streak now!',
+          title: 'Your favourite bird is calling... 📞',
+          body: 'It misses you! Come solve a problem and make it happy 😊',
           data: { type: 'daily_reminder', dailyGoal },
         },
         trigger: {
@@ -161,11 +161,10 @@ export class NotificationService {
    */
   static async sendTestNotification(): Promise<void> {
     try {
-      const settings = await this.getSettings();
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '🧪 Test Notification!',
-          body: 'Do your CodeOnTheGo for today!',
+          title: 'Testing, testing, 1-2-3! 🎤',
+          body: 'If you can read this, notifications are working! Now go code something cool!',
           data: { type: 'test_notification' },
         },
         trigger: null, // Send immediately
@@ -182,10 +181,20 @@ export class NotificationService {
    */
   static async sendStreakReminder(currentStreak: number): Promise<void> {
     try {
+      const messages = [
+        `Wowza! ${currentStreak} days in a row! You're basically a coding superhero now 🦸`,
+        `${currentStreak} days strong! Your future self is doing a happy dance 💃`,
+        `Look at you go! ${currentStreak} days of pure dedication. Keep it up, champ! 🏆`,
+        `${currentStreak}-day streak alert! Don't break the chain - your code needs you! 🔗`,
+        `You've coded ${currentStreak} days straight! That's more consistent than my morning coffee ☕`,
+      ];
+      
+      const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+      
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `🔥 ${currentStreak} Day Streak!`,
-          body: `Amazing! You're on fire with a ${currentStreak}-day streak! Don't let it break - solve a problem today to keep the momentum going! ⚡`,
+          title: `${currentStreak} Day Streak! 🎉`,
+          body: randomMessage,
           data: { type: 'streak_reminder', streak: currentStreak },
         },
         trigger: null, // Send immediately

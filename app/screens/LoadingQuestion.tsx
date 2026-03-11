@@ -2,7 +2,7 @@ import { apiCall } from '@/lib/api-config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Image, StyleSheet, Text, View } from 'react-native';
 
@@ -17,7 +17,7 @@ interface LoadingScreenProps {
   onProgressUpdate?: (progress: number) => void;
   problemId?: string;
   onDataFetched?: (data: any) => void;
-  
+
   // Lesson mode props
   isLessonMode?: string;
   questionId?: string;
@@ -29,13 +29,13 @@ interface LoadingScreenProps {
 
 const { width, height } = Dimensions.get('window');
 
-export default function LoadingScreen({ 
-  onLoadingComplete, 
+export default function LoadingScreen({
+  onLoadingComplete,
   loadingDuration = 1000,
   onProgressUpdate,
   problemId,
   onDataFetched,
-  
+
   // Lesson mode props
   isLessonMode,
   questionId,
@@ -44,12 +44,43 @@ export default function LoadingScreen({
   topicName,
   questionDifficulty
 }: LoadingScreenProps) {
+  const routeParams = useLocalSearchParams();
+
+  // expo-router passes route params via hooks (not component props).
+  // Support both usages: props (when embedded) and route params (when used as a screen).
+  const effectiveIsLessonMode =
+    isLessonMode ?? (routeParams.isLessonMode as string | undefined);
+
+  const effectiveQuestionId =
+    questionId ?? (routeParams.questionId as string | undefined);
+
+  const effectiveTopicName =
+    topicName ?? (routeParams.topicName as string | undefined);
+
+  const effectiveQuestionTitle =
+    questionTitle ??
+    (routeParams.questionTitle as string | undefined) ??
+    (routeParams.name as string | undefined);
+
+  const effectiveQuestionDescription =
+    questionDescription ?? (routeParams.questionDescription as string | undefined);
+
+  const effectiveQuestionDifficulty =
+    questionDifficulty ??
+    (routeParams.questionDifficulty as string | undefined) ??
+    (routeParams.difficulty as string | undefined);
+
+  const effectiveProblemId =
+    problemId ??
+    (routeParams.problemId as string | undefined) ??
+    (routeParams.id as string | undefined);
+
   const [isReady, setIsReady] = useState(false);
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
   const animationsStarted = useRef(false);
   const [fetchedData, setFetchedData] = useState<any>(null);
-  
+
   // Animation values
   const progressAnim = useRef(new Animated.Value(0)).current;
   const birdFloatAnim = useRef(new Animated.Value(0)).current;
@@ -58,21 +89,21 @@ export default function LoadingScreen({
   const captionFadeAnim = useRef(new Animated.Value(0)).current;
 
   const appName = 'CodeOnTheGo';
-  const caption = isLessonMode === 'true' ? 'Preparing your lesson...' : 'Loading your next challenge...';
+  const caption = effectiveIsLessonMode === 'true' ? 'Preparing your lesson...' : 'Loading your next challenge...';
 
   // Fetch lesson data for lesson mode
   const fetchLessonData = async () => {
-    if (!questionId || !topicName) return;
-    
+    if (!effectiveQuestionId || !effectiveTopicName) return;
+
     try {
-      console.log('🔄 LoadingScreen: Fetching lesson data for ID:', questionId);
-      
+      console.log('🔄 LoadingScreen: Fetching lesson data for ID:', effectiveQuestionId);
+
       // Get current user and session
       const { data: { user } } = await supabase.auth.getUser();
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       let lessonResponse;
-      
+
       // Check if user is authenticated and has a valid session
       if (!user || !session?.access_token) {
         console.log('⚠️ User not authenticated, proceeding without auth header and userId');
@@ -83,8 +114,8 @@ export default function LoadingScreen({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            topicName: topicName,
-            problemId: parseInt(questionId),
+            topicName: effectiveTopicName,
+            problemId: parseInt(effectiveQuestionId),
             // Don't send userId when user is not authenticated
             fastStructuredLesson: true,
           }),
@@ -98,8 +129,8 @@ export default function LoadingScreen({
             'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            topicName: topicName,
-            problemId: parseInt(questionId),
+            topicName: effectiveTopicName,
+            problemId: parseInt(effectiveQuestionId),
             userId: user?.id,
             fastStructuredLesson: true,
           }),
@@ -112,10 +143,10 @@ export default function LoadingScreen({
 
       const lessonResult = await lessonResponse.json();
       console.log('✅ LoadingScreen: Lesson data fetched successfully');
-      
+
       // Store lesson data in AsyncStorage
-      await AsyncStorage.setItem(`lesson_${questionId}`, JSON.stringify(lessonResult));
-      
+      await AsyncStorage.setItem(`lesson_${effectiveQuestionId}`, JSON.stringify(lessonResult));
+
       setFetchedData(lessonResult);
       if (onDataFetched) {
         onDataFetched(lessonResult);
@@ -127,28 +158,28 @@ export default function LoadingScreen({
 
   // Actually fetch the problem data during loading
   const fetchProblemData = async () => {
-    if (!problemId) return;
-    
-    try {
-      console.log('🔄 LoadingScreen: Fetching problem data for ID:', problemId);
-      
-      const { data, error } = await supabase
-        .from('leetcode_problems')
-        .select('id, leetcode_id, title, difficulty, description, examples, constraints, hints')
-        .eq('leetcode_id', parseInt(problemId))
-        .single();
+    if (!effectiveProblemId) return;
 
-      if (error) {
-        console.error('Error fetching problem:', error);
+    try {
+      console.log('🔄 LoadingScreen: Fetching problem data for ID:', effectiveProblemId);
+
+      console.log('🔄 LoadingScreen: Fetching problem data via Proxy for ID:', effectiveProblemId);
+
+      const response = await apiCall(`/api/problems/${effectiveProblemId}`, { method: 'GET' });
+
+      if (!response.ok) {
+        console.error('Error fetching problem via proxy');
         return;
       }
 
+      const data = await response.json();
+
       if (data) {
         console.log('✅ LoadingScreen: Problem data fetched successfully');
-        
+
         // Store problem data in AsyncStorage
-        await AsyncStorage.setItem(`problem_${problemId}`, JSON.stringify(data));
-        
+        await AsyncStorage.setItem(`problem_${effectiveProblemId}`, JSON.stringify(data));
+
         setFetchedData(data);
         if (onDataFetched) {
           onDataFetched(data);
@@ -162,15 +193,15 @@ export default function LoadingScreen({
   // Simulate fetch progress with actual data fetching
   useEffect(() => {
     console.log('🔄 Starting fetch progress simulation...');
-    console.log('🔄 IsLessonMode:', isLessonMode);
-    
+    console.log('🔄 IsLessonMode:', effectiveIsLessonMode);
+
     // Start actual data fetching based on mode
-    if (isLessonMode === 'true') {
+    if (effectiveIsLessonMode === 'true') {
       fetchLessonData();
     } else {
       fetchProblemData();
     }
-    
+
     // Define progress steps with 1-second total duration
     const progressSteps = [
       { time: 200, progress: 30 },   // Initial connection
@@ -190,13 +221,13 @@ export default function LoadingScreen({
       }, time);
     });
 
-  }, [problemId, questionId, isLessonMode, onProgressUpdate]);
+  }, [effectiveProblemId, effectiveQuestionId, effectiveIsLessonMode, onProgressUpdate]);
 
   // Start animations immediately and reliably
   useEffect(() => {
     if (animationsStarted.current) return;
     animationsStarted.current = true;
-    
+
     console.log('🔄 LoadingScreen: Starting animations...');
 
     // Bird scale in
@@ -269,17 +300,17 @@ export default function LoadingScreen({
       const finalTimer = setTimeout(async () => {
         console.log('🎯 Fetch complete, transitioning to appropriate screen');
         setIsReady(true);
-        
+
         // Navigate to appropriate screen based on mode
-        if (isLessonMode === 'true') {
+        if (effectiveIsLessonMode === 'true') {
           console.log('🎯 Navigating to lesson screen with pre-fetched data');
           await router.replace({
             pathname: '/screens/lesson',
             params: {
-              questionId: questionId,
-              questionTitle: questionTitle,
-              questionDescription: questionDescription,
-              topicName: topicName,
+              questionId: effectiveQuestionId,
+              questionTitle: effectiveQuestionTitle,
+              questionDescription: effectiveQuestionDescription,
+              topicName: effectiveTopicName,
               usePrefetchedData: 'true'
             },
           });
@@ -287,8 +318,8 @@ export default function LoadingScreen({
           // Clean up lesson data after navigation
           setTimeout(async () => {
             console.log('🧹 Cleaning up lesson data');
-            if (questionId) {
-              await AsyncStorage.removeItem(`lesson_${questionId}`);
+            if (effectiveQuestionId) {
+              await AsyncStorage.removeItem(`lesson_${effectiveQuestionId}`);
             }
           }, 1000);
         } else {
@@ -296,9 +327,9 @@ export default function LoadingScreen({
           await router.replace({
             pathname: '/screens/question',
             params: {
-              id: problemId,
-              name: questionTitle,
-              difficulty: questionDifficulty,
+              id: effectiveProblemId,
+              name: effectiveQuestionTitle,
+              difficulty: effectiveQuestionDifficulty,
               usePrefetchedData: 'true'
             },
           });
@@ -306,20 +337,30 @@ export default function LoadingScreen({
           // Clean up problem data after navigation
           setTimeout(async () => {
             console.log('🧹 Cleaning up problem data');
-            if (problemId) {
-              await AsyncStorage.removeItem(`problem_${problemId}`);
+            if (effectiveProblemId) {
+              await AsyncStorage.removeItem(`problem_${effectiveProblemId}`);
             }
           }, 1000);
         }
-        
+
         if (onLoadingComplete) {
           onLoadingComplete();
         }
       }, 500);
-      
+
       return () => clearTimeout(finalTimer);
     }
-  }, [fetchProgress, isLessonMode, questionId, questionTitle, questionDescription, topicName, problemId, questionDifficulty, onLoadingComplete]);
+  }, [
+    fetchProgress,
+    effectiveIsLessonMode,
+    effectiveQuestionId,
+    effectiveQuestionTitle,
+    effectiveQuestionDescription,
+    effectiveTopicName,
+    effectiveProblemId,
+    effectiveQuestionDifficulty,
+    onLoadingComplete,
+  ]);
 
   // Interpolate animations
   const birdFloatTranslateY = birdFloatAnim.interpolate({
@@ -404,7 +445,7 @@ export default function LoadingScreen({
           {/* Progress Bar*/}
           <View style={styles.progressBarContainer}>
             <View style={styles.progressBar}>
-              <Animated.View 
+              <Animated.View
                 style={[
                   styles.progressBarFill,
                   {
@@ -413,7 +454,7 @@ export default function LoadingScreen({
                       outputRange: ['0%', '100%']
                     })
                   }
-                ]} 
+                ]}
               />
             </View>
             <Text style={styles.progressText}>{Math.round(fetchProgress)}%</Text>

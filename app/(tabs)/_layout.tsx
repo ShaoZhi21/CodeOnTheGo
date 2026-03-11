@@ -3,7 +3,6 @@ import { Image, Platform, View } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import TabBarBackground from '@/components/ui/TabBarBackground';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 
 export default function TabLayout() {
@@ -22,27 +21,17 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#6564c7',
+        tabBarInactiveTintColor: '#9CA3AF',
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
-        tabBarStyle: Platform.select({
-          ios: {
-            height: 88,
-            paddingTop: 10,
-            paddingBottom: 6,
-            paddingHorizontal: 20,
-            position: 'absolute',
-          },
-          default: {
-            height: 73,
-            paddingTop: 10,
-            paddingBottom: 4,
-            paddingHorizontal: 20,
-          },
-        }),
-        tabBarLabelStyle: {
-          marginTop: 10,
-          fontSize: 12,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          height: Platform.OS === 'ios' ? 90 : 80,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E9ECEF',
+          borderTopWidth: 1,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 16,
+          paddingTop: 12,
         },
         tabBarItemStyle: {
           paddingHorizontal: 0,
@@ -57,18 +46,15 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <View style={{
               padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+              borderRadius: 16,
+              backgroundColor: focused ? '#F4EEFF' : 'transparent',
             }}>
               <Image 
                 source={require('@/assets/images/icons/codeonthego-bird-icon.png')}
                 style={{
-                  width: 26,
-                  height: 26,
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                  width: 32,
+                  height: 32,
+                  tintColor: focused ? '#6564c7' : '#9CA3AF',
                 }}
               />
             </View>
@@ -79,22 +65,19 @@ export default function TabLayout() {
       <Tabs.Screen
         name="learn"
         options={{
-          title: 'Learn',
+          title: 'Plans',
           tabBarIcon: ({ focused }) => (
             <View style={{
               padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+              borderRadius: 16,
+              backgroundColor: focused ? '#F4EEFF' : 'transparent',
             }}>
               <Image 
                 source={require('@/assets/images/icons/book-icon.png')}
                 style={{
-                  width: 26,
-                  height: 26,
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                  width: 32,
+                  height: 32,
+                  tintColor: focused ? '#6564c7' : '#9CA3AF',
                 }}
               />
             </View>
@@ -108,18 +91,15 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <View style={{
               padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+              borderRadius: 16,
+              backgroundColor: focused ? '#F4EEFF' : 'transparent',
             }}>
               <Image 
                 source={require('@/assets/images/icons/question-icon.png')}
                 style={{
-                  width: 26,
-                  height: 26, 
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                  width: 32,
+                  height: 32,
+                  tintColor: focused ? '#6564c7' : '#9CA3AF',
                 }}
               />
             </View>
@@ -133,18 +113,15 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <View style={{
               padding: 8,
-              borderRadius: 12,
-              borderWidth: focused ? 2 : 1,
-              borderColor: focused ? '#6564c7' : 'rgba(101, 100, 199, 0.3)',
-              backgroundColor: focused ? 'rgba(101, 100, 199, 0.1)' : 'transparent',
+              borderRadius: 16,
+              backgroundColor: focused ? '#F4EEFF' : 'transparent',
             }}>
               <Image 
                 source={require('@/assets/images/icons/profile-icon.png')}
                 style={{
-                  width: 26,
-                  height: 26,
-                  opacity: focused ? 1 : 0.7,
-                  tintColor: focused ? '#6564c7' : '#8E8E93',
+                  width: 32,
+                  height: 32,
+                  tintColor: focused ? '#6564c7' : '#9CA3AF',
                 }}
               />
             </View>

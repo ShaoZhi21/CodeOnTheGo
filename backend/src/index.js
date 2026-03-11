@@ -20,7 +20,7 @@ console.log('🔍 Environment Variables Debug:');
 console.log('GEMINI_API_KEY exists:', !!process.env.GEMINI_API_KEY);
 console.log('GEMINI_API_KEY length:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0);
 console.log('GEMINI_API_KEY first 10 chars:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 10) + '...' : 'undefined');
-console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL); 
 console.log('SUPABASE_SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 console.log('Current working directory:', process.cwd());
 console.log('========================');
@@ -35,11 +35,13 @@ if (!API_KEY) {
 }
 let geminiModel;
 if (API_KEY) {
-    const genAI = new GoogleGenerativeAI(API_KEY);
-    geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
-    console.log('✅ Gemini model initialized successfully');
+  const genAI = new GoogleGenerativeAI(API_KEY);
+  const modelName = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  // Model availability changes over time; keep it configurable via GEMINI_MODEL.
+  geminiModel = genAI.getGenerativeModel({ model: modelName });
+  console.log(`✅ Gemini model initialized successfully with ${modelName}`);
 } else {
-    console.log('❌ Gemini model NOT initialized - API key missing');
+  console.log('❌ Gemini model NOT initialized - API key missing');
 }
 
 // --- USER PROGRESS ENDPOINTS ---
@@ -51,11 +53,110 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 app.use(cors({
   origin: '*', // In production, replace with your app's domain
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(morgan('dev'));
+
+// --- AUTH + AI QUOTA GUARDS ---
+const AI_GUARDED_PATHS = new Set([
+  '/api/analyze',
+  '/api/simplify-question',
+  '/api/execute-code',
+  '/api/generate-topic-lesson',
+  '/api/generate-easy-lesson',
+  '/api/generate-harder-lesson',
+  '/api/generate-recap-quiz',
+  '/api/generate-quiz',
+  '/api/generate-mcq',
+  '/api/generate-code-summary',
+]);
+
+const aiUsageMemory = new Map(); // key: `${userId}:${YYYY-MM-DD}` -> count
+function getTodayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function requireAuthUser(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization || '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authorization header with Bearer token is required' });
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error('Auth middleware error:', err);
+    res.status(500).json({ error: 'Failed to verify auth' });
+  }
+}
+
+async function enforceAiQuota(req, res, next) {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const today = getTodayKey();
+
+    // Defaults
+    let aiEnabled = true;
+    let dailyLimit = Number.parseInt(process.env.AI_DAILY_REQUEST_LIMIT || '30', 10);
+    if (!Number.isFinite(dailyLimit) || dailyLimit < 0) dailyLimit = 30;
+
+    // Optional per-user overrides (if columns exist)
+    try {
+      const { data: profile, error: profileErr } = await supabase
+        .from('user_profiles')
+        .select('ai_enabled, ai_daily_limit')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!profileErr && profile) {
+        if (typeof profile.ai_enabled === 'boolean') aiEnabled = profile.ai_enabled;
+        if (typeof profile.ai_daily_limit === 'number' && Number.isFinite(profile.ai_daily_limit)) {
+          dailyLimit = profile.ai_daily_limit;
+        }
+      }
+    } catch (_e) {
+      // Ignore schema mismatches; keep defaults
+    }
+
+    if (!aiEnabled || dailyLimit === 0) {
+      return res.status(403).json({ error: 'AI usage is disabled for this account' });
+    }
+
+    const key = `${userId}:${today}`;
+    const current = aiUsageMemory.get(key) || 0;
+    if (current >= dailyLimit) {
+      return res.status(429).json({ error: 'Daily AI quota exceeded' });
+    }
+    aiUsageMemory.set(key, current + 1);
+
+    next();
+  } catch (err) {
+    console.error('AI quota middleware error:', err);
+    res.status(500).json({ error: 'Failed to enforce AI quota' });
+  }
+}
+
+// Apply auth+quota to AI endpoints only
+app.use((req, res, next) => {
+  if (!AI_GUARDED_PATHS.has(req.path)) return next();
+  return requireAuthUser(req, res, (err) => {
+    if (err) return next(err);
+    return enforceAiQuota(req, res, next);
+  });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -73,6 +174,87 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Create user account (service role) - keep keys off client
+app.post('/api/auth/create-user', async (req, res) => {
+  try {
+    const { email, password, name, skillLevel } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Basic rate limit: per-IP per-day
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').toString();
+    const day = getTodayKey();
+    const key = `signup:${ip}:${day}`;
+    const count = aiUsageMemory.get(key) || 0;
+    if (count >= 20) {
+      return res.status(429).json({ error: 'Too many signup attempts. Try again later.' });
+    }
+    aiUsageMemory.set(key, count + 1);
+
+    const { data, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: {
+        full_name: name || '',
+        skill_level: skillLevel || 'Beginner',
+      },
+    });
+
+    if (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    const userId = data?.user?.id;
+    if (userId) {
+      // Best-effort profile row
+      try {
+        await supabase
+          .from('user_profiles')
+          .upsert({
+            user_id: userId,
+            name: name || 'User',
+            skill_level: skillLevel || 'Beginner',
+            available_hints: 5,
+          }, { onConflict: 'user_id' });
+      } catch (_e) {
+        // ignore
+      }
+    }
+
+    return res.json({ success: true, userId });
+  } catch (err) {
+    console.error('Create user error:', err);
+    return res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// Get problem details (Proxy to LeetCode)
+app.get('/api/problems/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title } = req.query; // Get title from query params for fallback
+
+    if (!id) {
+      return res.status(400).json({ error: 'Problem ID is required' });
+    }
+
+    console.log(`🔍 Fetching problem details for ID: ${id}, Title: ${title || 'Not provided'}`);
+    const problem = await getProblemSolution(id, title);
+
+    if (!problem) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    res.json(problem);
+  } catch (error) {
+    console.error('Error in /api/problems/:id:', error);
+    res.status(500).json({ error: 'Failed to fetch problem details' });
+  }
+});
+
 // Code analysis endpoint
 app.post('/api/analyze', async (req, res) => {
   if (!geminiModel) {
@@ -80,7 +262,7 @@ app.post('/api/analyze', async (req, res) => {
   }
   try {
     const { code, question } = req.body;
-    
+
     if (!code || !question) {
       return res.status(400).json({ error: 'Code and question are required' });
     }
@@ -96,8 +278,8 @@ app.post('/api/analyze', async (req, res) => {
     console.log('PARSED SOLUTION FROM FRONTEND:');
     console.log(numberedCode);
 
-    const prompt = 
-    `You are a concise and critical code reviewer. 
+    const prompt =
+      `You are a concise and critical code reviewer. 
     When given a question and a piece of code (or pseudocode), your job is to 
     determine if the logic correctly solves the question, assess its efficiency, 
     identify any edge cases it might fail, and suggest specific improvements. 
@@ -231,7 +413,17 @@ Stars: [number]
 `;
 
     console.log('🔍 Calling Gemini API for analysis...');
-    const result = await geminiModel.generateContent(prompt);
+
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Gemini API timeout after 30 seconds')), 30000)
+    );
+
+    const result = await Promise.race([
+      geminiModel.generateContent(prompt),
+      timeoutPromise
+    ]);
+
     console.log('✅ Gemini API call successful');
     const response = await result.response;
     const text = response.text();
@@ -259,10 +451,10 @@ Stars: [number]
     let currentSection = '';
     let currentLineNumber = null; // Track the current line number from "Line X:" headers
     let pendingStatus = null; // Track the status for the current line
-    
+
     for (const line of lines) {
       const trimmedLine = line.trim();
-      
+
       // Check for score pattern anywhere in the line (case-insensitive, flexible format)
       const scoreMatch = trimmedLine.match(/(?:score|scoring)[:\s]*(\d+)(?:\/100|out of 100|\s*\/\s*100)/i);
       if (scoreMatch) {
@@ -279,14 +471,14 @@ Stars: [number]
           console.log('Score already set, ignoring this match');
         }
       }
-      
+
       // Check for stars pattern anywhere in the line (case-insensitive)
       const starsMatch = trimmedLine.match(/(?:stars?)[:\s]*(\d+)/i);
       if (starsMatch && analysis.stars === 0) { // Only set if not already set
         analysis.stars = parseInt(starsMatch[1]);
         console.log('Parsed stars from line:', trimmedLine, '-> Stars:', analysis.stars);
       }
-      
+
       if (trimmedLine.startsWith('Line-by-Line Analysis:')) {
         currentSection = 'lineByLine';
       } else if (trimmedLine.includes('Line-by-Line') || trimmedLine.includes('Line by Line')) {
@@ -323,18 +515,18 @@ Stars: [number]
             };
             analysis.lineByLineAnalysis.push(lineAnalysis);
           }
-          
+
           currentLineNumber = parseInt(lineHeaderMatch[1]);
           pendingStatus = null;
           continue;
         }
-        
+
         // Check if this is a status line
         if (currentLineNumber !== null && pendingStatus === null) {
           const statusMatch = trimmedLine.match(/^Status:\s*(Fully correct|Can be improved|Wrong)$/i);
           if (statusMatch) {
             let status = statusMatch[1].toLowerCase().trim();
-            
+
             // Normalize the status
             if (status.includes('fully') && status.includes('correct')) {
               status = 'fully_correct';
@@ -343,23 +535,23 @@ Stars: [number]
             } else if (status.includes('wrong')) {
               status = 'wrong';
             }
-            
+
             pendingStatus = status;
             continue;
           }
         }
-        
+
         // Check if this is an explanation line
         if (currentLineNumber !== null && pendingStatus !== null && trimmedLine.startsWith('Explanation:')) {
           const explanation = trimmedLine.replace('Explanation:', '').trim();
-          
+
           const lineAnalysis = {
             lineNumber: currentLineNumber,
             status: pendingStatus,
             explanation: explanation || null
           };
           analysis.lineByLineAnalysis.push(lineAnalysis);
-          
+
           // Reset for next line
           currentLineNumber = null;
           pendingStatus = null;
@@ -374,7 +566,7 @@ Stars: [number]
           console.log('✅ Added numbered edge case:', edgeCase);
         } else if (trimmedLine && !trimmedLine.startsWith('Edge Cases:') && !trimmedLine.startsWith('**Edge Cases:**')) {
           // Fallback: add the line if it's not empty and not a header
-        analysis.edgeCases.push(trimmedLine);
+          analysis.edgeCases.push(trimmedLine);
           console.log('✅ Added fallback edge case:', trimmedLine);
         } else {
           console.log('⚠️ Skipped edge case line:', trimmedLine);
@@ -393,9 +585,9 @@ Stars: [number]
             console.log('✅ Added numbered suggestion:', suggestion);
           } else if (trimmedLine && !trimmedLine.startsWith('Suggestions:') && !trimmedLine.startsWith('**Suggestions:**')) {
             // Fallback: add the line if it's not empty and not a header
-          analysis.suggestions.push(trimmedLine);
+            analysis.suggestions.push(trimmedLine);
             console.log('✅ Added fallback suggestion:', trimmedLine);
-        } else {
+          } else {
             console.log('⚠️ Skipped suggestion line:', trimmedLine);
           }
         } else if (analysis.suggestions.length >= 3) {
@@ -404,7 +596,7 @@ Stars: [number]
           console.log('🚫 Filtered out score/stars line from suggestions:', trimmedLine);
         }
       }
-      
+
       // Additional fallback parsing for edge cases and suggestions that might be in different formats
       if (trimmedLine.toLowerCase().includes('edge case') && !currentSection.includes('edgeCases')) {
         console.log('🔍 Found potential edge case in different format:', trimmedLine);
@@ -414,7 +606,7 @@ Stars: [number]
           console.log('✅ Added edge case from fallback parsing:', edgeCaseText);
         }
       }
-      
+
       if (trimmedLine.toLowerCase().includes('suggestion') && !currentSection.includes('suggestions') && analysis.suggestions.length < 3) {
         console.log('🔍 Found potential suggestion in different format:', trimmedLine);
         const suggestionText = trimmedLine.replace(/^.*?suggestion[:\s]*/i, '').trim();
@@ -424,7 +616,7 @@ Stars: [number]
         }
       }
     }
-    
+
     // Handle any remaining pending analysis at the end
     if (currentLineNumber !== null && pendingStatus !== null) {
       const lineAnalysis = {
@@ -453,13 +645,22 @@ Stars: [number]
       console.log(`  ${index + 1}. ${suggestion}`);
     });
 
-    res.json({ 
+    res.json({
       analysis,
       rawResponse: text // Add raw response for debugging
     });
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Failed to analyze code' });
+    console.error('❌ Error in /api/analyze:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({
+      error: 'Failed to analyze code',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
@@ -467,13 +668,13 @@ Stars: [number]
 app.post('/api/simplify-question', async (req, res) => {
   try {
     const { description, title } = req.body;
-    
+
     if (!description) {
       return res.status(400).json({ error: 'Question description is required' });
     }
 
     const model = geminiModel;
-    
+
     const prompt = `Please simplify this coding question for a beginner programmer with both a serious and fun version.
 
 Title: ${title || 'Coding Problem'}
@@ -518,7 +719,15 @@ It's just like finding a word in a dictionary by opening to the middle page!
 
 Return only the two-line response as shown above, nothing else.`;
 
-    const result = await model.generateContent(prompt);
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Gemini API timeout after 30 seconds')), 30000)
+    );
+
+    const result = await Promise.race([
+      model.generateContent(prompt),
+      timeoutPromise
+    ]);
     const response = await result.response;
     let simplifiedDescription = response.text().trim();
 
@@ -536,12 +745,21 @@ Return only the two-line response as shown above, nothing else.`;
     console.log('Original:', description);
     console.log('Simplified:', simplifiedDescription);
 
-    res.json({ 
+    res.json({
       simplifiedDescription: simplifiedDescription
     });
   } catch (error) {
-    console.error('Error simplifying question:', error);
-    res.status(500).json({ error: 'Failed to simplify question' });
+    console.error('❌ Error in /api/simplify-question:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({
+      error: 'Failed to simplify question',
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
   }
 });
 
@@ -549,14 +767,14 @@ Return only the two-line response as shown above, nothing else.`;
 app.post('/api/execute-code', async (req, res) => {
   try {
     const { code, language, testCases, pseudocode, functionSignature } = req.body;
-    
+
     console.log('🔍 Backend Debug - Received request:');
     console.log('  - Code length:', code?.length || 0);
     console.log('  - Language:', language);
     console.log('  - Test cases count:', testCases?.length || 0);
     console.log('  - Pseudocode provided:', !!pseudocode);
     console.log('  - Function signature:', functionSignature);
-    
+
     if (!code || !language || !testCases) {
       return res.status(400).json({ error: 'Code, language, and test cases are required' });
     }
@@ -567,7 +785,7 @@ app.post('/api/execute-code', async (req, res) => {
     for (const testCase of testCases) {
       try {
         console.log(`🔍 Processing test case: ${JSON.stringify(testCase)}`);
-        
+
         const functionInfo = functionSignature ? `
 FUNCTION SIGNATURE INFO:
 - Function name: ${functionSignature.functionName}
@@ -610,9 +828,9 @@ Respond in this JSON format:
         const result = await geminiModel.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
-        
+
         console.log('🔍 Gemini raw response:', text);
-        
+
         // Try to parse JSON response
         let testResult;
         try {
@@ -633,7 +851,7 @@ Respond in this JSON format:
             error: text.includes('Error') ? text : 'Could not parse execution result'
           };
         }
-        
+
         // Ensure we have the right format
         const finalResult = {
           input: testCase.input,
@@ -643,7 +861,7 @@ Respond in this JSON format:
           error: testResult.error || null,
           status: testResult.passed ? 'Passed' : 'Failed'
         };
-        
+
         console.log('🔍 Final test result:', finalResult);
         results.push(finalResult);
 
@@ -670,7 +888,7 @@ Respond in this JSON format:
     if (pseudocode) {
       try {
         console.log('🔍 Analyzing pseudocode progress...');
-        
+
         const progressPrompt = `You are a code analysis expert. Compare the user's actual code with the pseudocode steps to determine which parts have been implemented correctly.
 
 PSEUDOCODE STEPS:
@@ -703,9 +921,9 @@ Respond in this JSON format:
         const progressResult = await geminiModel.generateContent(progressPrompt);
         const progressResponse = await progressResult.response;
         const progressText = progressResponse.text();
-        
+
         console.log('🔍 Pseudocode progress raw response:', progressText);
-        
+
         // Try to parse JSON response
         try {
           const jsonMatch = progressText.match(/\{[\s\S]*\}/);
@@ -750,7 +968,7 @@ Respond in this JSON format:
 app.post('/api/generate-mcq', async (req, res) => {
   try {
     const { pseudocodeLine, language, context, nextStep, problemTitle, problemDescription } = req.body;
-    
+
     if (!pseudocodeLine || !language) {
       return res.status(400).json({ error: 'Pseudocode line and language are required' });
     }
@@ -759,7 +977,7 @@ app.post('/api/generate-mcq', async (req, res) => {
     console.log('Language:', language);
 
     const model = geminiModel;
-    
+
     const prompt = `You are a coding education expert creating MCQ questions that map pseudocode to real code solutions.
 
 PROBLEM: "${problemTitle || 'Programming Problem'}"
@@ -829,13 +1047,13 @@ ${language === 'JavaScript' ? `
 - Use 4-space indentation for nested blocks
 - Include semicolons where appropriate
 - Use proper spacing around operators: "i < arr.length"
-- Format multi-line structures clearly` : 
-language === 'Python' ? `
+- Format multi-line structures clearly` :
+        language === 'Python' ? `
 - Use proper indentation (4 spaces) for nested blocks
 - No braces needed: "if condition:\\n    code"
 - Use proper spacing around operators: "i < len(arr)"
 - Format multi-line structures with consistent indentation` :
-language === 'Java' ? `
+          language === 'Java' ? `
 - Use proper brace placement: "if (condition) {\\n    code\\n}"
 - Use 4-space indentation for nested blocks
 - Include semicolons for statements
@@ -982,7 +1200,7 @@ Return only valid JSON, no additional text.`;
         optionExplanations: {
           "A": "Correct syntax for variable declaration and initialization",
           "B": "Wrong operator - uses comparison instead of assignment",
-          "C": "Wrong language syntax for this language", 
+          "C": "Wrong language syntax for this language",
           "D": "Invalid syntax or wrong language construct"
         }
       };
@@ -1001,7 +1219,7 @@ Return only valid JSON, no additional text.`;
 app.post('/api/generate-code-summary', async (req, res) => {
   try {
     const { problemTitle, problemDescription, pseudocode, language, mcqAnswers } = req.body;
-    
+
     if (!problemTitle || !pseudocode || !language) {
       return res.status(400).json({ error: 'Problem title, pseudocode, and language are required' });
     }
@@ -1011,7 +1229,7 @@ app.post('/api/generate-code-summary', async (req, res) => {
     console.log('MCQ Answers provided:', mcqAnswers?.length || 0);
 
     const model = geminiModel;
-    
+
     const prompt = `Generate a comprehensive code summary that implements the user's exact pseudocode approach:
 
 PROBLEM: "${problemTitle}"
@@ -1118,7 +1336,7 @@ Return only valid JSON, no additional text.`;
       summaryData = {
         finalCode: `// ${language} solution for ${problemTitle}\n// TODO: Implement solution based on pseudocode`,
         explanation: "This is a fallback explanation. The AI was unable to generate a proper code summary.",
-        pseudocodeSteps: pseudocode.split('\n').filter(line => line.trim()).map((line, index) => 
+        pseudocodeSteps: pseudocode.split('\n').filter(line => line.trim()).map((line, index) =>
           `${index + 1}. ${line.trim().replace(/^\d+[\.\)\-\s]*/, '')}`
         ),
         efficiency: {
@@ -1147,27 +1365,27 @@ app.get('/api/test-db', async (req, res) => {
     console.log('Testing database connection...');
     console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Not set');
     console.log('Supabase Key:', supabaseKey ? 'Set' : 'Not set');
-    
+
     // Test basic connection
     const { data, error } = await supabase
       .from('user_lesson_completion')
       .select('*')
       .limit(1);
-    
+
     if (error) {
       console.error('Database test error:', error);
-      return res.status(500).json({ 
-        error: 'Database connection failed', 
+      return res.status(500).json({
+        error: 'Database connection failed',
         details: error.message,
-        code: error.code 
+        code: error.code
       });
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: 'Database connection successful',
       tableExists: true,
-      sampleData: data 
+      sampleData: data
     });
   } catch (error) {
     console.error('Test endpoint error:', error);
@@ -1179,7 +1397,7 @@ app.get('/api/test-db', async (req, res) => {
 app.post('/api/quiz-completion', async (req, res) => {
   try {
     const { questionId, score, completed } = req.body;
-    
+
     if (!questionId || score === undefined || completed === undefined) {
       return res.status(400).json({ error: 'Question ID, score, and completion status are required' });
     }
@@ -1191,10 +1409,10 @@ app.post('/api/quiz-completion', async (req, res) => {
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-    
+
     // Verify the token and get user
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
+
     if (authError || !user) {
       console.error('Authentication error:', authError);
       return res.status(401).json({ error: 'Invalid or expired token' });
@@ -1250,8 +1468,8 @@ const detectDataStructureImage = async (lessonContent) => {
   try {
     // Available data structure images
     const availableImages = [
-      'array', 'linkedlist', 'hashmap', 'binarytree', 'queue', 
-      'priorityqueue', 'matrix', 'trie', 'undirectedgraph', 
+      'array', 'linkedlist', 'hashmap', 'binarytree', 'queue',
+      'priorityqueue', 'matrix', 'trie', 'undirectedgraph',
       'directedgraph', 'weightedgraph'
     ];
 
@@ -1273,14 +1491,14 @@ Rules:
 Respond with ONLY one word: either the exact data structure name or "none".`;
 
     const result = await geminiModel.generateContent(detectionPrompt);
-      const response = await result.response;
+    const response = await result.response;
     const detectedStructure = response.text().trim().toLowerCase();
 
     // Verify the response is valid
     if (availableImages.includes(detectedStructure)) {
       return detectedStructure;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error detecting data structure image:', error);
@@ -1344,29 +1562,31 @@ app.post('/api/generate-easy-lesson', generateEasyLesson);
 
 async function generateEasyLesson(req, res) {
   console.log('📚 EXECUTING generateEasyLesson - BEGINNER version with super simple language');
-  
+
   if (!geminiModel) {
     return res.status(500).json({ error: 'Lesson generation is not configured on the server.' });
   }
 
   try {
-    const { topicName, problemId, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
+    const { topicName, problemId, questionTitle, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
 
     if (!topicName || !problemId) {
       return res.status(400).json({ error: 'Topic name and problem ID are required.' });
     }
 
     // Get problem details from database
-    const { data: problemData, error: problemError } = await supabase
-      .from('topic_problems')
-      .select('title')
-      .eq('leetcode_id', problemId)
-      .single();
+    // Get problem details using the proxy service (fetches from LeetCode if needed)
+    console.log(`🔍 Fetching problem details for lesson generation: ${problemId}, Title: ${questionTitle || 'Not provided'}`);
+    const problemData = await getProblemSolution(problemId, questionTitle);
 
-    if (problemError || !problemData) {
-      console.error('Error fetching problem:', problemError);
+    if (!problemData) {
+      console.error('Error fetching problem: Problem not found');
       return res.status(404).json({ error: 'Problem not found' });
     }
+
+    // Use the fetched problem data
+    const problemError = null; // compatibility with existing error check structure if any
+
 
     // Handle fast structured lesson generation (all parts in one call) - EASY VERSION
     if (fastStructuredLesson) {
@@ -1550,13 +1770,13 @@ Generate ONLY the JSON object, no other text.`;
       let text = response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const lessonData = JSON.parse(text);
-      
+
       // Detect relevant data structure image
       const detectedImage = await detectDataStructureImage(lessonData);
       if (detectedImage) {
         lessonData.dataStructureImage = detectedImage;
       }
-      
+
       return res.json(lessonData);
     }
 
@@ -1575,23 +1795,23 @@ async function generateHarderLesson(req, res) {
   }
 
   try {
-    const { topicName, problemId, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
+    const { topicName, problemId, questionTitle, userId, lessonPart, specificPrompt, structuredLesson, fastStructuredLesson } = req.body;
 
     if (!topicName || !problemId) {
       return res.status(400).json({ error: 'Topic name and problem ID are required.' });
     }
 
     // Get problem details from database
-    const { data: problemData, error: problemError } = await supabase
-      .from('topic_problems')
-      .select('title')
-      .eq('leetcode_id', problemId)
-      .single();
+    // Get problem details using the proxy service
+    console.log(`🔍 Fetching problem details for harder lesson: ${problemId}, Title: ${questionTitle || 'Not provided'}`);
+    const problemData = await getProblemSolution(problemId, questionTitle);
 
-    if (problemError || !problemData) {
-      console.error('Error fetching problem:', problemError);
+    if (!problemData) {
+      console.error('Error fetching problem: Problem not found');
       return res.status(404).json({ error: 'Problem not found' });
     }
+
+    const problemError = null;
 
     // Handle fast structured lesson generation (all parts in one call) - HARDER VERSION
     if (fastStructuredLesson) {
@@ -1711,13 +1931,13 @@ Generate ONLY the JSON object, no other text.`;
       let text = response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const lessonData = JSON.parse(text);
-      
+
       // Detect relevant data structure image
       const detectedImage = await detectDataStructureImage(lessonData);
       if (detectedImage) {
         lessonData.dataStructureImage = detectedImage;
       }
-      
+
       return res.json(lessonData);
     }
 
@@ -1844,11 +2064,11 @@ Generate ONLY the JSON object, no other text.`;
     const response = await result.response;
     let text = response.text();
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     let quizData;
     try {
       quizData = JSON.parse(text);
-      
+
       // Post-process to ensure completely random positioning of correct answers
       if (quizData.quiz && Array.isArray(quizData.quiz)) {
         quizData.quiz.forEach((question, questionIndex) => {
@@ -1858,25 +2078,25 @@ Generate ONLY the JSON object, no other text.`;
             console.error(`Question ${questionIndex + 1}: Correct answer not found in options`);
             return;
           }
-          
+
           const correctOption = question.options[correctAnswerIndex];
           const correctExplanation = question.optionExplanations?.[Object.keys(question.optionExplanations)[correctAnswerIndex]];
-          
+
           // Shuffle options and update correct_answer
           const shuffledOptions = [...question.options];
           const shuffledExplanations = { ...question.optionExplanations };
-          
+
           // Remove correct answer from current position
           shuffledOptions.splice(correctAnswerIndex, 1);
           const optionKeys = ['A', 'B', 'C', 'D'];
           delete shuffledExplanations[optionKeys[correctAnswerIndex]];
-          
+
           // Completely random position (0, 1, 2, or 3)
           const randomPosition = Math.floor(Math.random() * 4);
-          
+
           // Insert correct answer at random position
           shuffledOptions.splice(randomPosition, 0, correctOption);
-          
+
           // Update explanations
           const newExplanations = {};
           optionKeys.forEach((key, index) => {
@@ -1888,15 +2108,15 @@ Generate ONLY the JSON object, no other text.`;
               newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
             }
           });
-          
+
           // Update the question
           question.options = shuffledOptions;
           question.correct_answer = correctOption;
           question.optionExplanations = newExplanations;
-          
+
           console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
         });
-        
+
         // Log the final distribution
         const positionCounts = [0, 0, 0, 0];
         quizData.quiz.forEach(q => {
@@ -1926,7 +2146,7 @@ app.post('/api/generate-quiz', async (req, res) => {
   }
 
   try {
-    const { problemId, topicName, lessonData, userId } = req.body;
+    const { problemId, topicName, questionTitle, lessonData, userId } = req.body;
 
     if (!problemId || !topicName) {
       return res.status(400).json({ error: 'Problem ID and topic name are required' });
@@ -1952,16 +2172,16 @@ app.post('/api/generate-quiz', async (req, res) => {
     }
 
     // Get problem details from database - fetch full details including description
-    const { data: problemData, error: problemError } = await supabase
-      .from('leetcode_problems')
-      .select('leetcode_id, title, description, description_text, examples, constraints, difficulty, tags')
-      .eq('leetcode_id', problemId)
-      .single();
+    // Get problem details from proxy - fetch full details including description
+    console.log(`🔍 Fetching problem details for quiz: ${problemId}, Title: ${questionTitle || 'Not provided'}`);
+    const problemData = await getProblemSolution(problemId, questionTitle);
 
-    if (problemError || !problemData) {
-      console.error('Error fetching problem:', problemError);
+    if (!problemData) {
+      console.error('Error fetching problem: Problem not found');
       return res.status(404).json({ error: 'Problem not found' });
     }
+
+    const problemError = null;
 
     // First, analyze the problem to identify the ideal solution approach
     const analysisPrompt = `You are an expert competitive programmer. Analyze this LeetCode problem and identify the OPTIMAL solution approach.
@@ -1990,7 +2210,7 @@ TASK: Identify the IDEAL solution approach for this problem. Respond with ONLY a
     const analysisResponse = await analysisResult.response;
     let analysisText = analysisResponse.text();
     analysisText = analysisText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     let solutionAnalysis;
     try {
       solutionAnalysis = JSON.parse(analysisText);
@@ -2131,36 +2351,36 @@ CRITICAL FORMATTING NOTES:
 Generate ONLY the JSON object, no other text.`;
 
     const result = await geminiModel.generateContent(quizPrompt);
-      const response = await result.response;
-      let text = response.text();
-      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+    const response = await result.response;
+    let text = response.text();
+    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+
     let quizData;
     try {
       quizData = JSON.parse(text);
-      
+
       // Post-process to ensure completely random positioning of correct answers
       if (quizData.questions && Array.isArray(quizData.questions)) {
         quizData.questions.forEach((question, questionIndex) => {
           // Always randomize the correct answer position
           const correctOption = question.options[question.correctAnswer];
           const correctExplanation = question.optionExplanations?.[Object.keys(question.optionExplanations)[question.correctAnswer]];
-          
+
           // Shuffle options and update correctAnswer
           const shuffledOptions = [...question.options];
           const shuffledExplanations = { ...question.optionExplanations };
-          
+
           // Remove correct answer from current position
           shuffledOptions.splice(question.correctAnswer, 1);
           const optionKeys = ['A', 'B', 'C', 'D'];
           delete shuffledExplanations[optionKeys[question.correctAnswer]];
-          
+
           // Completely random position (0, 1, 2, or 3)
           const randomPosition = Math.floor(Math.random() * 4);
-          
+
           // Insert correct answer at random position
           shuffledOptions.splice(randomPosition, 0, correctOption);
-          
+
           // Update explanations
           const newExplanations = {};
           optionKeys.forEach((key, index) => {
@@ -2172,15 +2392,15 @@ Generate ONLY the JSON object, no other text.`;
               newExplanations[key] = shuffledExplanations[optionKeys[index - 1]];
             }
           });
-          
+
           // Update the question
           question.options = shuffledOptions;
           question.correctAnswer = randomPosition;
           question.optionExplanations = newExplanations;
-          
+
           console.log(`🔄 Repositioned correct answer for question ${questionIndex + 1} to position ${randomPosition}`);
         });
-        
+
         // Log the final distribution
         const positionCounts = [0, 0, 0, 0];
         quizData.questions.forEach(q => positionCounts[q.correctAnswer]++);
