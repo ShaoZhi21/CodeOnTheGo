@@ -93,11 +93,18 @@ export default function RoadmapTopic() {
   const topic = Array.isArray(params.topic) ? params.topic[0] : params.topic;
   const topicString = typeof topic === 'string' ? topic : '';
   const fromPage = Array.isArray(params.from) ? params.from[0] : params.from;
-  const preFetchedData = params.preFetchedData ? JSON.parse(params.preFetchedData as string) : null;
+  const safeJsonParse = <T,>(raw: unknown): T | null => {
+    if (typeof raw !== 'string') return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch (error) {
+      console.warn('RoadmapTopic: Failed to parse preFetchedData JSON:', error);
+      return null;
+    }
+  };
+  const preFetchedData = safeJsonParse<any>(params.preFetchedData);
 
-  console.log('RoadmapTopic: topic param =', topicString);
-  console.log('RoadmapTopic: from param =', fromPage);
-  console.log('RoadmapTopic: preFetchedData =', preFetchedData);
+  // Intentionally keep logging minimal in production builds.
 
   const router = useRouter();
   const [questions, setQuestions] = useState<TopicProblemWithProgress[]>(preFetchedData?.problems || []);
@@ -114,8 +121,6 @@ export default function RoadmapTopic() {
   const [selectedQuestion, setSelectedQuestion] = useState<TopicProblemWithProgress | null>(null);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number>(0);
   const [userSkillLevel, setUserSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced'>('Beginner');
-
-  console.log('RoadmapTopic: Component initialized');
 
   // Scroll to bottom only on first load
   useEffect(() => {
@@ -253,6 +258,12 @@ export default function RoadmapTopic() {
 
   const loadTopicData = async () => {
     try {
+      if (!topicString) {
+        console.warn('RoadmapTopic: Missing topic param, redirecting to home');
+        router.replace('/(tabs)');
+        return;
+      }
+
       console.log('Loading topic data for:', topicString);
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -267,39 +278,32 @@ export default function RoadmapTopic() {
         .select('*')  // Select all fields to see what we're getting
         .eq('topic_name', topicString)
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      console.log('Raw topic stats data:', topicStatsData);
-      console.log('Stats error if any:', statsError);
+      // Debug logs removed to keep console clean
 
       if (statsError) {
         console.error('Error fetching topic stats:', statsError);
-        // Provide default values if no stats found
-        setTopicStats({
-          total_stars: 0,
-          completion_percentage: 0,
-          total_problems: 0
-        });
-        return;
       }
 
       // Set topic stats directly from the view
       setTopicStats({
         total_stars: topicStatsData?.total_stars || 0,
+        // Keep both keys since some screens/components expect `percentage`
         completion_percentage: Number(topicStatsData?.completion_percentage || 0),
-        total_problems: topicStatsData?.total_problems || 0
+        percentage: Number(topicStatsData?.completion_percentage || 0),
+        total_problems: topicStatsData?.total_problems || 0,
+        completed_problems: topicStatsData?.completed_problems || 0,
       });
 
-      console.log('Topic stats set to:', {
-        total_stars: topicStatsData?.total_stars,
-        completion_percentage: topicStatsData?.completion_percentage,
-        total_problems: topicStatsData?.total_problems
-      });
+      // Debug logs removed to keep console clean
 
       // Get problems for this topic
       const { data: problems = [], error: problemsError } = await supabase
         .from('topic_problems')
-        .select('topic_id, leetcode_id, title, difficulty, topic_name, difficulty_order, stars, is_premium, acceptance_rate, likes, dislikes, tags')
+        // NOTE: `topic_problems` is a view and does not include per-user `stars`.
+        // Stars come from `user_problem_progress` and are merged in below.
+        .select('topic_id, topic_name, leetcode_id, title, difficulty, tags, acceptance_rate, is_premium, difficulty_order')
         .eq('topic_name', topicString)
         .order('difficulty_order');
 
@@ -449,7 +453,9 @@ export default function RoadmapTopic() {
       params: {
         id: selectedQuestion.leetcode_id?.toString(),
         name: selectedQuestion.title,
-        difficulty: selectedQuestion.difficulty
+        difficulty: selectedQuestion.difficulty,
+        topicName: topicString,
+        source: 'roadmap',
       }
     });
   };

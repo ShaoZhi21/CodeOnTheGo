@@ -348,6 +348,8 @@ export default function StudyPlanDetail() {
                     isLessonRequired={false}
                     isQuestionSolved={false}
                     topicName={plan?.name || 'Study Plan'}
+                    origin="studyplan"
+                    planId={String(planId || '')}
                 />
             )}
 

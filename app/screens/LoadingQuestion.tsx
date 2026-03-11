@@ -75,6 +75,9 @@ export default function LoadingScreen({
     (routeParams.problemId as string | undefined) ??
     (routeParams.id as string | undefined);
 
+  const effectiveSource = routeParams.source as string | undefined;
+  const effectivePlanId = routeParams.planId as string | undefined;
+
   const [isReady, setIsReady] = useState(false);
   const [fetchProgress, setFetchProgress] = useState(0);
   const [birdFlightStarted, setBirdFlightStarted] = useState(false);
@@ -330,7 +333,10 @@ export default function LoadingScreen({
               id: effectiveProblemId,
               name: effectiveQuestionTitle,
               difficulty: effectiveQuestionDifficulty,
-              usePrefetchedData: 'true'
+              usePrefetchedData: 'true',
+              ...(effectiveTopicName ? { topicName: effectiveTopicName } : {}),
+              ...(effectiveSource ? { source: effectiveSource } : {}),
+              ...(effectivePlanId ? { planId: effectivePlanId } : {}),
             },
           });
 

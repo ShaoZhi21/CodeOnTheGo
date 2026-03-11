@@ -15,6 +15,8 @@ interface QuestionActionModalProps {
   topicName: string;
   isQuestionOnLeft?: boolean;
   bubblePosition?: { x: number; y: number };
+  origin?: 'roadmap' | 'allquestions' | 'studyplan';
+  planId?: string;
 }
 
 export default function QuestionActionModal({
@@ -30,17 +32,11 @@ export default function QuestionActionModal({
   isQuestionSolved,
   topicName,
   isQuestionOnLeft = false,
-  bubblePosition = { x: 0, y: 0 }
+  bubblePosition = { x: 0, y: 0 },
+  origin = 'roadmap',
+  planId,
 }: QuestionActionModalProps) {
   const handleViewLesson = () => {
-    console.log('🎯 handleViewLesson called');
-    console.log('🎯 Navigation params:', {
-      questionId: questionId.toString(),
-      questionTitle: questionTitle,
-      questionDescription: questionDescription,
-      topicName: topicName,
-    });
-    
     // Navigate to loading lesson screen first
     router.push({
       pathname: '/screens/LoadingLesson',
@@ -51,7 +47,8 @@ export default function QuestionActionModal({
         questionDescription: questionDescription,
         topicName: topicName,
         questionDifficulty: questionDifficulty,
-        from: 'roadmaptopic', // Add source for back navigation
+        source: origin,
+        ...(planId ? { planId } : {}),
       },
     });
     onClose();
@@ -66,8 +63,9 @@ export default function QuestionActionModal({
         id: questionId.toString(),
         name: questionTitle,
         difficulty: questionDifficulty,
-        source: 'roadmap',
-        topicName: topicName
+        source: origin,
+        topicName: topicName,
+        ...(planId ? { planId } : {}),
       },
     });
     onClose();

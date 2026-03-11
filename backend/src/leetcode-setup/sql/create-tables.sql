@@ -241,44 +241,55 @@ ORDER BY t.difficulty_order, difficulty_order;
 
 -- Create view for topic stats with stars
 CREATE OR REPLACE VIEW topic_stats AS
-WITH topic_problems AS (
-  -- First get all problems for each topic
-  SELECT 
-    t.name as topic_name,
-    COUNT(DISTINCT p.leetcode_id) as total_problems
+WITH topic_problem_counts AS (
+  SELECT
+    t.name AS topic_name,
+    COUNT(DISTINCT p.leetcode_id) AS total_problems
   FROM topics t
   JOIN topic_problems tp ON t.name = tp.topic_name
   JOIN leetcode_problems p ON tp.leetcode_id = p.leetcode_id
   GROUP BY t.name
 ),
 user_progress AS (
-  -- Then get user progress for each topic
-  SELECT 
-    t.name as topic_name,
-    u.id as user_id,
-    COUNT(DISTINCT CASE WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.problem_id END) as completed_problems,
-    COALESCE(SUM(CASE WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.stars ELSE 0 END), 0) as total_stars
-  FROM topics t
-  CROSS JOIN auth.users u
-  LEFT JOIN topic_problems tp ON t.name = tp.topic_name
-  LEFT JOIN user_problem_progress upp ON tp.leetcode_id = upp.problem_id AND upp.user_id = u.id
-  LEFT JOIN user_lesson_completion ulc ON upp.problem_id = ulc.problem_id AND ulc.user_id = u.id
-  GROUP BY t.name, u.id
+  SELECT
+    tp.topic_name,
+    auth.uid() AS user_id,
+    COUNT(
+      DISTINCT CASE
+        WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.problem_id
+      END
+    ) AS completed_problems,
+    COALESCE(
+      SUM(
+        CASE
+          WHEN upp.is_solved = true AND ulc.quiz_completed = true THEN upp.stars
+          ELSE 0
+        END
+      ),
+      0
+    ) AS total_stars
+  FROM topic_problems tp
+  LEFT JOIN user_problem_progress upp
+    ON upp.problem_id = tp.leetcode_id
+   AND upp.user_id = auth.uid()
+  LEFT JOIN user_lesson_completion ulc
+    ON ulc.problem_id = tp.leetcode_id
+   AND ulc.user_id = auth.uid()
+  GROUP BY tp.topic_name, auth.uid()
 )
-SELECT 
-  tp.topic_name,
+SELECT
+  tpc.topic_name,
   up.user_id,
-  tp.total_problems,
-  up.total_stars,
-  CASE 
-    WHEN tp.total_problems > 0 THEN 
-      ROUND((up.completed_problems::float / tp.total_problems * 100)::numeric, 2)
-    ELSE 0 
-  END as completion_percentage,
-  up.completed_problems
-FROM topic_problems tp
-CROSS JOIN auth.users u
-LEFT JOIN user_progress up ON tp.topic_name = up.topic_name AND up.user_id = u.id;
+  tpc.total_problems,
+  COALESCE(up.total_stars, 0) AS total_stars,
+  CASE
+    WHEN tpc.total_problems > 0 THEN
+      ROUND((COALESCE(up.completed_problems, 0)::float / tpc.total_problems * 100)::numeric, 2)
+    ELSE 0
+  END AS completion_percentage,
+  COALESCE(up.completed_problems, 0) AS completed_problems
+FROM topic_problem_counts tpc
+LEFT JOIN user_progress up ON tpc.topic_name = up.topic_name;
 
 -- Create user topic navigation history table
 CREATE TABLE IF NOT EXISTS user_topic_navigation (

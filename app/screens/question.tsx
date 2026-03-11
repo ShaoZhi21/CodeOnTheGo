@@ -7,8 +7,7 @@ import { WhileBlock } from '@/components/codeblocks/WhileBlock';
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ProgressBar } from '@/components/ProgressBar';
 import { ThemedText } from '@/components/ThemedText';
-import { useStreak } from '@/contexts/StreakContext';
-import { API_BASE_URL, apiCall } from '@/lib/api-config';
+import { apiCall } from '@/lib/api-config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -740,7 +739,7 @@ const styles = StyleSheet.create({
 export default function QuestionScreen() {
   const params = useLocalSearchParams();
   const { id, name, difficulty, preFetchedData, source = 'allquestions' } = params; // Add source parameter
-  const { showStreakAnimation } = useStreak();
+  // `useStreak` is still used elsewhere in the app; this screen currently doesn't need it.
   
   // Refs
   const exampleScrollViewRef = useRef<ScrollView>(null);
@@ -750,16 +749,16 @@ export default function QuestionScreen() {
   const [problem, setProblem] = useState<Problem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [parsedExamples, setParsedExamples] = useState<Example[]>([]);
+  const [, setParsedExamples] = useState<Example[]>([]);
   const [cleanedDescription, setCleanedDescription] = useState<string>('');
   
   // UI states
   const [showProblem, setShowProblem] = useState(true);
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0);
-  const [solution, setSolution] = useState("");
+  const [, setSolution] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [selectedAnalysisSection, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
+  const [, setSelectedAnalysisSection] = useState<'correctness' | 'efficiency' | 'edgeCases' | 'suggestions'>('correctness');
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [descriptionBoxes, setDescriptionBoxes] = useState<CodeBlock[]>([{ type: 'text', value: '' }]);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -1099,19 +1098,6 @@ export default function QuestionScreen() {
     };
   }, [id]);
 
-  const getDifficultyColor = (diff: string) => {
-    switch (diff) {
-      case 'Easy':
-        return '#00B8A3';
-      case 'Medium':
-        return '#FFA116';
-      case 'Hard':
-        return '#FF375F';
-      default:
-        return '#6564c7';
-    }
-  };
-
   const getDifficultyBubbleColor = (diff: string) => {
     switch (diff) {
       case 'Easy':
@@ -1132,65 +1118,6 @@ export default function QuestionScreen() {
       case 'Hard': return '#F44336';
       default: return '#6564c7';
     }
-  };
-
-  const getLineAnalysisBorderStyle = (lineNumber: number) => {
-    if (!analysis || !analysis.lineByLineAnalysis) {
-      console.log(`No analysis data for line ${lineNumber}`);
-      return {};
-    }
-    
-    console.log(`Checking line ${lineNumber}, available analysis:`, analysis.lineByLineAnalysis);
-    
-    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
-    if (!lineAnalysis) {
-      console.log(`No analysis found for line ${lineNumber}`);
-      return {};
-    }
-
-    console.log(`Found analysis for line ${lineNumber}:`, lineAnalysis);
-
-    switch (lineAnalysis.status) {
-      case 'fully_correct':
-        console.log(`Applying green border for line ${lineNumber}`);
-        return {
-          borderWidth: 3,
-          borderColor: '#4CAF50', // Green
-        };
-      case 'can_be_improved':
-        console.log(`Applying orange border for line ${lineNumber}`);
-        return {
-          borderWidth: 3,
-          borderColor: '#FF9800', // Orange
-        };
-      case 'wrong':
-        console.log(`Applying red border for line ${lineNumber}`);
-        return {
-          borderWidth: 3,
-          borderColor: '#F44336', // Red
-        };
-      default:
-        console.log(`Unknown status for line ${lineNumber}: ${lineAnalysis.status}`);
-        return {};
-    }
-  };
-
-  const getLineAnalysisExplanation = (lineNumber: number) => {
-    if (!analysis || !analysis.lineByLineAnalysis) {
-      return undefined;
-    }
-    
-    const lineAnalysis = analysis.lineByLineAnalysis.find(line => line.lineNumber === lineNumber);
-    if (!lineAnalysis) {
-      return undefined;
-    }
-
-    // Only show explanations for lines that can be improved or are wrong
-    if (lineAnalysis.status === 'can_be_improved' || lineAnalysis.status === 'wrong') {
-      return lineAnalysis.explanation || undefined;
-    }
-    
-    return undefined;
   };
 
   // Calculate which line numbers each block spans
@@ -1356,7 +1283,7 @@ export default function QuestionScreen() {
         console.error('Analysis failed:', response.status);
         setAnalysisError('Analysis failed. Please try again.');
       }
-    } catch (error) {
+    } catch {
       // Show simple error message if both APIs failed
       setAnalysisError('Both live and local servers failed, try again');
     } finally {
@@ -1518,44 +1445,6 @@ export default function QuestionScreen() {
     setShowAnalysis(false);
   };
 
-  const handleMarkComplete = async () => {
-    try {
-      if (!analysis) return;
-      const { markProblemFullyComplete } = await import('@/lib/services/userProgress');
-      const problemId = problem?.leetcode_id ?? 0;
-      const score = analysis.score;
-      const stars = analysis.stars;
-      const result = await markProblemFullyComplete(problemId, score, stars);
-      console.log('🔍 HANDLE MARK COMPLETE - Params being passed:', JSON.stringify({ problemId, score, stars }, null, 2));
-      if (result.success) {
-        console.log('Problem marked as fully complete!');
-        // Check if this is a daily challenge completion
-        const isDailyChallenge = params.isDaily === 'true';
-        if (isDailyChallenge) {
-          console.log('🎯 Daily challenge completed! Triggering streak animation');
-          showStreakAnimation(1);
-          try {
-            const { DailyChallengeService } = await import('@/lib/services/dailyChallengeService');
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              await DailyChallengeService.markChallengeCompleted(user.id);
-              console.log('✅ Daily challenge marked as completed in database');
-            }
-          } catch (error) {
-            console.error('Error marking daily challenge as completed:', error);
-          }
-        } else {
-          showStreakAnimation(1);
-        }
-        router.back();
-      } else {
-        console.error('Failed to mark problem fully complete:', result.error);
-      }
-    } catch (error) {
-      console.error('Error marking problem fully complete:', error);
-    }
-  };
-
   const handleWritePseudocode = () => {
     // Get the current pseudocode solution
     const pseudocodeSolution = descriptionBoxes.map((block, index) => {
@@ -1586,7 +1475,10 @@ export default function QuestionScreen() {
         description: problem?.description,
         examples: JSON.stringify(problem?.examples || []),
         constraints: JSON.stringify(problem?.constraints || []),
-        pseudocode: pseudocodeSolution
+        pseudocode: pseudocodeSolution,
+        source: source as string,
+        ...(params.topicName ? { topicName: params.topicName as string } : {}),
+        ...(params.planId ? { planId: params.planId as string } : {}),
       }
     });
     setShowAnalysis(false);
@@ -1654,11 +1546,8 @@ export default function QuestionScreen() {
     setIsSimplifying(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/simplify-question`, {
+      const response = await apiCall('/api/simplify-question', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           description: cleanedDescription || problem?.description || '',
           title: name || problem?.title || ''
@@ -1733,11 +1622,32 @@ export default function QuestionScreen() {
           
           // Navigate based on source
           if (source === 'roadmap') {
-            router.replace('/screens/roadmaptopic'); // Use replace instead of back
+            const topicName = (params.topicName as string | undefined) ?? (params.topic as string | undefined);
+            if (topicName) {
+              router.replace({
+                pathname: '/screens/roadmaptopic',
+                params: {
+                  topic: topicName,
+                  from: 'roadmap',
+                },
+              });
+            } else {
+              router.replace('/'); // fallback to Home if topic missing
+            }
+          } else if (source === 'studyplan') {
+            const planId = (params.planId as string | undefined) ?? '';
+            if (planId) {
+              router.replace({
+                pathname: '/screens/StudyPlanDetail',
+                params: { planId },
+              });
+            } else {
+              router.replace('/(tabs)/learn');
+            }
           } else if (source === 'allquestions') {
             router.replace('/(tabs)/questions'); // Go to questions list
           } else {
-            router.replace('/(tabs)'); // Default fallback to main tabs
+            router.replace('/'); // Default fallback to Home
           }
         }} style={styles.backButton}>
           <Image source={require('@/assets/images/icons/back-icon.png')} style={styles.backIcon} />

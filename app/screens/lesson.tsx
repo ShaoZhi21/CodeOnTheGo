@@ -12,7 +12,7 @@ import {
   View
 } from 'react-native';
 import { ThemedText } from '../../components/ThemedText';
-import { API_BASE_URL } from '../../lib/api-config';
+import { apiCall } from '../../lib/api-config';
 import { supabase } from '../../lib/supabase';
 
 interface QuizQuestion {
@@ -444,17 +444,11 @@ export default function LessonScreen() {
         return;
       }
 
-      // Use the proper API configuration
-      const apiUrl = API_BASE_URL;
-
       // Get current user for skill level
       const { data: { user } } = await supabase.auth.getUser();
 
-      const response = await fetch(`${apiUrl}/api/generate-quiz`, {
+      const response = await apiCall('/api/generate-quiz', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           problemId: parseInt(currentProblemId as string) || currentProblemId,
           topicName: currentTopicName,
