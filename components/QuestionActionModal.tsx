@@ -1,5 +1,6 @@
 import { router } from 'expo-router';
 import { Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Routes } from '@/lib/navigation/routes';
 
 interface QuestionActionModalProps {
   visible: boolean;
@@ -38,36 +39,33 @@ export default function QuestionActionModal({
 }: QuestionActionModalProps) {
   const handleViewLesson = () => {
     // Navigate to loading lesson screen first
-    router.push({
-      pathname: '/screens/LoadingLesson',
-      params: {
+    router.push(
+      Routes.screens.loadingLesson({
         questionId: questionId.toString(),
-        problemId: questionId.toString(), // Add problemId (leetcode_id) for consistency
-        questionTitle: questionTitle,
-        questionDescription: questionDescription,
-        topicName: topicName,
-        questionDifficulty: questionDifficulty,
+        questionTitle,
+        questionDescription,
+        topicName,
+        questionDifficulty,
         source: origin,
-        ...(planId ? { planId } : {}),
-      },
-    });
+        planId,
+      }) as any,
+    );
     onClose();
   };
 
   // Let the user choose Lesson OR Pseudocode first (no gating).
   // We treat "Pseudocode" as entering the in-app question flow (where they can write pseudocode).
   const handleStartPseudocode = () => {
-    router.push({
-      pathname: '/screens/question',
-      params: {
+    router.push(
+      Routes.screens.question({
         id: questionId.toString(),
         name: questionTitle,
         difficulty: questionDifficulty,
         source: origin,
-        topicName: topicName,
-        ...(planId ? { planId } : {}),
-      },
-    });
+        topicName,
+        planId,
+      }) as any,
+    );
     onClose();
   };
 

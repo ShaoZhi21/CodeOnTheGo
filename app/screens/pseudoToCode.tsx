@@ -1,6 +1,7 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
+import { Routes } from '@/lib/navigation/routes';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -87,29 +88,25 @@ export default function PseudoToCode() {
   const handleBack = () => {
     if (source === 'studyplan') {
       if (planId) {
-        router.replace({
-          pathname: '/screens/StudyPlanDetail',
-          params: { planId },
-        });
+        router.replace(Routes.screens.studyPlanDetail(planId) as any);
       } else {
-        router.replace('/(tabs)/learn');
+        router.replace(Routes.tabs.learn);
       }
       return;
     }
 
     // Roadmap flows: return to topic roadmap if possible
     if (topicName) {
-      router.replace({
-        pathname: '/screens/roadmaptopic',
-        params: {
+      router.replace(
+        Routes.screens.roadmapTopic({
           topic: topicName,
           from: (source || 'pseudocode') as string,
-        },
-      });
+        }) as any,
+      );
     } else if (source === 'allquestions') {
-      router.replace('/(tabs)/questions');
+      router.replace(Routes.tabs.questions);
     } else {
-      router.replace('/(tabs)');
+      router.replace(Routes.tabs.root);
     }
   };
 
