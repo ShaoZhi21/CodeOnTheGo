@@ -4,7 +4,7 @@
     "slug": "CodeOnTheGo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icons/codeonthego-bird-icon.png",
     "scheme": "codeonthego",
     "userInterfaceStyle": "light",
     "ios": {
@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/icons/codeonthego-bird-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -25,7 +25,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icons/codeonthego-bird-icon.png"
     },
     "plugins": [
       "expo-router",
@@ -42,7 +42,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/icons/codeonthego-bird-icon.png",
           "color": "#6564c7"
         }
       ],
