@@ -1,6 +1,7 @@
 import { HtmlRenderer } from '@/components/HtmlRenderer';
 import { ThemedText } from '@/components/ThemedText';
 import { apiCall } from '@/lib/api-config';
+import { getConstraints, getDifficulty, getExamples, getPlanId, getProblemId, getProblemTitle, getSource, getTopicName } from '@/lib/navigation/canonical';
 import { Routes } from '@/lib/navigation/routes';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -67,23 +68,18 @@ export default function PseudoToCode() {
   const [loadedMCQCount, setLoadedMCQCount] = useState(0);
   const [hasNavigatedToSummary, setHasNavigatedToSummary] = useState(false);
 
-  const getParam = (key: string): string | undefined => {
-    const value = (params as any)?.[key];
-    if (Array.isArray(value)) return value[0];
-    return typeof value === 'string' ? value : undefined;
-  };
-
   // Parse the passed parameters
-  const problemId = getParam('problemId');
-  const title = getParam('title') ?? getParam('problemTitle') ?? '';
-  const difficulty = getParam('difficulty') ?? '';
-  const description = getParam('description') ?? '';
-  const examples: Example[] = getParam('examples') ? JSON.parse(getParam('examples') as string) : [];
-  const pseudocode = getParam('pseudocode') ?? '';
+  const problemId = getProblemId(params as any);
+  const title = getProblemTitle(params as any) ?? '';
+  const difficulty = getDifficulty(params as any) ?? '';
+  const description = (params.description as string) ?? '';
+  const examples: Example[] = (getExamples<Example[]>(params as any) ?? []) as Example[];
+  void getConstraints<string[]>(params as any); // Parsed for forward-compat even if unused here
+  const pseudocode = (params.pseudocode as string) ?? '';
 
-  const source = getParam('source') ?? getParam('from');
-  const topicName = getParam('topicName') ?? getParam('topic');
-  const planId = getParam('planId');
+  const source = getSource(params as any);
+  const topicName = getTopicName(params as any);
+  const planId = getPlanId(params as any);
 
   const handleBack = () => {
     if (source === 'studyplan') {
